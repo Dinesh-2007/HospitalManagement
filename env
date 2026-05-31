@@ -1,5 +1,0 @@
-DB_USER=neondb_owner
-DB_HOST=ep-shiny-dawn-aqd1fmg4.c-8.us-east-1.aws.neon.tech
-DB_NAME=neondb
-DB_PASSWORD=npg_hqLl67yxWTXk
-DB_PORT=5432

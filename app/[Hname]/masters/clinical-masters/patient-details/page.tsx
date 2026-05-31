@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Country, State, City } from "country-state-city";
 import {
   MastersFormPage,
@@ -10,6 +10,27 @@ import {
 export default function PatientDetailsPage() {
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
+  const [patientTypeOptions, setPatientTypeOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function loadPatientTypes() {
+      try {
+        const response = await fetch("/api/forms/patient_type");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.rows) {
+            // Field ID is "typeCode", so column in returned records is "type_code", or "typecode" depending on column mapping.
+            // A safe approach is to check both depending on how Pg returns it, but standard is type_code
+            const types = data.rows.map((r: any) => r.type_code || r.typeCode || "").filter(Boolean);
+            setPatientTypeOptions(types);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch patient types", error);
+      }
+    }
+    loadPatientTypes();
+  }, []);
 
   const countries = Country.getAllCountries();
   const states = selectedCountryCode ? State.getStatesOfCountry(selectedCountryCode) : [];
@@ -38,7 +59,7 @@ export default function PatientDetailsPage() {
     setSelectedStateCode(stateCode);
   };
 
-  const patientDetailsFields: MastersFormField[] = [
+  const patientDetailsFields: MastersFormField[] = useMemo(() => [
     { id: "patientId", label: "Patient ID", type: "text", maxLength: 50, pattern: "[a-zA-Z0-9]*", size: "small" },
     { id: "patientName", label: "Patient Name", type: "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium" },
     { id: "address", label: "Address", type: "textarea", size: "medium" },
@@ -92,7 +113,7 @@ export default function PatientDetailsPage() {
       id: "patientType",
       label: "Patient Type",
       type: "select",
-      options: ["General", "Corporate", "Insurance", "VIP"],
+      options: patientTypeOptions.length > 0 ? patientTypeOptions : ["General", "Corporate", "Insurance", "VIP"],
     },
     {
       id: "preferredPaymentType",
@@ -133,7 +154,7 @@ export default function PatientDetailsPage() {
       type: "textarea",
       fullWidth: true,
     },
-  ];
+  ], [countries, states, cities, patientTypeOptions]);
 
   return (
     <MastersFormPage
