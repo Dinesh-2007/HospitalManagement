@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { ComponentCard } from "./component-card";
 import { PageBreadcrumb } from "./ui/page-breadcrumb";
 import { Label } from "./ui/label";
 import { InputField } from "./ui/input-field";
 import { Button } from "./ui/button";
+import { createAccountAction } from "../app/actions/tenant";
 
 type AccountField = {
   id: string;
@@ -35,7 +36,7 @@ const accountFields: AccountField[] = [
   },
   {
     id: "password",
-    label: "Pass",
+    label: "Password",
     type: "password",
     placeholder: "Create a password",
     autoComplete: "new-password",
@@ -65,6 +66,7 @@ const accountFields: AccountField[] = [
 
 export function CreateAccountForm() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,12 +75,19 @@ export function CreateAccountForm() {
     const hospitalName = String(formData.get("hospitalName") ?? "").trim();
     const adminMail = String(formData.get("adminMail") ?? "").trim();
     const creatorName = String(formData.get("creatorName") ?? "").trim();
+    const siteName = String(formData.get("siteName") ?? "").trim();
 
     setSubmitMessage(
-      `${hospitalName} account is ready for ${adminMail || "the admin mail"} and will be managed by ${creatorName || "the creator"}.`,
+      `Initializing ${hospitalName} database... Please wait.`
     );
 
-    event.currentTarget.reset();
+    startTransition(async () => {
+      try {
+        await createAccountAction(formData);
+      } catch (e: any) {
+        setSubmitMessage(`Failed to create account: ${e.message}`);
+      }
+    });
   }
 
   return (
@@ -121,7 +130,9 @@ export function CreateAccountForm() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="submit">Create account</Button>
+                <Button type="submit" disabled={isPending}>
+                  {isPending ? "Creating setup..." : "Create account"}
+                </Button>
                 <Link
                   href="/"
                   className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-5 py-3.5 text-sm font-medium text-gray-700 transition hover:border-brand-300 hover:text-brand-600 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300"

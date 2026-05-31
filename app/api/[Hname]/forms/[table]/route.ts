@@ -4,8 +4,9 @@ import {
   ensureSafeIdentifier,
   quoteIdentifier,
   tableNameFromCardTitle,
-} from "../../../../lib/master-form-table";
-import { query } from "../../../../lib/db";
+} from "../../../../../lib/master-form-table";
+import { getTenantDB } from "../../../../../lib/db";
+import type { Pool } from "pg";
 
 export const runtime = "nodejs";
 
@@ -93,10 +94,10 @@ function normalizeValue(field: ApiField, rawValue: unknown) {
   return trimmed;
 }
 
-async function ensureTable(tableName: string, fields: ApiField[]) {
+async function ensureTable(pool: Pool, tableName: string, fields: ApiField[]) {
   const quotedTable = quoteIdentifier(tableName);
 
-  await query(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS ${quotedTable} (
       id BIGSERIAL PRIMARY KEY,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -104,7 +105,7 @@ async function ensureTable(tableName: string, fields: ApiField[]) {
     )
   `);
 
-  const existingColumnsResult = await query<{ column_name: string }>(
+  const existingColumnsResult = await pool.query<{ column_name: string }>(
     `
       SELECT column_name
       FROM information_schema.columns
@@ -126,14 +127,14 @@ async function ensureTable(tableName: string, fields: ApiField[]) {
       continue;
     }
 
-    await query(
+    await pool.query(
       `ALTER TABLE ${quotedTable} ADD COLUMN ${quoteIdentifier(columnName)} ${getColumnType(field.type)}`,
     );
   }
 }
 
-async function tableExists(tableName: string) {
-  const result = await query<{ exists: boolean }>(
+async function tableExists(pool: Pool, tableName: string) {
+  const result = await pool.query<{ exists: boolean }>(
     `
       SELECT EXISTS (
         SELECT 1
@@ -149,17 +150,20 @@ async function tableExists(tableName: string) {
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ table: string }> },
+  { params }: { params: Promise<{ Hname: string; table: string }> },
 ) {
   try {
-    const { table } = await params;
+    const { Hname, table } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    
     const tableName = ensureSafeIdentifier(table, "table");
 
-    if (!(await tableExists(tableName))) {
+    if (!(await tableExists(pool, tableName))) {
       return NextResponse.json({ rows: [] });
     }
 
-    const rowsResult = await query(
+    const rowsResult = await pool.query(
       `SELECT * FROM ${quoteIdentifier(tableName)} ORDER BY id DESC LIMIT 50`,
     );
 
@@ -174,10 +178,13 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ table: string }> },
+  { params }: { params: Promise<{ Hname: string; table: string }> },
 ) {
   try {
-    const { table } = await params;
+    const { Hname, table } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    
     const body = (await request.json()) as PostBody;
     const fields = body.fields ?? [];
     const values = body.values ?? {};
@@ -191,7 +198,7 @@ export async function POST(
 
     const tableName = resolveTableName(table, body.cardTitle);
 
-    await ensureTable(tableName, fields);
+    await ensureTable(pool, tableName, fields);
 
     const insertableFields = fields.filter((field) =>
       Object.prototype.hasOwnProperty.call(values, field.id),
@@ -212,7 +219,7 @@ export async function POST(
       normalizeValue(field, values[field.id]),
     );
 
-    const insertResult = await query(
+    const insertResult = await pool.query(
       `
         INSERT INTO ${quoteIdentifier(tableName)} (${columns.join(", ")})
         VALUES (${placeholders.join(", ")})

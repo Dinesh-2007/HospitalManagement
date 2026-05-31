@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { BlankPage } from "./blank-page";
 import { tableNameFromCardTitle } from "../lib/master-form-table";
 
@@ -107,12 +108,14 @@ export function MastersFormPage({
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const tableName = tableNameFromCardTitle(cardTitle);
+  const params = useParams();
+  const hname = params?.Hname as string;
 
   const loadRecords = useCallback(async () => {
     setIsLoadingRecords(true);
 
     try {
-      const response = await fetch(`/api/forms/${tableName}`, {
+      const response = await fetch(`/api/${hname}/forms/${tableName}`, {
         method: "GET",
         cache: "no-store",
       });
@@ -133,7 +136,7 @@ export function MastersFormPage({
     } finally {
       setIsLoadingRecords(false);
     }
-  }, [tableName]);
+  }, [tableName, hname]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -153,7 +156,7 @@ export function MastersFormPage({
     const values = serializeFormValues(new FormData(form), fields);
 
     try {
-      const response = await fetch(`/api/forms/${tableName}`, {
+      const response = await fetch(`/api/${hname}/forms/${tableName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
