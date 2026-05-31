@@ -14,7 +14,9 @@ export function DashboardShell({
 }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
   const pathname = usePathname();
-  const hideNavAndSidebar = pathname === "/" || pathname === "/create-account";
+  const segments = pathname.split('/').filter(Boolean);
+  const isLoginPage = segments.length === 1 && segments[0] !== 'create-account';
+  const hideNavAndSidebar = pathname === "/" || pathname === "/create-account" || isLoginPage;
 
   const mainContentMargin = isMobileOpen
     ? "ml-0"
@@ -32,7 +34,7 @@ export function DashboardShell({
         className={`flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out ${mainContentMargin}`}
       >
         {!hideNavAndSidebar && <Header />}
-        <main className="min-w-0 flex-1 bg-gray-50">
+        <main className="min-w-0 flex-1 bg-gray-50 dark:bg-gray-800">
           <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
         </main>
       </div>

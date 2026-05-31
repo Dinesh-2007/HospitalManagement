@@ -1,11 +1,11 @@
 "use client";
 
-import { use, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { use, useState, useTransition } from "react";
 import { ComponentCard } from "../../components/component-card";
 import { InputField } from "../../components/ui/input-field";
 import { Label } from "../../components/ui/label";
 import { Button } from "../../components/ui/button";
+import { loginAction } from "../actions/auth";
 
 interface Props {
   params: Promise<{ Hname: string }>;
@@ -15,12 +15,23 @@ export default function HospitalLoginPage({ params }: Props) {
   // Unwrap promise params
   const resolvedParams = use(params);
   const hname = decodeURIComponent(resolvedParams.Hname);
-  const router = useRouter();
+  
+  const [errorMessages, setErrorMessages] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  const handleLogin = (e: FormEvent) => {
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Simulate login logic, then redirect
-    router.push(`/${encodeURIComponent(hname)}/masters`);
+    setErrorMessages(null);
+    const formData = new FormData(e.currentTarget);
+    formData.append("hname", hname);
+
+    startTransition(async () => {
+      try {
+        await loginAction(formData);
+      } catch (err: any) {
+        setErrorMessages(err.message || "Failed to login");
+      }
+    });
   };
 
   return (
@@ -28,6 +39,11 @@ export default function HospitalLoginPage({ params }: Props) {
       <div className="w-full max-w-md">
         <ComponentCard title={`${hname} Login`}>
           <form onSubmit={handleLogin} className="space-y-5">
+            {errorMessages && (
+              <div className="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+                {errorMessages}
+              </div>
+            )}
             <div>
               <Label htmlFor="username">Username</Label>
               <InputField
@@ -49,8 +65,8 @@ export default function HospitalLoginPage({ params }: Props) {
               />
             </div>
             <div className="pt-2">
-              <Button type="submit" className="w-full">
-                Sign in
+              <Button type="submit" disabled={isPending} className="w-full">
+                {isPending ? "Signing in..." : "Sign in"}
               </Button>
             </div>
           </form>

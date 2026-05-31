@@ -60,19 +60,19 @@ export function BlankPage({ title, children }: BlankPageProps) {
   };
 
   return (
-    <main className="min-h-full bg-[#f3f4f6] px-4 py-5 sm:px-6 lg:px-8">
+    <main className="min-h-full bg-[#f3f4f6] dark:bg-transparent px-4 py-5 sm:px-6 lg:px-8">
       <h1 className="sr-only">{title}</h1>
       <div className="space-y-6">
         {matchedGroup ? (
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-800">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-white/90">
                 {matchedGroup.title}
               </h2>
             </div>
 
             <div
-              className={`flex min-w-0 max-w-full items-center rounded-2xl bg-slate-200/70 p-1.5 ${
+              className={`flex min-w-0 max-w-full items-center rounded-2xl bg-slate-200/70 dark:bg-gray-800 p-1.5 ${
                 hasTabOverflow ? "w-full lg:flex-1" : "w-fit"
               }`}
             >
@@ -105,8 +105,8 @@ export function BlankPage({ title, children }: BlankPageProps) {
                       href={localHref}
                       className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 ${
                         isActive
-                          ? "border border-slate-200 bg-white text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
-                          : "border border-transparent bg-transparent text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900"
+                          ? "border border-slate-200 bg-white dark:bg-gray-700 dark:border-gray-600 text-slate-900 dark:text-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+                          : "border border-transparent bg-transparent text-slate-600 dark:text-gray-400 hover:border-slate-300 dark:hover:border-gray-600 hover:bg-white dark:hover:bg-gray-700 hover:text-slate-900 dark:hover:text-white/90"
                       }`}
                     >
                       {item.title}

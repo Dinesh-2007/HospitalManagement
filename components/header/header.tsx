@@ -6,6 +6,7 @@ import { BellIcon, ChevronDownIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
 import { useParams } from "next/navigation";
+import { HeaderUserDropdown } from "./header-user-dropdown";
 
 export function Header() {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
@@ -163,28 +164,9 @@ export function Header() {
                 </svg>
               )}
             </button>
-
-            <button className="relative flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-100 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800">
-              <div className="scale-75"><BellIcon /></div>
-              <span className="absolute top-2.5 right-2 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-white dark:ring-gray-900"></span>
-            </button>
           </div>
 
-          <div className="flex cursor-pointer items-center gap-3">
-            <div className="relative h-11 w-11 overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-800 dark:bg-gray-800">
-              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" width="44" height="44">
-                <path fill="#E2E8F0" d="M0 0h36v36H0z" />
-                <circle cx="18" cy="14" r="6" fill="#94A3B8" />
-                <path d="M18 22c-7 0-11 4-11 6v8h22v-8c0-2-4-6-11-6z" fill="#94A3B8" />
-              </svg>
-            </div>
-            <div className="hidden sm:flex sm:items-center sm:gap-1">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                Musharof
-              </span>
-              <ChevronDownIcon className="h-4 w-4 text-gray-400" />
-            </div>
-          </div>
+          <HeaderUserDropdown />
         </div>
       </div>
     </header>

@@ -119,4 +119,8 @@ export const navigation: NavigationSection[] = [
       { title: "Pharmacist Screen", href: "/queue-management/pharmacist-screen" },
     ],
   },
+  {
+    title: "Manage Users",
+    href: "/manage-users",
+  },
 ];

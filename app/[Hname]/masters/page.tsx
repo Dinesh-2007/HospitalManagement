@@ -40,7 +40,7 @@ export default async function MastersPage({ params }: Props) {
   };
 
   return (
-    <div className="min-h-full bg-[#f3f4f6] px-4 py-5 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-transparent px-4 py-5 sm:px-6 lg:px-8">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {mastersItems.map((item, index) => {
           // Determine the correct route for the subgroup boxes page.
@@ -56,12 +56,12 @@ export default async function MastersPage({ params }: Props) {
             <Link
               key={index}
               href={linkHref}
-              className="group flex min-h-[180px] flex-col items-center justify-center rounded-sm border border-slate-200 bg-white px-6 py-10 text-center shadow-[0_1px_3px_rgba(15,23,42,0.08)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(37,99,235,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+              className="group flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-10 text-center shadow-[0_1px_3px_rgba(15,23,42,0.08)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.5)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(37,99,235,0.12)] hover:dark:shadow-[0_12px_30px_rgba(0,0,0,0.8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
             >
-              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-500 transition-colors duration-200 group-hover:bg-blue-100 group-hover:text-blue-600">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-500 transition-colors duration-200 group-hover:bg-blue-100 dark:group-hover:bg-blue-500/20 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                 {getIcon(item.title)}
               </div>
-              <span className="max-w-[14rem] text-lg font-semibold text-blue-500 transition-colors duration-200 group-hover:text-blue-600">
+              <span className="max-w-[14rem] text-lg font-semibold text-blue-500 transition-colors duration-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                 {item.title}
               </span>
             </Link>

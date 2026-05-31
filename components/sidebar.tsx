@@ -5,6 +5,7 @@ import { usePathname, useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NavigationSection } from "../lib/navigation";
 import { navigation } from "../lib/navigation";
+import { getCurrentUser } from "../app/actions/user";
 import {
   BoxCubeIcon,
   BoxIcon,
@@ -179,7 +180,26 @@ export function Sidebar() {
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : "HSMS";
   const { isExpanded, isHovered, isMobileOpen, setIsHovered } = useSidebar();
   const isCompact = !isExpanded && !isHovered && !isMobileOpen;
-  const initialOpen = useMemo(() => collectOpenKeys(navigation, pathname), [pathname]);
+  
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (hname !== "HSMS") {
+      getCurrentUser(hname).then(setCurrentUser).catch(console.error);
+    }
+  }, [hname]);
+
+  const filteredNavigation = useMemo(() => {
+    return navigation.filter(nav => {
+      // Hide Manage Users for non-admin
+      if (nav.title === "Manage Users" && currentUser !== "admin") {
+        return false;
+      }
+      return true;
+    });
+  }, [currentUser]);
+
+  const initialOpen = useMemo(() => collectOpenKeys(filteredNavigation, pathname), [pathname, filteredNavigation]);
   const [openMap, setOpenMap] = useState<OpenMap>({});
   const syncedPathname = useRef<string>("");
 
@@ -253,7 +273,7 @@ export function Sidebar() {
                 {isCompact ? "..." : "Menu"}
               </h2>
               <ul className="flex flex-col gap-2">
-                {navigation.map((section) => (
+                {filteredNavigation.map((section) => (
                   <SidebarItem
                     key={section.title}
                     node={section}
