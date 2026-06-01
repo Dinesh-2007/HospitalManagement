@@ -59,6 +59,8 @@ function getSectionIcon(title: string) {
       return <DocsIcon />;
     case "Queue Management":
       return <GroupIcon />;
+    case "Doctor Consultation":
+      return <UserCircleIcon />;
     case "Clinical Masters":
       return <GroupIcon />;
     case "Consultant Doctor Management":
