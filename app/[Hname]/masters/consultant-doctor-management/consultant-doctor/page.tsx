@@ -2,20 +2,29 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
+import { useParams } from "next/navigation";
 import {
   MastersFormPage,
   type MastersFormField,
 } from "../../../../../components/masters-form-page";
 
 export default function ConsultantDoctorPage() {
+  const params = useParams();
+  const hname = params?.Hname as string;
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [payModeOptions, setPayModeOptions] = useState<string[]>([]);
+  const [paymentTermsOptions, setPaymentTermsOptions] = useState<string[]>([]);
+  const [clinicOptions, setClinicOptions] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadPayModes() {
+      if (!hname) {
+        return;
+      }
+
       try {
-        const response = await fetch("/api/forms/pay_mode", {
+        const response = await fetch(`/api/${hname}/forms/pay_mode`, {
           method: "GET",
           cache: "no-store",
         });
@@ -28,18 +37,94 @@ export default function ConsultantDoctorPage() {
           rows?: Array<Record<string, unknown>>;
         };
 
-        const codes = (data.rows ?? [])
+        const options = (data.rows ?? [])
           .map((row) => String(row.code ?? "").trim())
+          .map((code, index) => {
+            const description = String(
+              data.rows?.[index]?.description ?? "",
+            ).trim();
+
+            return description ? `${code} - ${description}` : code;
+          })
           .filter(Boolean);
 
-        setPayModeOptions(codes);
+        setPayModeOptions(options);
       } catch (error) {
         console.error("Failed to load pay mode options", error);
       }
     }
 
     void loadPayModes();
-  }, []);
+  }, [hname]);
+
+  useEffect(() => {
+    async function loadPaymentTerms() {
+      if (!hname) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/payment_terms`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          rows?: Array<Record<string, unknown>>;
+        };
+
+        const options = (data.rows ?? [])
+          .map((row) => {
+            const code = String(row.code ?? "").trim();
+            const name = String(row.name ?? "").trim();
+
+            if (!code) {
+              return "";
+            }
+
+            return name ? `${code} - ${name}` : code;
+          })
+          .filter(Boolean);
+
+        setPaymentTermsOptions(options);
+      } catch (error) {
+        console.error("Failed to load payment terms options", error);
+      }
+    }
+
+    void loadPaymentTerms();
+  }, [hname]);
+
+  useEffect(() => {
+    async function loadDepartments() {
+      if (!hname) return;
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/department_master`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { rows?: Array<Record<string, unknown>> };
+
+        const options = (data.rows ?? [])
+          .map((row) => String(row.department_type ?? row.departmentType ?? row.department_name ?? row.name ?? "").trim())
+          .filter(Boolean);
+
+        setClinicOptions(options);
+      } catch (error) {
+        console.error("Failed to load department options", error);
+      }
+    }
+
+    void loadDepartments();
+  }, [hname]);
 
   const countries = Country.getAllCountries();
   const states = selectedCountryCode ? State.getStatesOfCountry(selectedCountryCode) : [];
@@ -127,7 +212,7 @@ export default function ConsultantDoctorPage() {
         id: "clinic",
         label: "Clinic",
         type: "select",
-        options: ["OPD", "Cardiology", "Orthopedics", "Neurology"],
+        options: clinicOptions.length > 0 ? clinicOptions : ["OPD", "Cardiology", "Orthopedics", "Neurology"],
       },
       {
         id: "appointmentScheduleLimit",
@@ -162,17 +247,16 @@ export default function ConsultantDoctorPage() {
         id: "payMode",
         label: "Pay Mode",
         type: "select",
-        options:
-          payModeOptions.length > 0 ? payModeOptions : ["Cash", "Card", "Bank Transfer", "Cheque"],
+        options: payModeOptions,
       },
       {
         id: "paymentTermsDays",
         label: "Payment Terms Days",
         type: "select",
-        options: ["0", "7", "15", "30"],
+        options: paymentTermsOptions,
       },
     ],
-    [countries, states, cities, payModeOptions],
+    [countries, states, cities, payModeOptions, paymentTermsOptions],
   );
 
   return (

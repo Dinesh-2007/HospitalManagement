@@ -1,12 +1,59 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import {
   MastersFormPage,
   type MastersFormField,
 } from "../../../../../components/masters-form-page";
 
 export default function AllergyPage() {
+  const params = useParams();
+  const hname = params?.Hname as string;
+  const [symptomOptions, setSymptomOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function loadAllergyOptions() {
+      if (!hname) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/allergy_master`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          rows?: Array<Record<string, unknown>>;
+        };
+
+        const options = (data.rows ?? [])
+          .map((row) => {
+            const code = String(row.code ?? "").trim();
+            const description = String(row.description ?? "").trim();
+
+            if (!code) {
+              return "";
+            }
+
+            return description ? `${code} - ${description}` : code;
+          })
+          .filter(Boolean);
+
+        setSymptomOptions(options);
+      } catch (error) {
+        console.error("Failed to load allergy options", error);
+      }
+    }
+
+    void loadAllergyOptions();
+  }, [hname]);
+
   const allergyFields: MastersFormField[] = useMemo(
     () => [
       {
@@ -24,7 +71,7 @@ export default function AllergyPage() {
           }
           
           try {
-            const res = await fetch("/api/forms/symptoms_master");
+            const res = await fetch(`/api/${hname}/forms/allergy_master`);
             if (res.ok) {
               const data = await res.json();
               if (data.rows && data.rows.length > 0) {
@@ -53,7 +100,7 @@ export default function AllergyPage() {
         id: "symptoms",
         label: "Symptoms",
         type: "select",
-        options: ["Cough", "Fever", "Headache", "Skin Rash"],
+        options: symptomOptions,
         size: "medium",
       },
       { id: "activeFrom", label: "Active From", type: "datetime-local" },
@@ -65,7 +112,7 @@ export default function AllergyPage() {
         fullWidth: true,
       },
     ],
-    []
+    [hname, symptomOptions]
   );
 
   return (
