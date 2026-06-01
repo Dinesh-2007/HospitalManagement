@@ -10,6 +10,8 @@ const doctorConsultationFields: MastersFormField[] = [
   { id: "diagnosisName", label: "Diagnosis Name", type: "text", size: "small" },
   { id: "symptoms", label: "Symptoms", type: "text", size: "small", colStart: 1 },
   { id: "remarks", label: "Remarks", type: "textarea", size: "medium", colStart: 2 },
+  { id: "followUpDays", label: "Follow-up Days", type: "number", size: "small" },
+  { id: "consultationAmount", label: "Consultation Amount", type: "number", size: "small" },
 ];
 
 export default function DoctorConsultationPage() {
