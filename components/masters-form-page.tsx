@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { BlankPage } from "./blank-page";
-import { tableNameFromCardTitle } from "../lib/master-form-table";
+import { columnNameFromFieldId, tableNameFromCardTitle } from "../lib/master-form-table";
+import { PencilIcon, TrashBinIcon } from "./icons";
 
 const HIDDEN_FIELD_NOTES = new Set([
   "character",
@@ -64,6 +65,7 @@ type MastersFormPageProps = {
 };
 
 type SavedRecord = Record<string, unknown>;
+type FormValue = string | string[];
 
 const fieldSizeClasses: Record<NonNullable<MastersFormField["size"]>, string> = {
   small: "w-full",
@@ -87,24 +89,55 @@ const colStartClasses: Record<number, string> = {
 };
 
 function serializeFormValues(
-  formData: FormData,
+  values: Record<string, FormValue>,
   fields: MastersFormField[],
 ): Record<string, string | string[]> {
   return fields.reduce<Record<string, string | string[]>>(
     (accumulator, field) => {
       if (field.type === "multiselect" || field.type === "checkbox") {
-        accumulator[field.id] = formData
-          .getAll(field.id)
-          .filter((value): value is string => typeof value === "string");
+        accumulator[field.id] = Array.isArray(values[field.id]) ? values[field.id] : [];
         return accumulator;
       }
 
-      const value = formData.get(field.id);
-      accumulator[field.id] = typeof value === "string" ? value : "";
+      accumulator[field.id] =
+        typeof values[field.id] === "string" ? values[field.id] : "";
       return accumulator;
     },
     {},
   );
+}
+
+function buildInitialFormValues(fields: MastersFormField[]): Record<string, FormValue> {
+  return fields.reduce<Record<string, FormValue>>((accumulator, field) => {
+    accumulator[field.id] =
+      field.type === "multiselect" || field.type === "checkbox" ? [] : "";
+    return accumulator;
+  }, {});
+}
+
+function normalizeRecordValue(value: unknown, field: MastersFormField): FormValue {
+  if (field.type === "multiselect" || field.type === "checkbox") {
+    if (Array.isArray(value)) {
+      return value.map(String);
+    }
+
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        return value ? [value] : [];
+      }
+    }
+
+    return [];
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
 }
 
 export function MastersFormPage({
@@ -123,6 +156,10 @@ export function MastersFormPage({
   const [isShowingForm, setIsShowingForm] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, FormValue>>(() =>
+    buildInitialFormValues(fields),
+  );
   const tableName = tableNameFromCardTitle(cardTitle);
   const params = useParams();
   const hname = params?.Hname as string;
@@ -162,22 +199,101 @@ export function MastersFormPage({
     return () => window.clearTimeout(timeoutId);
   }, [loadRecords]);
 
+  useEffect(() => {
+    setFormValues(buildInitialFormValues(fields));
+  }, [fields]);
+
+  const resetFormState = useCallback(() => {
+    setFormValues(buildInitialFormValues(fields));
+    setEditingRecordId(null);
+  }, [fields]);
+
+  const updateFieldValue = useCallback(
+    (field: MastersFormField, value: FormValue) => {
+      setFormValues((current) => ({
+        ...current,
+        [field.id]: value,
+      }));
+
+      if (typeof value === "string") {
+        field.onChange?.(value);
+      }
+    },
+    [],
+  );
+
+  const handleEditRecord = useCallback(
+    (record: SavedRecord) => {
+      const nextValues = buildInitialFormValues(fields);
+
+      for (const field of fields) {
+        const recordValue =
+          record[field.id] ?? record[columnNameFromFieldId(field.id)];
+        nextValues[field.id] = normalizeRecordValue(recordValue, field);
+      }
+
+      setFormValues(nextValues);
+      setEditingRecordId(Number(record.id));
+      setSubmitError(null);
+      setSubmitMessage(null);
+      setIsShowingForm(true);
+    },
+    [fields],
+  );
+
+  const handleDeleteRecord = useCallback(
+    async (recordId: number) => {
+      setSubmitError(null);
+      setSubmitMessage(null);
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/${tableName}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ id: recordId }),
+        });
+
+        const data = (await response.json()) as {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to delete record.");
+        }
+
+        if (editingRecordId === recordId) {
+          resetFormState();
+        }
+
+        setSubmitMessage("Record deleted successfully.");
+        await loadRecords();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to delete record.";
+        setSubmitError(message);
+      }
+    },
+    [editingRecordId, hname, loadRecords, resetFormState, tableName],
+  );
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitMessage(null);
 
-    const form = event.currentTarget;
-    const values = serializeFormValues(new FormData(form), fields);
+    const values = serializeFormValues(formValues, fields);
 
     try {
       const response = await fetch(`/api/${hname}/forms/${tableName}`, {
-        method: "POST",
+        method: editingRecordId ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          id: editingRecordId,
           cardTitle,
           fields,
           values,
@@ -192,8 +308,12 @@ export function MastersFormPage({
         throw new Error(data.error ?? "Failed to save form values.");
       }
 
-      form.reset();
-      setSubmitMessage(`Saved successfully to ${tableName}.`);
+      resetFormState();
+      setSubmitMessage(
+        editingRecordId
+          ? `Updated successfully in ${tableName}.`
+          : `Saved successfully to ${tableName}.`,
+      );
       await loadRecords();
       setIsShowingForm(false);
     } catch (error) {
@@ -271,8 +391,8 @@ export function MastersFormPage({
                         <select
                           id={field.id}
                           name={field.id}
-                          defaultValue=""
-                          onChange={(e) => field.onChange?.(e.target.value)}
+                          value={typeof formValues[field.id] === "string" ? formValues[field.id] : ""}
+                          onChange={(e) => updateFieldValue(field, e.target.value)}
                           className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 pr-10 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                         >
                           <option value="" disabled>
@@ -289,6 +409,13 @@ export function MastersFormPage({
                           id={field.id}
                           name={field.id}
                           multiple
+                          value={Array.isArray(formValues[field.id]) ? formValues[field.id] : []}
+                          onChange={(e) =>
+                            updateFieldValue(
+                              field,
+                              Array.from(e.target.selectedOptions, (option) => option.value),
+                            )
+                          }
                           className="min-h-28 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                         >
                           {(field.options ?? []).map((option) => (
@@ -308,6 +435,19 @@ export function MastersFormPage({
                                 type="checkbox"
                                 name={field.id}
                                 value={option}
+                                checked={
+                                  Array.isArray(formValues[field.id]) &&
+                                  formValues[field.id].includes(option)
+                                }
+                                onChange={(e) => {
+                                  const currentValues = Array.isArray(formValues[field.id])
+                                    ? formValues[field.id]
+                                    : [];
+                                  const nextValues = e.target.checked
+                                    ? [...currentValues, option]
+                                    : currentValues.filter((current) => current !== option);
+                                  updateFieldValue(field, nextValues);
+                                }}
                                 className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                               />
                               <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -323,6 +463,8 @@ export function MastersFormPage({
                           rows={4}
                           placeholder={field.placeholder}
                           maxLength={field.maxLength}
+                          value={typeof formValues[field.id] === "string" ? formValues[field.id] : ""}
+                          onChange={(e) => updateFieldValue(field, e.target.value)}
                           className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                         />
                       ) : (
@@ -338,6 +480,7 @@ export function MastersFormPage({
                           pattern={field.pattern}
                           inputMode={field.inputMode}
                           readOnly={field.type === "display"}
+                          value={typeof formValues[field.id] === "string" ? formValues[field.id] : ""}
                           onChange={(e) => {
                             if (field.pattern === "[a-zA-Z\\s]*") {
                               e.target.value = e.target.value.replace(
@@ -359,7 +502,7 @@ export function MastersFormPage({
                                 "",
                               );
                             }
-                            field.onChange?.(e.target.value);
+                            updateFieldValue(field, e.target.value);
                           }}
                           className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                         />
@@ -392,16 +535,17 @@ export function MastersFormPage({
                 <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="reset"
+                    onClick={resetFormState}
                     className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                   >
-                    Clear
+                    {editingRecordId ? "Cancel Edit" : "Clear"}
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
                   >
-                    {isSubmitting ? "Saving..." : "Submit"}
+                    {isSubmitting ? "Saving..." : editingRecordId ? "Update" : "Submit"}
                   </button>
                 </div>
               </div>
@@ -451,6 +595,9 @@ export function MastersFormPage({
                             {column.replace(/_/g, " ")}
                           </th>
                         ))}
+                        <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -477,6 +624,33 @@ export function MastersFormPage({
                               </td>
                             );
                           })}
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditRecord(record)}
+                                title="Edit record"
+                                aria-label="Edit record"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-300 text-brand-600 transition hover:bg-brand-50 dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-500/10"
+                              >
+                                <PencilIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const recordId = Number(record.id);
+                                  if (Number.isInteger(recordId) && recordId > 0) {
+                                    void handleDeleteRecord(recordId);
+                                  }
+                                }}
+                                title="Delete record"
+                                aria-label="Delete record"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-500/10"
+                              >
+                                <TrashBinIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

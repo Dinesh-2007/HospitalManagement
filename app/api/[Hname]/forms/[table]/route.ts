@@ -31,6 +31,14 @@ type PostBody = {
   values?: Record<string, unknown>;
 };
 
+type PutBody = PostBody & {
+  id?: number;
+};
+
+type DeleteBody = {
+  id?: number;
+};
+
 function resolveTableName(routeTable: string, cardTitle?: string) {
   const safeRouteTable = ensureSafeIdentifier(routeTable, "table");
 
@@ -235,6 +243,122 @@ export async function POST(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save form values.";
+
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ Hname: string; table: string }> },
+) {
+  try {
+    const { Hname, table } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+
+    const body = (await request.json()) as PutBody;
+    const fields = body.fields ?? [];
+    const values = body.values ?? {};
+    const id = body.id;
+
+    if (!Number.isInteger(id) || Number(id) <= 0) {
+      return NextResponse.json({ error: "A valid record id is required." }, { status: 400 });
+    }
+
+    if (fields.length === 0) {
+      return NextResponse.json(
+        { error: "No fields were provided for this form." },
+        { status: 400 },
+      );
+    }
+
+    const tableName = resolveTableName(table, body.cardTitle);
+
+    if (!(await tableExists(pool, tableName))) {
+      return NextResponse.json({ error: "Table does not exist." }, { status: 404 });
+    }
+
+    await ensureTable(pool, tableName, fields);
+
+    const updatableFields = fields.filter((field) =>
+      Object.prototype.hasOwnProperty.call(values, field.id),
+    );
+
+    if (updatableFields.length === 0) {
+      return NextResponse.json(
+        { error: "No form values were provided." },
+        { status: 400 },
+      );
+    }
+
+    const assignments = updatableFields.map(
+      (field, index) =>
+        `${quoteIdentifier(columnNameFromFieldId(field.id))} = $${index + 1}`,
+    );
+    const updateValues = updatableFields.map((field) =>
+      normalizeValue(field, values[field.id]),
+    );
+
+    const updateResult = await pool.query(
+      `
+        UPDATE ${quoteIdentifier(tableName)}
+        SET ${assignments.join(", ")}, updated_at = NOW()
+        WHERE id = $${updatableFields.length + 1}
+        RETURNING *
+      `,
+      [...updateValues, id],
+    );
+
+    if (updateResult.rowCount === 0) {
+      return NextResponse.json({ error: "Record not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      row: updateResult.rows[0],
+      tableName,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update form values.";
+
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ Hname: string; table: string }> },
+) {
+  try {
+    const { Hname, table } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    const body = (await request.json()) as DeleteBody;
+    const id = body.id;
+    const tableName = ensureSafeIdentifier(table, "table");
+
+    if (!Number.isInteger(id) || Number(id) <= 0) {
+      return NextResponse.json({ error: "A valid record id is required." }, { status: 400 });
+    }
+
+    if (!(await tableExists(pool, tableName))) {
+      return NextResponse.json({ error: "Table does not exist." }, { status: 404 });
+    }
+
+    const deleteResult = await pool.query(
+      `DELETE FROM ${quoteIdentifier(tableName)} WHERE id = $1 RETURNING id`,
+      [id],
+    );
+
+    if (deleteResult.rowCount === 0) {
+      return NextResponse.json({ error: "Record not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, id });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete form values.";
 
     return NextResponse.json({ error: message }, { status: 400 });
   }
