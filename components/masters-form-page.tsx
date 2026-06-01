@@ -48,6 +48,7 @@ export type MastersFormField = {
   fullWidth?: boolean;
   size?: "small" | "medium" | "large" | "full";
   note?: string;
+  colStart?: 1 | 2 | 3 | 4;
   onChange?: (value: string) => void;
 };
 
@@ -56,6 +57,10 @@ type MastersFormPageProps = {
   cardTitle: string;
   description: string;
   fields: MastersFormField[];
+  backButtonText?: string;
+  backHref?: string;
+  columns?: 1 | 2 | 3;
+  children?: React.ReactNode;
 };
 
 type SavedRecord = Record<string, unknown>;
@@ -72,6 +77,13 @@ const fieldColumnClasses: Record<NonNullable<MastersFormField["size"]>, string> 
   medium: "",
   large: "lg:col-span-2",
   full: "col-span-full",
+};
+
+const colStartClasses: Record<number, string> = {
+  1: "lg:col-start-1",
+  2: "lg:col-start-2",
+  3: "lg:col-start-3",
+  4: "lg:col-start-4",
 };
 
 function serializeFormValues(
@@ -100,6 +112,10 @@ export function MastersFormPage({
   cardTitle,
   description,
   fields,
+  backButtonText = "Back to Masters",
+  backHref = "/masters",
+  columns,
+  children,
 }: MastersFormPageProps) {
   const [records, setRecords] = useState<SavedRecord[]>([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
@@ -191,7 +207,13 @@ export function MastersFormPage({
 
   const recordColumns = Object.keys(records[0] ?? {});
   const standardFieldCount = fields.filter((field) => !field.fullWidth).length;
-  const shouldUseThreeColumns = standardFieldCount >= 6;
+  // Determine column count based on explicit prop or field count
+  const shouldUseThreeColumns = columns === 3 || (columns === undefined && standardFieldCount >= 6);
+  const gridColumnsClass = columns === 1 
+    ? "lg:grid-cols-1" 
+    : shouldUseThreeColumns 
+      ? "lg:grid-cols-3" 
+      : "lg:grid-cols-2";
 
   return (
     <BlankPage title={title}>
@@ -219,9 +241,7 @@ export function MastersFormPage({
           {isShowingForm ? (
             <form className="space-y-8" onSubmit={handleSubmit}>
               <div
-                className={`grid grid-flow-dense grid-cols-1 items-start gap-4 lg:grid-cols-2 ${
-                  shouldUseThreeColumns ? "xl:grid-cols-3" : ""
-                }`}
+                className={`grid grid-flow-dense grid-cols-1 items-start gap-4 ${gridColumnsClass}`}
               >
                 {fields.map((field) => {
                   const helperText = field.note ?? field.hint;
@@ -233,11 +253,12 @@ export function MastersFormPage({
                   const fieldColumnClass = field.fullWidth
                     ? fieldColumnClasses.full
                     : fieldColumnClasses[fieldSize];
+                  const colStartClass = field.colStart ? colStartClasses[field.colStart] : "";
 
                   return (
                     <div
                       key={field.id}
-                      className={`${fieldColumnClass} ${fieldSizeClass}`}
+                      className={`${fieldColumnClass} ${fieldSizeClass} ${colStartClass}`}
                     >
                       <label
                         htmlFor={field.id}
@@ -354,12 +375,18 @@ export function MastersFormPage({
                 })}
               </div>
 
+              {children && (
+                <div className="mt-8">
+                  {children}
+                </div>
+              )}
+
               <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
                 <Link
-                  href="/masters"
+                  href={backHref}
                   className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                 >
-                  Back to Masters
+                  {backButtonText}
                 </Link>
 
                 <div className="flex flex-wrap justify-end gap-3">
