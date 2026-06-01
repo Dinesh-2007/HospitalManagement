@@ -85,6 +85,10 @@ export const navigation: NavigationSection[] = [
     href: "/masters",
   },
   {
+    title: "Pharmacy Dispensing",
+    href: "/pharmacy-dispensing",
+  },
+  {
     title: "Pharmacy",
     items: [
       { title: "Purchase", href: "/pharmacy/purchase" },
