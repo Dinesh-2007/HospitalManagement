@@ -37,7 +37,6 @@ export const mastersData: NavigationSection[] = [
       { title: "Room Type", href: "/masters/lab-hospital-facility-masters/room-type" },
       { title: "Room Master", href: "/masters/lab-hospital-facility-masters/room-master" },
       { title: "Equipment Master", href: "/masters/lab-hospital-facility-masters/equipment-master" },
-      { title: "Holiday Master", href: "/masters/lab-hospital-facility-masters/holiday-master" },
     ],
   },
   {
@@ -118,6 +117,10 @@ export const navigation: NavigationSection[] = [
       { title: "In Patient", href: "/queue-management/in-patient" },
       { title: "Pharmacist Screen", href: "/queue-management/pharmacist-screen" },
     ],
+  },
+  {
+    title: "Doctor Consultation",
+    href: "/doctor-consultation",
   },
   {
     title: "Manage Users",

@@ -14,7 +14,7 @@ const departmentMasterFields: MastersFormField[] = [
   },
   {
     id: "departmentType",
-    label: "Card Type",
+    label: "Name",
     type: "text",
     placeholder: "Enter department name",
     maxLength: 100,

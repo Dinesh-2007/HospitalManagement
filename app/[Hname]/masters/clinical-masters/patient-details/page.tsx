@@ -2,35 +2,61 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Country, State, City } from "country-state-city";
+import { useParams } from "next/navigation";
 import {
   MastersFormPage,
   type MastersFormField,
 } from "../../../../../components/masters-form-page";
 
 export default function PatientDetailsPage() {
+  const params = useParams();
+  const hname = params?.Hname as string;
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [patientTypeOptions, setPatientTypeOptions] = useState<string[]>([]);
 
   useEffect(() => {
     async function loadPatientTypes() {
+      if (!hname) {
+        return;
+      }
+
       try {
-        const response = await fetch("/api/forms/patient_type");
+        const response = await fetch(`/api/${hname}/forms/patient_type`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          rows?: Array<Record<string, unknown>>;
+        };
+
         if (response.ok) {
-          const data = await response.json();
-          if (data.rows) {
-            // Field ID is "typeCode", so column in returned records is "type_code", or "typecode" depending on column mapping.
-            // A safe approach is to check both depending on how Pg returns it, but standard is type_code
-            const types = data.rows.map((r: any) => r.type_code || r.typeCode || "").filter(Boolean);
-            setPatientTypeOptions(types);
-          }
+          const types = (data.rows ?? [])
+            .map((row) => {
+              const typeCode = String(row.type_code ?? row.typeCode ?? "").trim();
+              const description = String(row.description ?? "").trim();
+
+              if (!typeCode) {
+                return "";
+              }
+
+              return description ? `${typeCode} - ${description}` : typeCode;
+            })
+            .filter(Boolean);
+
+          setPatientTypeOptions(types);
         }
       } catch (error) {
         console.error("Failed to fetch patient types", error);
       }
     }
     loadPatientTypes();
-  }, []);
+  }, [hname]);
 
   const countries = Country.getAllCountries();
   const states = selectedCountryCode ? State.getStatesOfCountry(selectedCountryCode) : [];
@@ -113,7 +139,7 @@ export default function PatientDetailsPage() {
       id: "patientType",
       label: "Patient Type",
       type: "select",
-      options: patientTypeOptions.length > 0 ? patientTypeOptions : ["General", "Corporate", "Insurance", "VIP"],
+      options: patientTypeOptions,
     },
     {
       id: "preferredPaymentType",

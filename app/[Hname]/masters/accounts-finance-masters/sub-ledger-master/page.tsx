@@ -1,15 +1,117 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
+import { useParams } from "next/navigation";
 import {
   MastersFormPage,
   type MastersFormField,
 } from "../../../../../components/masters-form-page";
 
 export default function SubLedgerMasterPage() {
+  const params = useParams();
+  const hname = params?.Hname as string;
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
+  const [ledgerOptions, setLedgerOptions] = useState<string[]>([]);
+  const [payModeOptions, setPayModeOptions] = useState<string[]>([]);
+  const [paymentTermsOptions, setPaymentTermsOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function loadLedgers() {
+      if (!hname) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/ledger_master`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          rows?: Array<Record<string, unknown>>;
+        };
+
+        const options = (data.rows ?? [])
+          .map((row) => {
+            const code = String(row.code ?? "").trim();
+            const ledgerName = String(row.ledger_name ?? row.ledgerName ?? "").trim();
+
+            if (!code) {
+              return "";
+            }
+
+            return ledgerName ? `${code} - ${ledgerName}` : code;
+          })
+          .filter(Boolean);
+
+        setLedgerOptions(options);
+      } catch (error) {
+        console.error("Failed to load ledger options", error);
+      }
+    }
+
+    void loadLedgers();
+  }, [hname]);
+
+  useEffect(() => {
+    async function loadPaymentTerms() {
+      if (!hname) return;
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/payment_terms`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { rows?: Array<Record<string, unknown>> };
+
+        const options = (data.rows ?? [])
+          .map((row) => String(row.description ?? "").trim())
+          .filter(Boolean);
+
+        setPaymentTermsOptions(options);
+      } catch (error) {
+        console.error("Failed to load payment terms options", error);
+      }
+    }
+
+    void loadPaymentTerms();
+  }, [hname]);
+
+  useEffect(() => {
+    async function loadPayModes() {
+      if (!hname) return;
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/pay_mode`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { rows?: Array<Record<string, unknown>> };
+
+        const options = (data.rows ?? [])
+          .map((row) => String(row.description ?? row.desc ?? "").trim())
+          .filter(Boolean);
+
+        setPayModeOptions(options);
+      } catch (error) {
+        console.error("Failed to load pay mode options", error);
+      }
+    }
+
+    void loadPayModes();
+  }, [hname]);
 
   const countries = Country.getAllCountries();
   const states = selectedCountryCode ? State.getStatesOfCountry(selectedCountryCode) : [];
@@ -58,7 +160,7 @@ export default function SubLedgerMasterPage() {
       id: "ledger",
       label: "Ledger",
       type: "select",
-      options: ["Ledger A", "Ledger B", "Ledger C", "Ledger D"],
+      options: ledgerOptions,
       note: "LOV",
     },
     {
@@ -196,14 +298,14 @@ export default function SubLedgerMasterPage() {
       id: "payMode",
       label: "Pay Mode",
       type: "select",
-      options: ["Cash", "Cheque", "RTGS", "NEFT", "Online Transfer"],
+      options: payModeOptions.length > 0 ? payModeOptions : ["Cash", "Cheque", "RTGS", "NEFT", "Online Transfer"],
       note: "Cash / Cheque / RTGS / NEFT / Online Transfer",
     },
     {
       id: "paymentTermsDays",
       label: "Payment Terms Days",
       type: "select",
-      options: ["Immediate", "7 Days", "15 Days", "30 Days", "45 Days"],
+      options: paymentTermsOptions.length > 0 ? paymentTermsOptions : ["Immediate", "7 Days", "15 Days", "30 Days", "45 Days"],
       note: "From LOV",
     },
     {

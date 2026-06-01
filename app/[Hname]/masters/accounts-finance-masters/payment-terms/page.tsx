@@ -18,7 +18,7 @@ const paymentTermsFields: MastersFormField[] = [
     id: "name",
     label: "Name",
     type: "text",
-    pattern: "[a-zA-Z\\s]*",
+    pattern: "[a-zA-Z0-9\\s]*",
     placeholder: "Enter name",
     maxLength: 200,
   },
