@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { PlusIcon } from "../../../components/icons/plus"; // Checking if plus icon exists
+import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type Medicine = {
   id: string;
@@ -37,6 +37,7 @@ type PrescriptionRow = {
 export function PrescriptionTable() {
   const [rows, setRows] = useState<PrescriptionRow[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   
   // Modal state
   const [searchQuery, setSearchQuery] = useState("");
@@ -101,8 +102,9 @@ export function PrescriptionTable() {
   };
 
   const addEmptyRow = () => {
+    const rowId = crypto.randomUUID();
     const emptyRow: PrescriptionRow = {
-      id: crypto.randomUUID(),
+      id: rowId,
       medicine: {
         id: "",
         code: "",
@@ -119,7 +121,67 @@ export function PrescriptionTable() {
       totalQty: "",
     };
     setRows([...rows, emptyRow]);
+    setEditingRowId(rowId);
   };
+
+  const deleteRow = (rowId: string) => {
+    setRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
+    setEditingRowId((currentEditingId) =>
+      currentEditingId === rowId ? null : currentEditingId
+    );
+  };
+
+  const editRow = (rowId: string) => {
+    setEditingRowId((currentEditingId) =>
+      currentEditingId === rowId ? null : rowId
+    );
+  };
+
+  const updateRowField = (
+    rowId: string,
+    field: keyof Pick<PrescriptionRow, "frequency" | "foodTiming" | "days" | "totalQty">,
+    value: string
+  ) => {
+    const nextValue =
+      (field === "days" || field === "totalQty") && value !== ""
+        ? String(Math.max(0, Number(value)))
+        : value;
+
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId ? { ...row, [field]: nextValue } : row
+      )
+    );
+  };
+
+  const updateMedicineField = (
+    rowId: string,
+    field: keyof Pick<Medicine, "type" | "genericName" | "uom" | "strength">,
+    value: string
+  ) => {
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? { ...row, medicine: { ...row.medicine, [field]: value } }
+          : row
+      )
+    );
+  };
+
+  const editableInputClass = (minWidth: string, isEditing: boolean) =>
+    `w-full ${minWidth} rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
+      isEditing
+        ? "border-gray-300 bg-transparent focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:bg-gray-900"
+        : "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300"
+    }`;
+
+  const lineNumberInputClass =
+    "w-12 rounded-md border border-gray-300 bg-gray-50 px-2 py-1.5 text-center text-sm dark:border-gray-700 dark:bg-gray-900/50";
+
+  const actionButtonClass =
+    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white";
+  const deleteButtonClass =
+    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 transition hover:bg-red-50 hover:text-red-600 focus:outline-hidden focus:ring-2 focus:ring-red-500/30 dark:border-red-900/40 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30";
 
   return (
     <div className="mt-8 space-y-4">
@@ -152,77 +214,126 @@ export function PrescriptionTable() {
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Food Timings</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">No of Days</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Total Qty</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                  No medicines added yet. Click "Add Medicine" to select.
+                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  No medicines added yet. Click Add Medicine to select.
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
-                <tr key={row.id}>
-                  <td className="px-4 py-2">
-                    <input type="text" readOnly value={index + 1} className="w-12 rounded-md border border-gray-300 bg-gray-50 px-2 py-1.5 text-center text-sm dark:border-gray-700 dark:bg-gray-900/50" />
-                  </td>
-                  <td className="px-4 py-2"><input type="text" readOnly value={row.medicine.type} className="w-full min-w-[120px] rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900/50" /></td>
-                  <td className="px-4 py-2"><input type="text" readOnly value={row.medicine.genericName} className="w-full min-w-[120px] rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900/50" /></td>
-                  <td className="px-4 py-2"><input type="text" readOnly value={row.medicine.uom} className="w-full min-w-[80px] rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900/50" /></td>
-                  <td className="px-4 py-2"><input type="text" readOnly value={row.medicine.strength} className="w-full min-w-[80px] rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900/50" /></td>
-                  <td className="px-4 py-2">
-                    <input 
-                      type="text" 
-                      placeholder="e.g. 1-0-1"
-                      value={row.frequency}
-                      onChange={(e) => {
-                        const newRows = [...rows];
-                        newRows[index].frequency = e.target.value;
-                        setRows(newRows);
-                      }}
-                      className="w-full min-w-[80px] rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900" 
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input 
-                      type="text" 
-                      placeholder="Before Food"
-                      value={row.foodTiming}
-                      onChange={(e) => {
-                        const newRows = [...rows];
-                        newRows[index].foodTiming = e.target.value;
-                        setRows(newRows);
-                      }}
-                      className="w-full min-w-[120px] rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900" 
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input 
-                      type="number" 
-                      value={row.days}
-                      onChange={(e) => {
-                        const newRows = [...rows];
-                        newRows[index].days = e.target.value;
-                        setRows(newRows);
-                      }}
-                      className="w-full min-w-[80px] rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900" 
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input 
-                      type="number" 
-                      value={row.totalQty}
-                      onChange={(e) => {
-                        const newRows = [...rows];
-                        newRows[index].totalQty = e.target.value;
-                        setRows(newRows);
-                      }}
-                      className="w-full min-w-[80px] rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900" 
-                    />
-                  </td>
-                </tr>
-              ))
+              rows.map((row, index) => {
+                const isEditing = editingRowId === row.id;
+
+                return (
+                  <tr key={row.id}>
+                    <td className="px-4 py-2">
+                      <input type="text" readOnly value={index + 1} className={lineNumberInputClass} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        value={row.medicine.type}
+                        onChange={(e) => updateMedicineField(row.id, "type", e.target.value)}
+                        className={editableInputClass("min-w-[120px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        value={row.medicine.genericName}
+                        onChange={(e) => updateMedicineField(row.id, "genericName", e.target.value)}
+                        className={editableInputClass("min-w-[120px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        value={row.medicine.uom}
+                        onChange={(e) => updateMedicineField(row.id, "uom", e.target.value)}
+                        className={editableInputClass("min-w-[80px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        value={row.medicine.strength}
+                        onChange={(e) => updateMedicineField(row.id, "strength", e.target.value)}
+                        className={editableInputClass("min-w-[80px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        placeholder="e.g. 1-0-1"
+                        value={row.frequency}
+                        onChange={(e) => updateRowField(row.id, "frequency", e.target.value)}
+                        className={editableInputClass("min-w-[80px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly={!isEditing}
+                        placeholder="Before Food"
+                        value={row.foodTiming}
+                        onChange={(e) => updateRowField(row.id, "foodTiming", e.target.value)}
+                        className={editableInputClass("min-w-[120px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        readOnly={!isEditing}
+                        value={row.days}
+                        onChange={(e) => updateRowField(row.id, "days", e.target.value)}
+                        className={editableInputClass("min-w-[80px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        readOnly={!isEditing}
+                        value={row.totalQty}
+                        onChange={(e) => updateRowField(row.id, "totalQty", e.target.value)}
+                        className={editableInputClass("min-w-[80px]", isEditing)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editRow(row.id)}
+                          className={`${actionButtonClass} ${isEditing ? "border-brand-200 text-brand-600 dark:border-brand-500/40 dark:text-brand-400" : ""}`}
+                          aria-label={`${isEditing ? "Finish editing" : "Edit"} prescription row ${index + 1}`}
+                          title={isEditing ? "Finish editing" : "Edit"}
+                        >
+                          <PencilIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRow(row.id)}
+                          className={deleteButtonClass}
+                          aria-label={`Delete prescription row ${index + 1}`}
+                          title="Delete"
+                        >
+                          <TrashBinIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
