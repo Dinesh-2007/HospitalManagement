@@ -19,7 +19,7 @@ export default function AllergyPage() {
       }
 
       try {
-        const response = await fetch(`/api/${hname}/forms/allergy_master`, {
+        const response = await fetch(`/api/${hname}/forms/symptoms_master`, {
           method: "GET",
           cache: "no-store",
         });
@@ -45,9 +45,9 @@ export default function AllergyPage() {
           })
           .filter(Boolean);
 
-        setSymptomOptions(options);
+        setSymptomOptions([...new Set(options)]);
       } catch (error) {
-        console.error("Failed to load allergy options", error);
+        console.error("Failed to load symptom options", error);
       }
     }
 
