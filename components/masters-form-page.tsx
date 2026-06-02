@@ -349,7 +349,18 @@ export function MastersFormPage({
     }
   }
 
-  const recordColumns = Object.keys(records[0] ?? {});
+  const availableRecordColumns = new Set(
+    records.flatMap((record) => Object.keys(record)),
+  );
+  const recordColumns = [
+    "id",
+    "created_at",
+    "updated_at",
+    ...fields.map((field) => columnNameFromFieldId(field.id)),
+  ].filter(
+    (column, index, array) =>
+      array.indexOf(column) === index && availableRecordColumns.has(column),
+  );
   const standardFieldCount = fields.filter((field) => !field.fullWidth).length;
   // Determine column count based on explicit prop or field count
   const shouldUseThreeColumns = columns === 3 || (columns === undefined && standardFieldCount >= 6);

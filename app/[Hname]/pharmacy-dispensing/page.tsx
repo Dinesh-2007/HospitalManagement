@@ -271,7 +271,7 @@ export default function PharmacyDispensingPage() {
 
   const openDispensingForm = (record: ConsultationRecord) => {
     const nextRows = parsePrescriptionLines(
-      record.prescription_lines ?? record.prescription_data,
+      record.prescription_data ?? record.prescription_lines,
     );
     nextRowId.current = 1;
     const hydratedRows = nextRows.map((row) => createMedicineRow(row));
