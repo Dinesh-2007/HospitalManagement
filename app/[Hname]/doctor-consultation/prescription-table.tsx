@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type Medicine = {
@@ -14,16 +15,16 @@ type Medicine = {
   stock: number;
 };
 
-const MOCK_MEDICINES: Medicine[] = Array.from({ length: 45 }).map((_, i) => ({
-  id: `M${i + 1}`,
-  code: `MED-${String(i + 1).padStart(3, "0")}`,
-  name: `Medicine ${i + 1}`,
-  genericName: `Generic ${i + 1}`,
-  type: i % 2 === 0 ? "Tablet" : "Syrup",
-  strength: i % 3 === 0 ? "500mg" : "250mg",
-  uom: "Nos",
-  stock: Math.floor(Math.random() * 500) + 10,
-}));
+type ItemMasterRow = {
+  id?: number | string | null;
+  item_code?: string | null;
+  item_name?: string | null;
+  item_category?: string | null;
+  purchase_uom?: string | null;
+  sale_uom?: string | null;
+  medicine_combination?: string | null;
+  current_stock?: number | string | null;
+};
 
 type PrescriptionRow = {
   id: string;
@@ -132,9 +133,14 @@ function parseRows(value?: string): PrescriptionRow[] {
 }
 
 export function PrescriptionTable({ value = "", onChange }: PrescriptionTableProps) {
+  const params = useParams();
+  const hname = params?.Hname as string;
   const [rows, setRows] = useState<PrescriptionRow[]>(() => parseRows(value));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [isLoadingMedicines, setIsLoadingMedicines] = useState(true);
+  const [medicineLoadError, setMedicineLoadError] = useState<string | null>(null);
   
   // Modal state
   const [searchQuery, setSearchQuery] = useState("");
@@ -142,14 +148,87 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadMedicines() {
+      if (!hname) {
+        return;
+      }
+
+      setIsLoadingMedicines(true);
+      setMedicineLoadError(null);
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/item_master_medicine`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          rows?: ItemMasterRow[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load medicines from item master.");
+        }
+
+        const nextMedicines = (data.rows ?? [])
+          .map((row, index) => {
+            const code = String(row.item_code ?? "").trim();
+            const name = String(row.item_name ?? "").trim();
+
+            if (!name) {
+              return null;
+            }
+
+            return {
+              id: String((row.id ?? code) || `medicine-${index}`),
+              code,
+              name,
+              genericName: String(row.medicine_combination ?? "").trim(),
+              type: String(row.item_category ?? "").trim(),
+              strength: "",
+              uom: String(row.sale_uom ?? row.purchase_uom ?? "").trim(),
+              stock: Number(row.current_stock ?? 0) || 0,
+            } satisfies Medicine;
+          })
+          .filter((medicine): medicine is Medicine => medicine !== null);
+
+        if (isMounted) {
+          setMedicines(nextMedicines);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMedicineLoadError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load medicines from item master.",
+          );
+          setMedicines([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingMedicines(false);
+        }
+      }
+    }
+
+    void loadMedicines();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hname]);
+
   const filteredMedicines = useMemo(() => {
-    return MOCK_MEDICINES.filter(
+    return medicines.filter(
       (m) =>
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.genericName.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [medicines, searchQuery]);
 
   const totalPages = Math.ceil(filteredMedicines.length / itemsPerPage);
   const currentMedicines = filteredMedicines.slice(
@@ -181,7 +260,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   };
 
   const addSelectedMedicines = () => {
-    const medicinesToAdd = MOCK_MEDICINES.filter((m) => selectedIds.has(m.id));
+    const medicinesToAdd = medicines.filter((m) => selectedIds.has(m.id));
     const newRows: PrescriptionRow[] = medicinesToAdd.map((m) => ({
       id: crypto.randomUUID(),
       medicine: m,
@@ -502,6 +581,12 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                 </div>
               </div>
 
+              {medicineLoadError ? (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                  {medicineLoadError}
+                </div>
+              ) : null}
+
               <div className="flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
                   <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-md">
@@ -524,9 +609,15 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
-                    {currentMedicines.length === 0 ? (
+                    {isLoadingMedicines ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No medicines found.</td>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                          Loading medicines from Item Master...
+                        </td>
+                      </tr>
+                    ) : currentMedicines.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No medicines found in Item Master.</td>
                       </tr>
                     ) : (
                       currentMedicines.map((medicine) => (
