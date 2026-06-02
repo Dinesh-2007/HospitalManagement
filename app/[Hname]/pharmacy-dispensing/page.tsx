@@ -12,7 +12,7 @@ type MedicineRow = {
 const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
 
 export default function PharmacyDispensingPage() {
-  const [isShowingForm, setIsShowingForm] = useState(true);
+  const [isShowingForm, setIsShowingForm] = useState(false);
   const [patientName, setPatientName] = useState("");
   const [prescribedQty, setPrescribedQty] = useState("0");
   const [receivedQty, setReceivedQty] = useState("0");
