@@ -3,31 +3,43 @@
 import React, { useMemo, useState } from "react";
 import { BlankPage } from "../../../components/blank-page";
 
+
 type MedicineRow = {
   id: number;
   medicineName: string;
-  quantity: string;
+  prescribedQty: string;
+  receivedQty: string;
+  medicineAmount: string;
 };
+
 
 const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
 
 export default function PharmacyDispensingPage() {
   const [isShowingForm, setIsShowingForm] = useState(false);
   const [patientName, setPatientName] = useState("");
-  const [prescribedQty, setPrescribedQty] = useState("0");
-  const [receivedQty, setReceivedQty] = useState("0");
   const [billingAmount, setBillingAmount] = useState("");
   const [paymentStatus, setPaymentStatus] = useState(paymentStatusOptions[0]);
   const [medicineRows, setMedicineRows] = useState<MedicineRow[]>([
-    { id: 1, medicineName: "", quantity: "0" },
+    { id: 1, medicineName: "", prescribedQty: "0", receivedQty: "0", medicineAmount: "0" },
   ]);
+
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
 
-  const calculatedQty = useMemo(() => {
-    return medicineRows.reduce((total, row) => {
-      const quantityValue = Number(row.quantity);
-      return total + (Number.isFinite(quantityValue) ? quantityValue : 0);
-    }, 0);
+  const medicineQtyTotals = useMemo(() => {
+    return medicineRows.reduce(
+      (totals, row) => {
+        const prescribedValue = Number(row.prescribedQty);
+        const receivedValue = Number(row.receivedQty);
+
+        return {
+          prescribed:
+            totals.prescribed + (Number.isFinite(prescribedValue) ? prescribedValue : 0),
+          received: totals.received + (Number.isFinite(receivedValue) ? receivedValue : 0),
+        };
+      },
+      { prescribed: 0, received: 0 },
+    );
   }, [medicineRows]);
 
   const updateMedicineRow = (
@@ -43,11 +55,18 @@ export default function PharmacyDispensingPage() {
   const addMedicineRow = () => {
     setMedicineRows((currentRows) => [
       ...currentRows,
-      { id: Date.now(), medicineName: "", quantity: "0" },
+      {
+        id: Date.now(),
+        medicineName: "",
+        prescribedQty: "0",
+        receivedQty: "0",
+        medicineAmount: "0",
+      },
     ]);
   };
 
   const removeMedicineRow = (rowId: number) => {
+
     setMedicineRows((currentRows) =>
       currentRows.length > 1 ? currentRows.filter((row) => row.id !== rowId) : currentRows,
     );
@@ -89,58 +108,11 @@ export default function PharmacyDispensingPage() {
                     <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
                       Patient Name
                     </label>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        value={patientName}
-                        readOnly
-                        placeholder="Auto Fill"
-                        className="h-11 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-950 dark:text-white/90"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPatientName("Auto Filled Patient")}
-                        className="shrink-0 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                      >
-                        Auto Fill
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="xl:col-span-2">
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Calculated Qty
-                    </label>
                     <input
                       type="text"
-                      value={calculatedQty}
-                      readOnly
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-950 dark:text-white/90"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Prescribed Qty
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={prescribedQty}
-                      onChange={(event) => setPrescribedQty(event.target.value)}
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Received Qty
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={receivedQty}
-                      onChange={(event) => setReceivedQty(event.target.value)}
+                      value={patientName}
+                      onChange={(event) => setPatientName(event.target.value)}
+                      placeholder="Enter patient name"
                       className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                     />
                   </div>
@@ -187,7 +159,7 @@ export default function PharmacyDispensingPage() {
                         Medicine List
                       </h3>
                       <p className="text-sm text-slate-500 dark:text-gray-400">
-                        Add the dispensed medicines and their quantities.
+                        Add the dispensed medicines with prescribed and received quantities.
                       </p>
                     </div>
                     <button
@@ -207,17 +179,23 @@ export default function PharmacyDispensingPage() {
                             Medicine Name
                           </th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
-                            Qty
+                            Prescribed Qty
                           </th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
-                            Action
+                            Received Qty
                           </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Medicine Amount
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300"></th>
+
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                         {medicineRows.map((row, index) => (
                           <tr key={row.id}>
                             <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
                               <input
                                 type="text"
                                 value={row.medicineName}
@@ -227,28 +205,56 @@ export default function PharmacyDispensingPage() {
                                 placeholder={`Medicine ${index + 1}`}
                                 className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                               />
-                            </td>
-                            <td className="px-4 py-3">
-                              <input
-                                type="number"
-                                min="0"
-                                value={row.quantity}
-                                onChange={(event) =>
-                                  updateMedicineRow(row.id, "quantity", event.target.value)
-                                }
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => removeMedicineRow(row.id)}
-                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                                disabled={medicineRows.length === 1}
-                              >
-                                Remove
-                              </button>
-                            </td>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.prescribedQty}
+                              onChange={(event) =>
+                                updateMedicineRow(row.id, "prescribedQty", event.target.value)
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.receivedQty}
+                              onChange={(event) =>
+                                updateMedicineRow(row.id, "receivedQty", event.target.value)
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                            />
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={row.medicineAmount}
+                              onChange={(event) =>
+                                updateMedicineRow(row.id, "medicineAmount", event.target.value)
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                            />
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => removeMedicineRow(row.id)}
+                              className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                              disabled={medicineRows.length === 1}
+                            >
+                              Remove
+                            </button>
+                          </td>
+
                           </tr>
                         ))}
                       </tbody>
@@ -258,18 +264,25 @@ export default function PharmacyDispensingPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-4 dark:border-gray-800">
                   <p className="text-sm text-slate-500 dark:text-gray-400">
-                    Prescribed Qty: {prescribedQty || "0"} | Received Qty: {receivedQty || "0"}
+                    Prescribed Qty: {medicineQtyTotals.prescribed} | Received Qty: {medicineQtyTotals.received}
                   </p>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         setPatientName("");
-                        setPrescribedQty("0");
-                        setReceivedQty("0");
                         setBillingAmount("");
                         setPaymentStatus(paymentStatusOptions[0]);
-                        setMedicineRows([{ id: 1, medicineName: "", quantity: "0" }]);
+                        setMedicineRows([
+                          {
+                            id: 1,
+                            medicineName: "",
+                            prescribedQty: "0",
+                            receivedQty: "0",
+                            medicineAmount: "0",
+                          },
+                        ]);
+
                         setSubmitMessage(null);
                       }}
                       className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
