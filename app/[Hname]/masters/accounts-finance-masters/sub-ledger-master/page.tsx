@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
 import {
@@ -74,7 +74,16 @@ export default function SubLedgerMasterPage() {
         const data = (await response.json()) as { rows?: Array<Record<string, unknown>> };
 
         const options = (data.rows ?? [])
-          .map((row) => String(row.description ?? "").trim())
+          .map((row) => {
+            const code = String(row.code ?? "").trim();
+            const description = String(row.description ?? "").trim();
+
+            if (!code && !description) {
+              return "";
+            }
+
+            return code && description ? `${code} - ${description}` : code || description;
+          })
           .filter(Boolean);
 
         setPaymentTermsOptions(options);
