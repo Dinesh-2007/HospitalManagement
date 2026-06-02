@@ -150,6 +150,7 @@ export function MastersFormPage({
   columns,
   children,
 }: MastersFormPageProps) {
+
   const [records, setRecords] = useState<SavedRecord[]>([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -160,6 +161,7 @@ export function MastersFormPage({
   const [formValues, setFormValues] = useState<Record<string, FormValue>>(() =>
     buildInitialFormValues(fields),
   );
+
   const tableName = tableNameFromCardTitle(cardTitle);
   const params = useParams();
   const hname = params?.Hname as string;
@@ -199,9 +201,9 @@ export function MastersFormPage({
     return () => window.clearTimeout(timeoutId);
   }, [loadRecords]);
 
-  useEffect(() => {
-    setFormValues(buildInitialFormValues(fields));
-  }, [fields]);
+  // Avoid synchronously calling setState inside effects; form state is reset
+  // via resetFormState or during editRecord.
+
 
   const resetFormState = useCallback(() => {
     setFormValues(buildInitialFormValues(fields));

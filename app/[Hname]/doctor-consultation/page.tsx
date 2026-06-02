@@ -12,7 +12,10 @@ const doctorConsultationFields: MastersFormField[] = [
   { id: "remarks", label: "Remarks", type: "textarea", size: "medium", colStart: 2 },
   { id: "followUpDays", label: "Follow-up Days", type: "number", size: "small" },
   { id: "consultationAmount", label: "Consultation Amount", type: "number", size: "small" },
+  // Pharmacy needs prescribed medicine lines; store as JSON textarea.
+  { id: "prescriptionLines", label: "Prescription Lines", type: "textarea", size: "medium", colStart: 1, note: "Auto-saved medicine lines for Pharmacy Dispensing" },
 ];
+
 
 export default function DoctorConsultationPage() {
   return (
