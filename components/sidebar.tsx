@@ -9,6 +9,7 @@ import { getCurrentUser } from "../app/actions/user";
 import {
   BoxCubeIcon,
   BoxIcon,
+  CalenderIcon,
   ChevronDownIcon,
   DocsIcon,
   DollarLineIcon,
@@ -61,6 +62,8 @@ function getSectionIcon(title: string) {
       return <GroupIcon />;
     case "Doctor Consultation":
       return <UserCircleIcon />;
+    case "Book Appointment":
+      return <CalenderIcon />;
     case "Clinical Masters":
       return <GroupIcon />;
     case "Consultant Doctor Management":
@@ -180,6 +183,11 @@ export function Sidebar() {
   const pathname = usePathname();
   const params = useParams();
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : "HSMS";
+  const encodedHname = encodeURIComponent(hname);
+  const normalizedPathname =
+    hname && hname !== "HSMS" && pathname.startsWith(`/${encodedHname}/`)
+      ? pathname.replace(`/${encodedHname}`, "")
+      : pathname;
   const { isExpanded, isHovered, isMobileOpen, setIsHovered } = useSidebar();
   const isCompact = !isExpanded && !isHovered && !isMobileOpen;
   
@@ -201,16 +209,19 @@ export function Sidebar() {
     });
   }, [currentUser]);
 
-  const initialOpen = useMemo(() => collectOpenKeys(filteredNavigation, pathname), [pathname, filteredNavigation]);
+  const initialOpen = useMemo(
+    () => collectOpenKeys(filteredNavigation, normalizedPathname),
+    [normalizedPathname, filteredNavigation],
+  );
   const [openMap, setOpenMap] = useState<OpenMap>({});
   const syncedPathname = useRef<string>("");
 
   useEffect(() => {
-    if (syncedPathname.current === pathname) {
+    if (syncedPathname.current === normalizedPathname) {
       return;
     }
 
-    syncedPathname.current = pathname;
+    syncedPathname.current = normalizedPathname;
     setOpenMap((current) => {
       const next = { ...current };
 
@@ -220,7 +231,7 @@ export function Sidebar() {
 
       return next;
     });
-  }, [initialOpen, pathname]);
+  }, [initialOpen, normalizedPathname]);
 
   const handleToggle = (key: string) => {
     setOpenMap((current) => ({
@@ -279,7 +290,7 @@ export function Sidebar() {
                   <SidebarItem
                     key={section.title}
                     node={section}
-                    pathname={pathname}
+                    pathname={normalizedPathname}
                     isCompact={isCompact}
                     openMap={openMap}
                     onToggle={handleToggle}
