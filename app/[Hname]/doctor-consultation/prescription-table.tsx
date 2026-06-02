@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type Medicine = {
@@ -34,8 +34,105 @@ type PrescriptionRow = {
   totalQty: string;
 };
 
-export function PrescriptionTable() {
-  const [rows, setRows] = useState<PrescriptionRow[]>([]);
+type SerializedPrescriptionLine = {
+  medicineName: string;
+  genericName: string;
+  medicineType: string;
+  strength: string;
+  uom: string;
+  frequency: string;
+  foodTiming: string;
+  days: string;
+  totalQty: string;
+};
+
+type PrescriptionTableProps = {
+  value?: string;
+  onChange?: (value: string) => void;
+};
+
+function buildEmptyMedicine(): Medicine {
+  return {
+    id: "",
+    code: "",
+    name: "",
+    genericName: "",
+    type: "",
+    strength: "",
+    uom: "",
+    stock: 0,
+  };
+}
+
+function serializeRows(rows: PrescriptionRow[]): string {
+  const serializedRows: SerializedPrescriptionLine[] = rows.map((row) => ({
+    medicineName: row.medicine.name || row.medicine.genericName,
+    genericName: row.medicine.genericName,
+    medicineType: row.medicine.type,
+    strength: row.medicine.strength,
+    uom: row.medicine.uom,
+    frequency: row.frequency,
+    foodTiming: row.foodTiming,
+    days: row.days,
+    totalQty: row.totalQty,
+  }));
+
+  return JSON.stringify(serializedRows);
+}
+
+function parseRows(value?: string): PrescriptionRow[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((item) => {
+      const line = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+
+      return {
+        id: crypto.randomUUID(),
+        medicine: {
+          ...buildEmptyMedicine(),
+          name:
+            typeof line.medicineName === "string"
+              ? line.medicineName
+              : typeof line.name === "string"
+                ? line.name
+                : "",
+          genericName: typeof line.genericName === "string" ? line.genericName : "",
+          type:
+            typeof line.medicineType === "string"
+              ? line.medicineType
+              : typeof line.type === "string"
+                ? line.type
+                : "",
+          strength: typeof line.strength === "string" ? line.strength : "",
+          uom: typeof line.uom === "string" ? line.uom : "",
+        },
+        frequency: typeof line.frequency === "string" ? line.frequency : "",
+        foodTiming: typeof line.foodTiming === "string" ? line.foodTiming : "",
+        days: typeof line.days === "string" ? line.days : "",
+        totalQty:
+          typeof line.totalQty === "string"
+            ? line.totalQty
+            : typeof line.prescribedQty === "string"
+              ? line.prescribedQty
+              : "",
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function PrescriptionTable({ value = "", onChange }: PrescriptionTableProps) {
+  const [rows, setRows] = useState<PrescriptionRow[]>(() => parseRows(value));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   
@@ -94,7 +191,9 @@ export function PrescriptionTable() {
       totalQty: "",
     }));
     
-    setRows([...rows, ...newRows]);
+    const updatedRows = [...rows, ...newRows];
+    setRows(updatedRows);
+    onChange?.(serializeRows(updatedRows));
     setIsModalOpen(false);
     setSelectedIds(new Set());
     setSearchQuery("");
@@ -105,27 +204,24 @@ export function PrescriptionTable() {
     const rowId = crypto.randomUUID();
     const emptyRow: PrescriptionRow = {
       id: rowId,
-      medicine: {
-        id: "",
-        code: "",
-        name: "",
-        genericName: "",
-        type: "",
-        strength: "",
-        uom: "",
-        stock: 0,
-      },
+      medicine: buildEmptyMedicine(),
       frequency: "",
       foodTiming: "",
       days: "",
       totalQty: "",
     };
-    setRows([...rows, emptyRow]);
+    const updatedRows = [...rows, emptyRow];
+    setRows(updatedRows);
+    onChange?.(serializeRows(updatedRows));
     setEditingRowId(rowId);
   };
 
   const deleteRow = (rowId: string) => {
-    setRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
+    setRows((currentRows) => {
+      const updatedRows = currentRows.filter((row) => row.id !== rowId);
+      onChange?.(serializeRows(updatedRows));
+      return updatedRows;
+    });
     setEditingRowId((currentEditingId) =>
       currentEditingId === rowId ? null : currentEditingId
     );
@@ -147,11 +243,13 @@ export function PrescriptionTable() {
         ? String(Math.max(0, Number(value)))
         : value;
 
-    setRows((currentRows) =>
-      currentRows.map((row) =>
+    setRows((currentRows) => {
+      const updatedRows = currentRows.map((row) =>
         row.id === rowId ? { ...row, [field]: nextValue } : row
-      )
-    );
+      );
+      onChange?.(serializeRows(updatedRows));
+      return updatedRows;
+    });
   };
 
   const updateMedicineField = (
@@ -159,13 +257,15 @@ export function PrescriptionTable() {
     field: keyof Pick<Medicine, "type" | "genericName" | "uom" | "strength">,
     value: string
   ) => {
-    setRows((currentRows) =>
-      currentRows.map((row) =>
+    setRows((currentRows) => {
+      const updatedRows = currentRows.map((row) =>
         row.id === rowId
           ? { ...row, medicine: { ...row.medicine, [field]: value } }
           : row
-      )
-    );
+      );
+      onChange?.(serializeRows(updatedRows));
+      return updatedRows;
+    });
   };
 
   const editableInputClass = (minWidth: string, isEditing: boolean) =>
@@ -206,6 +306,7 @@ export function PrescriptionTable() {
           <thead className="bg-gray-50 dark:bg-gray-800/50">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Line No</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Type</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Generic Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UOM</th>
@@ -220,7 +321,7 @@ export function PrescriptionTable() {
           <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={11} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                   No medicines added yet. Click Add Medicine to select.
                 </td>
               </tr>
@@ -232,6 +333,15 @@ export function PrescriptionTable() {
                   <tr key={row.id}>
                     <td className="px-4 py-2">
                       <input type="text" readOnly value={index + 1} className={lineNumberInputClass} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={row.medicine.name}
+                        placeholder="Selected medicine name"
+                        className={editableInputClass("min-w-[160px]", false)}
+                      />
                     </td>
                     <td className="px-4 py-2">
                       <input
@@ -249,6 +359,7 @@ export function PrescriptionTable() {
                         value={row.medicine.genericName}
                         onChange={(e) => updateMedicineField(row.id, "genericName", e.target.value)}
                         className={editableInputClass("min-w-[120px]", isEditing)}
+                        placeholder={row.medicine.name || "Generic name"}
                       />
                     </td>
                     <td className="px-4 py-2">

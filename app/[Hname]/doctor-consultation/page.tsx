@@ -1,6 +1,9 @@
+"use client";
+
 import {
   MastersFormPage,
   type MastersFormField,
+  type MastersFormPageRenderProps,
 } from "../../../components/masters-form-page";
 import { PrescriptionTable } from "./prescription-table";
 
@@ -28,7 +31,13 @@ export default function DoctorConsultationPage() {
       backHref="/doctor-consultation"
       columns={3}
     >
-      <PrescriptionTable />
+      {({ formValues, updateFieldValueById, formStateVersion }: MastersFormPageRenderProps) => (
+        <PrescriptionTable
+          key={formStateVersion}
+          value={typeof formValues.prescriptionLines === "string" ? formValues.prescriptionLines : ""}
+          onChange={(value) => updateFieldValueById("prescriptionLines", value)}
+        />
+      )}
     </MastersFormPage>
   );
 }

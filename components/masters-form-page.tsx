@@ -53,6 +53,12 @@ export type MastersFormField = {
   onChange?: (value: string) => void;
 };
 
+export type MastersFormPageRenderProps = {
+  formValues: Record<string, FormValue>;
+  updateFieldValueById: (fieldId: string, value: FormValue) => void;
+  formStateVersion: number;
+};
+
 type MastersFormPageProps = {
   title: string;
   cardTitle: string;
@@ -61,7 +67,7 @@ type MastersFormPageProps = {
   backButtonText?: string;
   backHref?: string;
   columns?: 1 | 2 | 3;
-  children?: React.ReactNode;
+  children?: React.ReactNode | ((props: MastersFormPageRenderProps) => React.ReactNode);
 };
 
 type SavedRecord = Record<string, unknown>;
@@ -158,6 +164,7 @@ export function MastersFormPage({
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [formStateVersion, setFormStateVersion] = useState(0);
   const [formValues, setFormValues] = useState<Record<string, FormValue>>(() =>
     buildInitialFormValues(fields),
   );
@@ -208,6 +215,7 @@ export function MastersFormPage({
   const resetFormState = useCallback(() => {
     setFormValues(buildInitialFormValues(fields));
     setEditingRecordId(null);
+    setFormStateVersion((current) => current + 1);
   }, [fields]);
 
   const updateFieldValue = useCallback(
@@ -224,6 +232,19 @@ export function MastersFormPage({
     [],
   );
 
+  const updateFieldValueById = useCallback(
+    (fieldId: string, value: FormValue) => {
+      const field = fields.find((item) => item.id === fieldId);
+
+      if (!field) {
+        return;
+      }
+
+      updateFieldValue(field, value);
+    },
+    [fields, updateFieldValue],
+  );
+
   const handleEditRecord = useCallback(
     (record: SavedRecord) => {
       const nextValues = buildInitialFormValues(fields);
@@ -236,6 +257,7 @@ export function MastersFormPage({
 
       setFormValues(nextValues);
       setEditingRecordId(Number(record.id));
+      setFormStateVersion((current) => current + 1);
       setSubmitError(null);
       setSubmitMessage(null);
       setIsShowingForm(true);
@@ -522,7 +544,9 @@ export function MastersFormPage({
 
               {children && (
                 <div className="mt-8">
-                  {children}
+                  {typeof children === "function"
+                    ? children({ formValues, updateFieldValueById, formStateVersion })
+                    : children}
                 </div>
               )}
 
