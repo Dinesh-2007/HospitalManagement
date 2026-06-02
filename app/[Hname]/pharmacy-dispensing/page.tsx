@@ -1,33 +1,230 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { BlankPage } from "../../../components/blank-page";
+
+type ConsultationRecord = {
+  id: number;
+  token_number?: string | null;
+  patient_details?: string | null;
+  prescription_lines?: string | null;
+  prescription_data?: string | null;
+};
+
+type DispensingBillRecord = {
+  id: number;
+  token_number?: string | null;
+  patient_name?: string | null;
+  payment_status?: string | null;
+  billing_amount?: string | number | null;
+  medicine_lines?: string | null;
+  created_at?: string | null;
+};
 
 type MedicineRow = {
   id: number;
   medicineName: string;
-  quantity: string;
+  prescribedQty: string;
+  receivedQty: string;
+  medicineAmount: string;
+};
+
+type DispensingField = {
+  id: string;
+  type: "text" | "number" | "select" | "textarea";
+};
+
+type SerializedPrescriptionLine = {
+  medicineName?: string;
+  genericName?: string;
+  totalQty?: string;
+  prescribedQty?: string;
 };
 
 const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
 
+const DISPENSING_FIELDS: DispensingField[] = [
+  { id: "tokenNumber", type: "text" },
+  { id: "patientName", type: "text" },
+  { id: "paymentStatus", type: "select" },
+  { id: "billingAmount", type: "number" },
+  { id: "medicineLines", type: "textarea" },
+];
+
+function parsePrescriptionLines(value?: string | null): Omit<MedicineRow, "id">[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as SerializedPrescriptionLine[];
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((line) => ({
+      medicineName: line.medicineName || line.genericName || "",
+      prescribedQty: line.totalQty || line.prescribedQty || "",
+      receivedQty: "",
+      medicineAmount: "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export default function PharmacyDispensingPage() {
-  const [isShowingForm, setIsShowingForm] = useState(false);
+  const params = useParams();
+  const hname = params?.Hname as string;
+
+  const [activeView, setActiveView] = useState<"records" | "form" | "bills">("records");
+  const [consultationRecords, setConsultationRecords] = useState<ConsultationRecord[]>([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
+  const [dispensingBills, setDispensingBills] = useState<DispensingBillRecord[]>([]);
+  const [isLoadingBills, setIsLoadingBills] = useState(true);
+  const [selectedConsultationId, setSelectedConsultationId] = useState<number | null>(null);
+  const [tokenNumber, setTokenNumber] = useState("");
   const [patientName, setPatientName] = useState("");
-  const [prescribedQty, setPrescribedQty] = useState("0");
-  const [receivedQty, setReceivedQty] = useState("0");
-  const [billingAmount, setBillingAmount] = useState("");
   const [paymentStatus, setPaymentStatus] = useState(paymentStatusOptions[0]);
+  const nextRowId = useRef(2);
+  const createMedicineRow = (overrides?: Partial<Omit<MedicineRow, "id">>): MedicineRow => ({
+    id: nextRowId.current++,
+    medicineName: "",
+    prescribedQty: "",
+    receivedQty: "",
+    medicineAmount: "",
+    ...overrides,
+  });
   const [medicineRows, setMedicineRows] = useState<MedicineRow[]>([
-    { id: 1, medicineName: "", quantity: "0" },
+    {
+      id: 1,
+      medicineName: "",
+      prescribedQty: "",
+      receivedQty: "",
+      medicineAmount: "",
+    },
   ]);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const calculatedQty = useMemo(() => {
-    return medicineRows.reduce((total, row) => {
-      const quantityValue = Number(row.quantity);
-      return total + (Number.isFinite(quantityValue) ? quantityValue : 0);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadConsultationRecords() {
+      setIsLoadingRecords(true);
+      setSubmitError(null);
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/doctor_consultation_entry`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          rows?: ConsultationRecord[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load doctor consultation records.");
+        }
+
+        if (isMounted) {
+          setConsultationRecords(data.rows ?? []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setSubmitError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load doctor consultation records.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingRecords(false);
+        }
+      }
+    }
+
+    if (hname) {
+      void loadConsultationRecords();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hname]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDispensingBills() {
+      setIsLoadingBills(true);
+
+      try {
+        const response = await fetch(`/api/${hname}/forms/pharmacy_dispensing`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          rows?: DispensingBillRecord[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load dispensing bills.");
+        }
+
+        if (isMounted) {
+          setDispensingBills(data.rows ?? []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setSubmitError(
+            error instanceof Error ? error.message : "Failed to load dispensing bills.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingBills(false);
+        }
+      }
+    }
+
+    if (hname) {
+      void loadDispensingBills();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hname]);
+
+  const billingAmount = useMemo(() => {
+    const total = medicineRows.reduce((sum, row) => {
+      const amount = Number(row.medicineAmount);
+      return sum + (Number.isFinite(amount) ? amount : 0);
     }, 0);
+
+    return total.toFixed(2);
+  }, [medicineRows]);
+
+  const medicineQtyTotals = useMemo(() => {
+    return medicineRows.reduce(
+      (totals, row) => {
+        const prescribedValue = Number(row.prescribedQty);
+        const receivedValue = Number(row.receivedQty);
+
+        return {
+          prescribed:
+            totals.prescribed + (Number.isFinite(prescribedValue) ? prescribedValue : 0),
+          received: totals.received + (Number.isFinite(receivedValue) ? receivedValue : 0),
+        };
+      },
+      { prescribed: 0, received: 0 },
+    );
   }, [medicineRows]);
 
   const updateMedicineRow = (
@@ -43,7 +240,7 @@ export default function PharmacyDispensingPage() {
   const addMedicineRow = () => {
     setMedicineRows((currentRows) => [
       ...currentRows,
-      { id: Date.now(), medicineName: "", quantity: "0" },
+      createMedicineRow(),
     ]);
   };
 
@@ -53,9 +250,96 @@ export default function PharmacyDispensingPage() {
     );
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const resetForm = () => {
+    nextRowId.current = 2;
+    setSelectedConsultationId(null);
+    setTokenNumber("");
+    setPatientName("");
+    setPaymentStatus(paymentStatusOptions[0]);
+    setMedicineRows([
+      {
+        id: 1,
+        medicineName: "",
+        prescribedQty: "",
+        receivedQty: "",
+        medicineAmount: "",
+      },
+    ]);
+    setSubmitMessage(null);
+    setSubmitError(null);
+  };
+
+  const openDispensingForm = (record: ConsultationRecord) => {
+    const nextRows = parsePrescriptionLines(
+      record.prescription_data ?? record.prescription_lines,
+    );
+    nextRowId.current = 1;
+    const hydratedRows = nextRows.map((row) => createMedicineRow(row));
+
+    setSelectedConsultationId(record.id);
+    setTokenNumber(record.token_number ?? "");
+    setPatientName(record.patient_details ?? "");
+    setPaymentStatus(paymentStatusOptions[0]);
+    setMedicineRows(hydratedRows.length > 0 ? hydratedRows : [createMedicineRow()]);
+    setSubmitMessage(null);
+    setSubmitError(null);
+    setActiveView("form");
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSubmitMessage("Dispensing form prepared successfully.");
+    setSubmitMessage(null);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch(`/api/${hname}/forms/pharmacy_dispensing`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cardTitle: "Pharmacy Dispensing",
+          fields: DISPENSING_FIELDS,
+          values: {
+            tokenNumber,
+            patientName,
+            paymentStatus,
+            billingAmount,
+            medicineLines: JSON.stringify(medicineRows),
+          },
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to save dispensing record.");
+      }
+
+      const billsResponse = await fetch(`/api/${hname}/forms/pharmacy_dispensing`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const billsData = (await billsResponse.json()) as {
+        rows?: DispensingBillRecord[];
+        error?: string;
+      };
+
+      if (!billsResponse.ok) {
+        throw new Error(billsData.error ?? "Failed to refresh dispensing bills.");
+      }
+
+      setDispensingBills(billsData.rows ?? []);
+
+      resetForm();
+      setSubmitMessage("Dispensing record saved successfully.");
+      setActiveView("bills");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Failed to save dispensing record.",
+      );
+    }
   };
 
   return (
@@ -68,80 +352,70 @@ export default function PharmacyDispensingPage() {
                 Pharmacy Dispensing
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
-                Capture prescription details, quantities, and billing status.
+                Pick a consultation record, then enter received quantity and medicine amount.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsShowingForm((current) => !current)}
-              className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
-            >
-              {isShowingForm ? "View Records" : "View Form"}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveView("bills")}
+                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${
+                  activeView === "bills"
+                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                }`}
+              >
+                View Bills
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView(activeView === "form" ? "records" : "form")}
+                className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+              >
+                {activeView === "form" ? "View Records" : "View Form"}
+              </button>
+            </div>
           </div>
 
           <div className="p-4 sm:p-6">
-            {isShowingForm ? (
+            {submitMessage ? (
+              <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {submitMessage}
+              </div>
+            ) : null}
+
+            {submitError ? (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                {submitError}
+              </div>
+            ) : null}
+
+            {activeView === "form" ? (
               <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
+                      Token Number
+                    </label>
+                    <input
+                      type="text"
+                      value={tokenNumber}
+                      readOnly
+                      className="h-11 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
+                    />
+                  </div>
+
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
                       Patient Name
                     </label>
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        value={patientName}
-                        readOnly
-                        placeholder="Auto Fill"
-                        className="h-11 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-950 dark:text-white/90"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPatientName("Auto Filled Patient")}
-                        className="shrink-0 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                      >
-                        Auto Fill
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="xl:col-span-2">
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Calculated Qty
-                    </label>
                     <input
                       type="text"
-                      value={calculatedQty}
+                      value={patientName}
                       readOnly
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-950 dark:text-white/90"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Prescribed Qty
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={prescribedQty}
-                      onChange={(event) => setPrescribedQty(event.target.value)}
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Received Qty
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={receivedQty}
-                      onChange={(event) => setReceivedQty(event.target.value)}
-                      className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                      placeholder="Select a patient from records"
+                      className="h-11 w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
                     />
                   </div>
 
@@ -153,10 +427,8 @@ export default function PharmacyDispensingPage() {
                       <span className="px-4 text-sm text-slate-500 dark:text-gray-400">Rs.</span>
                       <input
                         type="number"
-                        min="0"
-                        step="0.01"
                         value={billingAmount}
-                        onChange={(event) => setBillingAmount(event.target.value)}
+                        readOnly
                         className="h-11 w-full rounded-r-lg border-0 bg-transparent px-0 py-2.5 text-sm text-slate-700 focus:outline-hidden dark:text-white/90"
                       />
                     </div>
@@ -187,7 +459,7 @@ export default function PharmacyDispensingPage() {
                         Medicine List
                       </h3>
                       <p className="text-sm text-slate-500 dark:text-gray-400">
-                        Add the dispensed medicines and their quantities.
+                        Medicine name and prescribed quantity come from Doctor Consultation.
                       </p>
                     </div>
                     <button
@@ -207,11 +479,15 @@ export default function PharmacyDispensingPage() {
                             Medicine Name
                           </th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
-                            Qty
+                            Prescribed Qty
                           </th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
-                            Action
+                            Received Qty
                           </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Medicine Amount
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
@@ -221,10 +497,42 @@ export default function PharmacyDispensingPage() {
                               <input
                                 type="text"
                                 value={row.medicineName}
+                                readOnly={row.medicineName.trim().length > 0}
                                 onChange={(event) =>
                                   updateMedicineRow(row.id, "medicineName", event.target.value)
                                 }
                                 placeholder={`Medicine ${index + 1}`}
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
+                                  row.medicineName.trim().length > 0
+                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                }`}
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.prescribedQty}
+                                readOnly={row.prescribedQty.trim().length > 0}
+                                onChange={(event) =>
+                                  updateMedicineRow(row.id, "prescribedQty", event.target.value)
+                                }
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
+                                  row.prescribedQty.trim().length > 0
+                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                }`}
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.receivedQty}
+                                onChange={(event) =>
+                                  updateMedicineRow(row.id, "receivedQty", event.target.value)
+                                }
                                 className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                               />
                             </td>
@@ -232,9 +540,10 @@ export default function PharmacyDispensingPage() {
                               <input
                                 type="number"
                                 min="0"
-                                value={row.quantity}
+                                step="0.01"
+                                value={row.medicineAmount}
                                 onChange={(event) =>
-                                  updateMedicineRow(row.id, "quantity", event.target.value)
+                                  updateMedicineRow(row.id, "medicineAmount", event.target.value)
                                 }
                                 className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                               />
@@ -243,7 +552,7 @@ export default function PharmacyDispensingPage() {
                               <button
                                 type="button"
                                 onClick={() => removeMedicineRow(row.id)}
-                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                 disabled={medicineRows.length === 1}
                               >
                                 Remove
@@ -258,52 +567,149 @@ export default function PharmacyDispensingPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-4 dark:border-gray-800">
                   <p className="text-sm text-slate-500 dark:text-gray-400">
-                    Prescribed Qty: {prescribedQty || "0"} | Received Qty: {receivedQty || "0"}
+                    Prescribed Qty: {medicineQtyTotals.prescribed} | Received Qty: {medicineQtyTotals.received}
                   </p>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        setPatientName("");
-                        setPrescribedQty("0");
-                        setReceivedQty("0");
-                        setBillingAmount("");
-                        setPaymentStatus(paymentStatusOptions[0]);
-                        setMedicineRows([{ id: 1, medicineName: "", quantity: "0" }]);
-                        setSubmitMessage(null);
-                      }}
+                      onClick={resetForm}
                       className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                     >
                       Reset
                     </button>
                     <button
                       type="submit"
-                      className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                      disabled={!tokenNumber || !patientName}
+                      className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Save Dispensing
                     </button>
                   </div>
                 </div>
-
-                {submitMessage ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
-                    {submitMessage}
-                  </div>
-                ) : null}
               </form>
+            ) : activeView === "bills" ? (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
+                    View Bills
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Saved dispensing bills are listed here for quick review.
+                  </p>
+                </div>
+
+                {isLoadingBills ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
+                    Loading bills...
+                  </div>
+                ) : dispensingBills.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
+                    No bills saved yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                    <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
+                      <thead className="bg-slate-100 dark:bg-gray-950">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Token Number
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Patient Name
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Payment Status
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Billing Amount
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Saved At
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                        {dispensingBills.map((bill) => (
+                          <tr key={bill.id}>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {bill.token_number || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {bill.patient_name || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {bill.payment_status || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {bill.billing_amount ?? "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {bill.created_at
+                                ? new Date(bill.created_at).toLocaleString("en-IN")
+                                : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
-                    Saved Records
+                    Consultation Records
                   </h3>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Latest dispensing entries will appear here.
+                    Only patient details and token number are shown here. Click a row to open the dispensing form.
                   </p>
                 </div>
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
-                  No dispensing records saved yet.
-                </div>
+
+                {isLoadingRecords ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
+                    Loading consultation records...
+                  </div>
+                ) : consultationRecords.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
+                    No doctor consultation records saved yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                    <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
+                      <thead className="bg-slate-100 dark:bg-gray-950">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Token Number
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">
+                            Patient Details
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                        {consultationRecords.map((record) => (
+                          <tr
+                            key={record.id}
+                            onClick={() => openDispensingForm(record)}
+                            className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${
+                              selectedConsultationId === record.id
+                                ? "bg-brand-50 dark:bg-brand-500/10"
+                                : ""
+                            }`}
+                          >
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {record.token_number || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              {record.patient_details || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>

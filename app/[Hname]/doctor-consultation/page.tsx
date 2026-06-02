@@ -1,6 +1,9 @@
+"use client";
+
 import {
   MastersFormPage,
   type MastersFormField,
+  type MastersFormPageRenderProps,
 } from "../../../components/masters-form-page";
 import { PrescriptionTable } from "./prescription-table";
 
@@ -12,7 +15,10 @@ const doctorConsultationFields: MastersFormField[] = [
   { id: "remarks", label: "Remarks", type: "textarea", size: "medium", colStart: 2 },
   { id: "followUpDays", label: "Follow-up Days", type: "number", size: "small" },
   { id: "consultationAmount", label: "Consultation Amount", type: "number", size: "small" },
+  // Pharmacy needs prescribed medicine lines; store as JSON textarea.
+  { id: "prescriptionData", label: "Prescription Data", type: "textarea", size: "medium", colStart: 1, note: "Auto-saved medicine lines for Pharmacy Dispensing" },
 ];
+
 
 export default function DoctorConsultationPage() {
   return (
@@ -25,7 +31,13 @@ export default function DoctorConsultationPage() {
       backHref="/doctor-consultation"
       columns={3}
     >
-      <PrescriptionTable />
+      {({ formValues, updateFieldValueById, formStateVersion }: MastersFormPageRenderProps) => (
+        <PrescriptionTable
+          key={formStateVersion}
+          value={typeof formValues.prescriptionData === "string" ? formValues.prescriptionData : ""}
+          onChange={(value) => updateFieldValueById("prescriptionData", value)}
+        />
+      )}
     </MastersFormPage>
   );
 }
