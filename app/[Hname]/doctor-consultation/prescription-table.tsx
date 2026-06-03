@@ -52,6 +52,9 @@ type PrescriptionTableProps = {
   onChange?: (value: string) => void;
 };
 
+const DEFAULT_FOOD_TIMING = "After Food";
+const FOOD_TIMING_OPTIONS = [DEFAULT_FOOD_TIMING, "Before Food"] as const;
+
 function buildEmptyMedicine(): Medicine {
   return {
     id: "",
@@ -63,6 +66,25 @@ function buildEmptyMedicine(): Medicine {
     uom: "",
     stock: 0,
   };
+}
+
+function isValidFrequencyPattern(value: string): boolean {
+  return /^[01]{3}$/.test(value);
+}
+
+function calculateTotalQty(frequency: string, days: string): string {
+  if (!isValidFrequencyPattern(frequency)) {
+    return "";
+  }
+
+  const totalDays = Number(days);
+
+  if (!Number.isFinite(totalDays) || totalDays < 0) {
+    return "";
+  }
+
+  const dosesPerDay = frequency.split("").reduce((sum, digit) => sum + Number(digit), 0);
+  return String(dosesPerDay * totalDays);
 }
 
 function serializeRows(rows: PrescriptionRow[]): string {
@@ -117,14 +139,15 @@ function parseRows(value?: string): PrescriptionRow[] {
           uom: typeof line.uom === "string" ? line.uom : "",
         },
         frequency: typeof line.frequency === "string" ? line.frequency : "",
-        foodTiming: typeof line.foodTiming === "string" ? line.foodTiming : "",
+        foodTiming:
+          typeof line.foodTiming === "string" && FOOD_TIMING_OPTIONS.includes(line.foodTiming as (typeof FOOD_TIMING_OPTIONS)[number])
+            ? line.foodTiming
+            : DEFAULT_FOOD_TIMING,
         days: typeof line.days === "string" ? line.days : "",
-        totalQty:
-          typeof line.totalQty === "string"
-            ? line.totalQty
-            : typeof line.prescribedQty === "string"
-              ? line.prescribedQty
-              : "",
+        totalQty: calculateTotalQty(
+          typeof line.frequency === "string" ? line.frequency : "",
+          typeof line.days === "string" ? line.days : "",
+        ),
       };
     });
   } catch {
@@ -265,7 +288,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
       id: crypto.randomUUID(),
       medicine: m,
       frequency: "",
-      foodTiming: "",
+      foodTiming: DEFAULT_FOOD_TIMING,
       days: "",
       totalQty: "",
     }));
@@ -285,7 +308,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
       id: rowId,
       medicine: buildEmptyMedicine(),
       frequency: "",
-      foodTiming: "",
+      foodTiming: DEFAULT_FOOD_TIMING,
       days: "",
       totalQty: "",
     };
@@ -314,17 +337,26 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
 
   const updateRowField = (
     rowId: string,
-    field: keyof Pick<PrescriptionRow, "frequency" | "foodTiming" | "days" | "totalQty">,
+    field: keyof Pick<PrescriptionRow, "frequency" | "foodTiming" | "days">,
     value: string
   ) => {
     const nextValue =
-      (field === "days" || field === "totalQty") && value !== ""
+      field === "days" && value !== ""
         ? String(Math.max(0, Number(value)))
         : value;
 
     setRows((currentRows) => {
       const updatedRows = currentRows.map((row) =>
-        row.id === rowId ? { ...row, [field]: nextValue } : row
+        row.id === rowId
+          ? {
+              ...row,
+              [field]: nextValue,
+              totalQty: calculateTotalQty(
+                field === "frequency" ? nextValue : row.frequency,
+                field === "days" ? nextValue : row.days,
+              ),
+            }
+          : row
       );
       onChange?.(serializeRows(updatedRows));
       return updatedRows;
@@ -463,21 +495,25 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                       <input
                         type="text"
                         readOnly={!isEditing}
-                        placeholder="e.g. 1-0-1"
+                        placeholder="e.g. 101"
                         value={row.frequency}
                         onChange={(e) => updateRowField(row.id, "frequency", e.target.value)}
                         className={editableInputClass("min-w-[80px]", isEditing)}
                       />
                     </td>
                     <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        placeholder="Before Food"
+                      <select
+                        disabled={!isEditing}
                         value={row.foodTiming}
                         onChange={(e) => updateRowField(row.id, "foodTiming", e.target.value)}
                         className={editableInputClass("min-w-[120px]", isEditing)}
-                      />
+                      >
+                        {FOOD_TIMING_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-2">
                       <input
@@ -493,10 +529,9 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                       <input
                         type="number"
                         min={0}
-                        readOnly={!isEditing}
+                        readOnly
                         value={row.totalQty}
-                        onChange={(e) => updateRowField(row.id, "totalQty", e.target.value)}
-                        className={editableInputClass("min-w-[80px]", isEditing)}
+                        className={editableInputClass("min-w-[80px]", false)}
                       />
                     </td>
                     <td className="px-4 py-2">
