@@ -475,9 +475,8 @@ export function MastersFormPage({
                                   formValues[field.id].includes(option)
                                 }
                                 onChange={(e) => {
-                                  const currentValues = Array.isArray(formValues[field.id])
-                                    ? formValues[field.id]
-                                    : [];
+                                  const rawValue = formValues[field.id];
+                                  const currentValues: string[] = Array.isArray(rawValue) ? rawValue : [];
                                   const nextValues = e.target.checked
                                     ? [...currentValues, option]
                                     : currentValues.filter((current) => current !== option);

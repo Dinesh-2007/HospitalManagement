@@ -361,6 +361,10 @@ export function PricingManagementPage({
   const [savingRows, setSavingRows] = useState(false);
   const [itemRows, setItemRows] = useState<ItemMasterRow[]>([]);
   const [pricingRows, setPricingRows] = useState<PricingRow[]>([]);
+  const [savedFormsOpen, setSavedFormsOpen] = useState(true);
+  const [savedForms, setSavedForms] = useState<ItemMasterRow[]>([]);
+  const [loadingSavedForms, setLoadingSavedForms] = useState(false);
+  const [savedFormsError, setSavedFormsError] = useState("");
   const [selectedProductKeys, setSelectedProductKeys] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -382,6 +386,12 @@ export function PricingManagementPage({
       setResolvedHname(cookieTenant);
     }
   }, [initialHname, params]);
+
+  useEffect(() => {
+    if (resolvedHname && savedFormsOpen) {
+      void loadSavedPricingForms();
+    }
+  }, [resolvedHname, savedFormsOpen]);
 
   useEffect(() => {
     async function loadItems() {
@@ -669,6 +679,10 @@ export function PricingManagementPage({
       if (resetAfterSave) {
         resetForm(false);
       }
+
+      if (savedFormsOpen) {
+        await loadSavedPricingForms();
+      }
     } catch (error) {
       console.error("Failed to save pricing rows", error);
       setErrorMessage(
@@ -676,6 +690,48 @@ export function PricingManagementPage({
       );
     } finally {
       setSavingRows(false);
+    }
+  }
+
+  async function loadSavedPricingForms() {
+    if (!resolvedHname) {
+      setSavedForms([]);
+      return;
+    }
+
+    setLoadingSavedForms(true);
+    setSavedFormsError("");
+
+    try {
+      const response = await fetch(
+        `/api/${encodeURIComponent(resolvedHname)}/forms/pricing`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to load saved pricing forms.");
+      }
+
+      const data = (await response.json()) as {
+        rows?: ItemMasterRow[];
+        error?: string;
+      };
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setSavedForms(data.rows ?? []);
+    } catch (error) {
+      console.error("Failed to load saved pricing forms", error);
+      setSavedFormsError(
+        error instanceof Error ? error.message : "Failed to load saved pricing forms.",
+      );
+    } finally {
+      setLoadingSavedForms(false);
     }
   }
 
@@ -701,309 +757,415 @@ export function PricingManagementPage({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            disabled={!resolvedHname || loadingItems}
-            className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loadingItems ? "Loading Products..." : "Select Products"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const nextOpen = !savedFormsOpen;
+                setSavedFormsOpen(nextOpen);
+                if (nextOpen) {
+                  void loadSavedPricingForms();
+                }
+              }}
+              disabled={!resolvedHname}
+              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+            >
+              {savedFormsOpen ? "View Form" : "View Records"}
+            </button>
+            {!savedFormsOpen ? (
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                disabled={!resolvedHname || loadingItems}
+                className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingItems ? "Loading Items..." : "Select Items"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-5 px-5 py-5 sm:px-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
-                Effective Date
-              </span>
-              <div className="relative">
-                <input
-                  ref={effectiveDateRef}
-                  id="effectiveDate"
-                  type="date"
-                  value={effectiveDate}
-                  onChange={(event) => setEffectiveDate(event.target.value)}
-                  className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 pr-12 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                />
+          {!savedFormsOpen ? (
+            <>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
+                    Effective Date
+                  </span>
+                  <div className="relative">
+                    <input
+                      ref={effectiveDateRef}
+                      id="effectiveDate"
+                      type="date"
+                      value={effectiveDate}
+                      onChange={(event) => setEffectiveDate(event.target.value)}
+                      className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 pr-12 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
 
-                <button
-                  type="button"
-                  onClick={() => openDatePicker(effectiveDateRef.current)}
-                  aria-label="Open calendar"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900/20 dark:text-gray-300"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </button>
-              </div>
-            </label>
+                    <button
+                      type="button"
+                      onClick={() => openDatePicker(effectiveDateRef.current)}
+                      aria-label="Open calendar"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900/20 dark:text-gray-300"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </button>
+                  </div>
+                </label>
 
-            <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
-                Expires At (Optional)
-              </span>
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <input
-                    ref={expiresAtRef}
-                    id="expiresAt"
-                    type="date"
-                    value={expiresAt}
-                    onChange={(event) => setExpiresAt(event.target.value)}
-                    className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 pr-12 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => openDatePicker(expiresAtRef.current)}
-                    aria-label="Open calendar"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900/20 dark:text-gray-300"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
-                Margin Type
-              </span>
-              <select
-                value={marginType}
-                onChange={(event) => setMarginType(event.target.value)}
-                className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              >
-                <option value="percentage">Percentage</option>
-                <option value="amount">Amount</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
-            <label className="relative block">
-              <span className="sr-only">Search products</span>
-              <input
-                type="text"
-                value={tableSearch}
-                onChange={(event) => setTableSearch(event.target.value)}
-                placeholder="Search by product name, code, or SKU..."
-                className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
-              />
-            </label>
-
-            <label className="space-y-2">
-              <span className="sr-only">Filter by type</span>
-              <select
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-                className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              >
-                <option value="All Types">All Types</option>
-                {availableTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {statusMessage ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-              {statusMessage}
-            </div>
-          ) : null}
-
-          {errorMessage ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-              {errorMessage}
-            </div>
-          ) : null}
-
-          <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-                <thead className="bg-gray-50 dark:bg-gray-900/60">
-                  <tr>
-                    <th className="px-4 py-3 text-left">
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
+                    Expires At (Optional)
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
                       <input
-                        type="checkbox"
-                        checked={allVisibleRowsSelected}
-                        onChange={toggleAllVisiblePricingRows}
-                        className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                        ref={expiresAtRef}
+                        id="expiresAt"
+                        type="date"
+                        value={expiresAt}
+                        onChange={(event) => setExpiresAt(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 pr-12 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                       />
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Product Code
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Product Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Base Cost
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Margin Value
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Tax %
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Margin Amount
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Tax Amount
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Unit Price
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Landed Price
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
-                      Selling Price
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
-                  {filteredPricingRows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={11}
-                        className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
-                      >
-                        Select products to start building pricing rows.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPricingRows.map((row) => {
-                      const amounts = calculateAmounts(row, marginType);
 
-                      return (
-                        <tr key={row.id} className="align-top">
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              checked={row.checked}
-                              onChange={() => togglePricingRow(row.id)}
-                              className="mt-2 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                            {row.productCode || "-"}
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div>{row.productName || "-"}</div>
-                            <div className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-400">
-                              {row.productType}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={row.baseCost}
-                              onChange={(event) =>
-                                updatePricingRow(row.id, "baseCost", event.target.value)
-                              }
-                              className="h-11 min-w-[120px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={row.marginValue}
-                              onChange={(event) =>
-                                updatePricingRow(row.id, "marginValue", event.target.value)
-                              }
-                              className="h-11 min-w-[120px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={row.taxPercent}
-                              onChange={(event) =>
-                                updatePricingRow(row.id, "taxPercent", event.target.value)
-                              }
-                              className="h-11 min-w-[100px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
-                              {formatMoney(amounts.marginAmount)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
-                              {formatMoney(amounts.taxAmount)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
-                              {formatMoney(amounts.unitPrice)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
-                              {formatMoney(amounts.landedPrice)}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                            <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
-                              {formatMoney(amounts.sellingPrice)}
-                            </div>
+                      <button
+                        type="button"
+                        onClick={() => openDatePicker(expiresAtRef.current)}
+                        aria-label="Open calendar"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900/20 dark:text-gray-300"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400">
+                    Margin Type
+                  </span>
+                  <select
+                    value={marginType}
+                    onChange={(event) => setMarginType(event.target.value)}
+                    className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="amount">Amount</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+                <label className="relative block">
+                  <span className="sr-only">Search products</span>
+                  <input
+                    type="text"
+                    value={tableSearch}
+                    onChange={(event) => setTableSearch(event.target.value)}
+                    placeholder="Search by product name, code, or SKU..."
+                    className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="sr-only">Filter by type</span>
+                  <select
+                    value={typeFilter}
+                    onChange={(event) => setTypeFilter(event.target.value)}
+                    className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  >
+                    <option value="All Types">All Types</option>
+                    {availableTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {errorMessage ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                  {errorMessage}
+                </div>
+              ) : null}
+
+              <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                    <thead className="bg-gray-50 dark:bg-gray-900/60">
+                      <tr>
+                        <th className="px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={allVisibleRowsSelected}
+                            onChange={toggleAllVisiblePricingRows}
+                            className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Product Code
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Product Name
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Base Cost
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Margin Value
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Tax %
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Margin Amount
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Tax Amount
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Unit Price
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Landed Price
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">
+                          Selling Price
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
+                      {filteredPricingRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={11}
+                            className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+                          >
+                            Select products to start building pricing rows.
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      ) : (
+                        filteredPricingRows.map((row) => {
+                          const amounts = calculateAmounts(row, marginType);
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <button
-              type="button"
-              onClick={() => resetForm(true)}
-              className="inline-flex items-center justify-center rounded-xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void savePricingRows(true)}
-              disabled={savingRows}
-              className="inline-flex items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
-            >
-              {savingRows ? "Saving..." : "Create & Add New"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void savePricingRows(false)}
-              disabled={savingRows}
-              className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {savingRows ? "Saving..." : "Create"}
-            </button>
-          </div>
+                          return (
+                            <tr key={row.id} className="align-top">
+                              <td className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={row.checked}
+                                  onChange={() => togglePricingRow(row.id)}
+                                  className="mt-2 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                                />
+                              </td>
+                              <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                {row.productCode || "-"}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div>{row.productName || "-"}</div>
+                                <div className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-400">
+                                  {row.productType}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.baseCost}
+                                  onChange={(event) =>
+                                    updatePricingRow(row.id, "baseCost", event.target.value)
+                                  }
+                                  className="h-11 min-w-[120px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.marginValue}
+                                  onChange={(event) =>
+                                    updatePricingRow(row.id, "marginValue", event.target.value)
+                                  }
+                                  className="h-11 min-w-[120px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.taxPercent}
+                                  onChange={(event) =>
+                                    updatePricingRow(row.id, "taxPercent", event.target.value)
+                                  }
+                                  className="h-11 min-w-[100px] rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                />
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
+                                  {formatMoney(amounts.marginAmount)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
+                                  {formatMoney(amounts.taxAmount)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
+                                  {formatMoney(amounts.unitPrice)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
+                                  {formatMoney(amounts.landedPrice)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                                <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900/70">
+                                  {formatMoney(amounts.sellingPrice)}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => resetForm(true)}
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void savePricingRows(true)}
+                  disabled={savingRows}
+                  className="inline-flex items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
+                >
+                  {savingRows ? "Saving..." : "Create & Add New"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void savePricingRows(false)}
+                  disabled={savingRows}
+                  className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingRows ? "Saving..." : "Create"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {statusMessage ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  {statusMessage}
+                </div>
+              ) : null}
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">Saved Pricing Forms</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {savedForms.length} saved form{savedForms.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  {savedFormsError ? (
+                    <p className="text-xs text-red-500">{savedFormsError}</p>
+                  ) : null}
+                </div>
+                <div className="mt-4 overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-800">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                    <thead className="bg-white text-left dark:bg-gray-900">
+                      <tr>
+                        {[
+                          "productCode",
+                          "productName",
+                          "productType",
+                          "baseCost",
+                          "marginType",
+                          "marginValue",
+                          "taxPercent",
+                          "unitPrice",
+                          "landedPrice",
+                          "sellingPrice",
+                          "effectiveDate",
+                          "expiresAt",
+                          "created_at",
+                        ].map((column) => (
+                          <th
+                            key={column}
+                            className="whitespace-nowrap px-3 py-2 font-semibold text-gray-500 dark:text-gray-400"
+                          >
+                            {formatColumnLabel(column)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
+                      {loadingSavedForms ? (
+                        <tr>
+                          <td colSpan={13} className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                            Loading saved forms...
+                          </td>
+                        </tr>
+                      ) : savedForms.length === 0 ? (
+                        <tr>
+                          <td colSpan={13} className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                            No saved pricing forms found.
+                          </td>
+                        </tr>
+                      ) : (
+                        savedForms.map((form, index) => (
+                          <tr key={`${form.id ?? index}-${index}`} className="hover:bg-gray-50 dark:hover:bg-gray-900/60">
+                            {[
+                              "productCode",
+                              "productName",
+                              "productType",
+                              "baseCost",
+                              "marginType",
+                              "marginValue",
+                              "taxPercent",
+                              "unitPrice",
+                              "landedPrice",
+                              "sellingPrice",
+                              "effectiveDate",
+                              "expiresAt",
+                              "created_at",
+                            ].map((column) => (
+                              <td key={`${index}-${column}`} className="whitespace-nowrap px-3 py-2 text-gray-700 dark:text-gray-300">
+                                {formatCellValue((form as Record<string, unknown>)[column])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1013,7 +1175,7 @@ export function PricingManagementPage({
             <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between dark:border-gray-800">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Select Products
+                  Select Items
                 </h2>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   Item master data is shown here except Created At, Last Purchase Price, Active From, Inactive From, Inactive Reason, and Updated At.
@@ -1141,7 +1303,7 @@ export function PricingManagementPage({
                   disabled={selectedDialogCount === 0}
                   className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Add Selected Products
+                  Add Selected Items
                 </button>
               </div>
             </div>
