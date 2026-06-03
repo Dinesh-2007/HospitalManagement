@@ -1,5 +1,5 @@
-import { BlankPage } from "../../components/blank-page";
+import { DiscountSchemaPage } from "../../components/discount-schema-page";
 
-export default function DiscountSchemaPage() {
-  return <BlankPage title="Discount Schema" />;
+export default function DiscountSchemaRootPage() {
+  return <DiscountSchemaPage />;
 }
