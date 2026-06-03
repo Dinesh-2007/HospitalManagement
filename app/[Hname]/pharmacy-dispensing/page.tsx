@@ -22,6 +22,11 @@ type DispensingBillRecord = {
   created_at?: string | null;
 };
 
+type PricingRecord = {
+  product_name?: string | null;
+  selling_price?: string | number | null;
+};
+
 type MedicineRow = {
   id: number;
   medicineName: string;
@@ -75,6 +80,14 @@ function parsePrescriptionLines(value?: string | null): Omit<MedicineRow, "id">[
   }
 }
 
+function normalizeMedicineName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function formatMoney(value: number): string {
+  return value.toFixed(2);
+}
+
 export default function PharmacyDispensingPage() {
   const params = useParams();
   const hname = params?.Hname as string;
@@ -84,6 +97,7 @@ export default function PharmacyDispensingPage() {
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
   const [dispensingBills, setDispensingBills] = useState<DispensingBillRecord[]>([]);
   const [isLoadingBills, setIsLoadingBills] = useState(true);
+  const [pricingMap, setPricingMap] = useState<Record<string, number>>({});
   const [selectedConsultationId, setSelectedConsultationId] = useState<number | null>(null);
   const [tokenNumber, setTokenNumber] = useState("");
   const [patientName, setPatientName] = useState("");
@@ -108,6 +122,54 @@ export default function PharmacyDispensingPage() {
   ]);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPricing() {
+      try {
+        const response = await fetch(`/api/${hname}/forms/pricing`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          rows?: PricingRecord[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load pricing.");
+        }
+
+        const nextPricingMap = (data.rows ?? []).reduce<Record<string, number>>((accumulator, row) => {
+          const name = normalizeMedicineName(String(row.product_name ?? ""));
+          const sellingPrice = Number(row.selling_price);
+
+          if (name && Number.isFinite(sellingPrice)) {
+            accumulator[name] = sellingPrice;
+          }
+
+          return accumulator;
+        }, {});
+
+        if (isMounted) {
+          setPricingMap(nextPricingMap);
+        }
+      } catch {
+        if (isMounted) {
+          setPricingMap({});
+        }
+      }
+    }
+
+    if (hname) {
+      void loadPricing();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -227,13 +289,46 @@ export default function PharmacyDispensingPage() {
     );
   }, [medicineRows]);
 
+  useEffect(() => {
+    setMedicineRows((currentRows) =>
+      currentRows.map((row) => {
+        const sellingPrice = pricingMap[normalizeMedicineName(row.medicineName)] ?? 0;
+        const receivedQty = Number(row.receivedQty);
+
+        return {
+          ...row,
+          medicineAmount:
+            Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
+              ? formatMoney(sellingPrice * receivedQty)
+              : "",
+        };
+      }),
+    );
+  }, [pricingMap]);
+
   const updateMedicineRow = (
     rowId: number,
     field: keyof Omit<MedicineRow, "id">,
     value: string,
   ) => {
     setMedicineRows((currentRows) =>
-      currentRows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
+      currentRows.map((row) => {
+        if (row.id !== rowId) {
+          return row;
+        }
+
+        const nextRow = { ...row, [field]: value };
+        const sellingPrice = pricingMap[normalizeMedicineName(nextRow.medicineName)] ?? 0;
+        const receivedQty = Number(nextRow.receivedQty);
+
+        return {
+          ...nextRow,
+          medicineAmount:
+            Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
+              ? formatMoney(sellingPrice * receivedQty)
+              : "",
+        };
+      }),
     );
   };
 
@@ -542,10 +637,8 @@ export default function PharmacyDispensingPage() {
                                 min="0"
                                 step="0.01"
                                 value={row.medicineAmount}
-                                onChange={(event) =>
-                                  updateMedicineRow(row.id, "medicineAmount", event.target.value)
-                                }
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                                readOnly
+                                className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
                               />
                             </td>
                             <td className="px-4 py-3">
