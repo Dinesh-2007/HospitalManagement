@@ -19,6 +19,11 @@ export function middleware(request: NextRequest) {
   // Everything beyond /Hname requires auth
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length > 1) {
+    // Let book-appointment and book-appointment/calendar pass without auth
+    if (parts[1] === 'book-appointment' || (parts[1] === 'book-appointment' && parts[2] === 'calendar')) {
+      return NextResponse.next();
+    }
+    
     const hname = decodeURIComponent(parts[0]);
     // The login page is /Hname (parts.length === 1). 
     // parts.length > 1 means they are tyring to access /Hname/something
