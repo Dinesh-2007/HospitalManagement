@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BlankPage } from "./blank-page";
 
 type Variant = {
@@ -44,6 +44,8 @@ export function DiscountSchemaPage() {
   const [couponCode, setCouponCode] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const startDateRef = useRef<HTMLInputElement | null>(null);
+  const endDateRef = useRef<HTMLInputElement | null>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
 
@@ -53,6 +55,21 @@ export function DiscountSchemaPage() {
   );
 
   const selectedCount = selectedVariants.length;
+
+  const openDatePicker = (input: HTMLInputElement | null) => {
+    if (!input) {
+      return;
+    }
+
+    const picker = input as HTMLInputElement & { showPicker?: () => void };
+
+    if (typeof picker.showPicker === "function") {
+      picker.showPicker();
+      return;
+    }
+
+    input.focus();
+  };
 
   const toggleVariant = (variantId: string) => {
     setSelectedVariantIds((current) =>
@@ -171,6 +188,7 @@ export function DiscountSchemaPage() {
               </span>
               <div className="relative">
                 <input
+                  ref={startDateRef}
                   id="startDate"
                   type="date"
                   value={startDate}
@@ -179,7 +197,7 @@ export function DiscountSchemaPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => document.getElementById("startDate")?.focus()}
+                  onClick={() => openDatePicker(startDateRef.current)}
                   aria-label="Open start date picker"
                   className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-400 transition hover:bg-slate-50 hover:text-slate-600 dark:bg-gray-900 dark:text-slate-500 dark:hover:bg-gray-800 dark:hover:text-white"
                 >
@@ -199,6 +217,7 @@ export function DiscountSchemaPage() {
               </span>
               <div className="relative">
                 <input
+                  ref={endDateRef}
                   id="endDate"
                   type="date"
                   value={endDate}
@@ -207,7 +226,7 @@ export function DiscountSchemaPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => document.getElementById("endDate")?.focus()}
+                  onClick={() => openDatePicker(endDateRef.current)}
                   aria-label="Open end date picker"
                   className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-400 transition hover:bg-slate-50 hover:text-slate-600 dark:bg-gray-900 dark:text-slate-500 dark:hover:bg-gray-800 dark:hover:text-white"
                 >

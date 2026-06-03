@@ -1099,18 +1099,18 @@ export function PricingManagementPage({
                     <thead className="bg-white text-left dark:bg-gray-900">
                       <tr>
                         {[
-                          "productCode",
-                          "productName",
-                          "productType",
-                          "baseCost",
-                          "marginType",
-                          "marginValue",
-                          "taxPercent",
-                          "unitPrice",
-                          "landedPrice",
-                          "sellingPrice",
-                          "effectiveDate",
-                          "expiresAt",
+                          "product_code",
+                          "product_name",
+                          "product_type",
+                          "base_cost",
+                          "margin_type",
+                          "margin_value",
+                          "tax_percent",
+                          "unit_price",
+                          "landed_price",
+                          "selling_price",
+                          "effective_date",
+                          "expires_at",
                           "created_at",
                         ].map((column) => (
                           <th
@@ -1139,18 +1139,18 @@ export function PricingManagementPage({
                         savedForms.map((form, index) => (
                           <tr key={`${form.id ?? index}-${index}`} className="hover:bg-gray-50 dark:hover:bg-gray-900/60">
                             {[
-                              "productCode",
-                              "productName",
-                              "productType",
-                              "baseCost",
-                              "marginType",
-                              "marginValue",
-                              "taxPercent",
-                              "unitPrice",
-                              "landedPrice",
-                              "sellingPrice",
-                              "effectiveDate",
-                              "expiresAt",
+                              "product_code",
+                              "product_name",
+                              "product_type",
+                              "base_cost",
+                              "margin_type",
+                              "margin_value",
+                              "tax_percent",
+                              "unit_price",
+                              "landed_price",
+                              "selling_price",
+                              "effective_date",
+                              "expires_at",
                               "created_at",
                             ].map((column) => (
                               <td key={`${index}-${column}`} className="whitespace-nowrap px-3 py-2 text-gray-700 dark:text-gray-300">
