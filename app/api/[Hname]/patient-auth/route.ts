@@ -4,7 +4,7 @@ import { quoteIdentifier } from "../../../../lib/master-form-table";
 
 export const runtime = "nodejs";
 
-const TABLE_NAME = "patient_details";
+const TABLE_NAME = "patient_registration";
 
 function normalizePhone(value: unknown) {
   return String(value ?? "").replace(/\D/g, "").trim();

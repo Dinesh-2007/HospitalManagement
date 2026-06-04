@@ -12,6 +12,13 @@ type PatientAuthState = {
   name: string;
   phone: string;
 };
+type ScheduleSummary = {
+  doctorName: string;
+  daysAvailable: string[];
+  availableTimeFrom: string;
+  availableTimeTo: string;
+  timeSlotMinutes: string;
+};
 
 type PatientSignupState = {
   patientId: string;
@@ -43,6 +50,8 @@ type PatientSignupState = {
 
 const DEPARTMENT_TABLE = tableNameFromCardTitle("Department Master");
 const DOCTOR_TABLE = tableNameFromCardTitle("Consultant / Doctor Master");
+const SCHEDULE_TABLE = tableNameFromCardTitle("Consultant / Doctor Schedule");
+const PATIENT_TABLE = tableNameFromCardTitle("Patient Registration");
 const STORAGE_PREFIX = "book-appointment-patient";
 
 function storageKey(hname: string) {
@@ -118,12 +127,37 @@ function normalizeDoctor(row: MasterRow) {
   };
 }
 
+function readDays(value: unknown) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      return value.replace(/[\[\]\"]/g, "").split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function normalizeSchedule(row: MasterRow): ScheduleSummary {
+  return {
+    doctorName: readText(row, ["consultant_doctor_name", "consultantDoctorName"]),
+    daysAvailable: readDays(row.days_available ?? row.daysAvailable),
+    availableTimeFrom: readText(row, ["available_time_from", "availableTimeFrom"]),
+    availableTimeTo: readText(row, ["available_time_to", "availableTimeTo"]),
+    timeSlotMinutes: readText(row, ["time_slot_minutes", "timeSlotMinutes"]),
+  };
+}
+
 export default function BookAppointmentPage() {
   const params = useParams();
   const router = useRouter();
   const hname = params?.Hname as string;
   const [departments, setDepartments] = useState<string[]>([]);
   const [doctorRows, setDoctorRows] = useState<MasterRow[]>([]);
+  const [patientRows, setPatientRows] = useState<MasterRow[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<ScheduleSummary[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -157,12 +191,16 @@ export default function BookAppointmentPage() {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const [departmentRows, doctorRows] = await Promise.all([
+        const [departmentRows, doctorRows, patientRows, scheduleRows] = await Promise.all([
           fetchMasterRows(hname, DEPARTMENT_TABLE),
           fetchMasterRows(hname, DOCTOR_TABLE),
+          fetchMasterRows(hname, PATIENT_TABLE),
+          fetchMasterRows(hname, SCHEDULE_TABLE),
         ]);
         setDepartments(Array.from(new Set(departmentRows.map(normalizeDepartment).filter(Boolean))).sort((left, right) => left.localeCompare(right)));
         setDoctorRows(doctorRows);
+        setPatientRows(patientRows);
+        setScheduleRows(scheduleRows.map(normalizeSchedule).filter((row) => row.doctorName));
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Failed to load appointment options.");
       } finally {
@@ -173,26 +211,47 @@ export default function BookAppointmentPage() {
   }, [authenticatedPatient, hname]);
 
   const doctorOptions = useMemo(() => {
+    const scheduledDoctors = new Set(
+      scheduleRows.map((row) => row.doctorName.trim().toLowerCase()),
+    );
+
     return doctorRows
       .map(normalizeDoctor)
       .filter((doctor) => !selectedDepartment || !doctor.department || doctor.department === selectedDepartment)
+      .filter((doctor) => scheduledDoctors.has(doctor.name.trim().toLowerCase()))
       .filter((doctor) => doctor.name);
-  }, [doctorRows, selectedDepartment]);
+  }, [doctorRows, scheduleRows, selectedDepartment]);
+
+  const patientOptions = useMemo(() => {
+    return patientRows
+      .map((row) => ({
+        id: Number(row.id ?? 0),
+        name: readText(row, ["patient_name", "patientName"]),
+        phone: readText(row, ["mobile", "phoneOffice", "phoneResi"]),
+      }))
+      .filter((row) => row.id && row.name)
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [patientRows]);
+
+  const selectedDoctorSchedule = useMemo(() => {
+    return scheduleRows.filter(
+      (row) => row.doctorName.trim().toLowerCase() === selectedDoctor.trim().toLowerCase(),
+    );
+  }, [scheduleRows, selectedDoctor]);
 
   async function handleSignin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signin", phone: authForm.phone }),
-      });
-      const data = (await response.json()) as { exists?: boolean; row?: MasterRow; patientId?: number; error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Signin failed.");
-      if (data.exists) {
-        const payload = { id: data.patientId ?? Number(data.row?.id ?? 0), name: authForm.name || String(data.row?.patient_name ?? data.row?.patientName ?? ""), phone: authForm.phone };
+      const selectedPatient = patientOptions.find(
+        (row) =>
+          row.phone === authForm.phone ||
+          row.name.trim().toLowerCase() === authForm.name.trim().toLowerCase(),
+      );
+
+      if (selectedPatient) {
+        const payload = { id: selectedPatient.id, name: selectedPatient.name, phone: selectedPatient.phone };
         window.localStorage.setItem(storageKey(hname), JSON.stringify(payload));
         setAuthenticatedPatient(payload);
         return;
@@ -256,6 +315,27 @@ export default function BookAppointmentPage() {
             {errorMessage ? <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
             {mode === "signin" ? (
               <form onSubmit={(event) => void handleSignin(event)} className="space-y-4 max-w-xl">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Patient</label>
+                  <select
+                    value={authForm.phone}
+                    onChange={(event) => {
+                      const selectedPatient = patientOptions.find((row) => row.phone === event.target.value);
+                      setAuthForm({
+                        name: selectedPatient?.name ?? "",
+                        phone: selectedPatient?.phone ?? event.target.value,
+                      });
+                    }}
+                    className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                  >
+                    <option value="">Select Patient</option>
+                    {patientOptions.map((patient) => (
+                      <option key={patient.id} value={patient.phone}>
+                        {patient.name} - {patient.phone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
                   <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
@@ -369,14 +449,23 @@ export default function BookAppointmentPage() {
             </div>
           ) : null}
           {selectedDoctor ? (
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-lg font-semibold text-gray-800">{selectedDoctor}</h4>
-                  <p className="mt-1 text-sm text-gray-500">{selectedDepartment}</p>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-800">{selectedDoctor}</h4>
+                    <p className="mt-1 text-sm text-gray-500">{selectedDepartment}</p>
+                    {selectedDoctorSchedule.length > 0 ? (
+                      <div className="mt-3 space-y-1 text-sm text-gray-600">
+                        {selectedDoctorSchedule.map((schedule, index) => (
+                          <p key={`${schedule.doctorName}-${index}`}>
+                            {schedule.daysAvailable.join(", ") || "All Days"} | {schedule.availableTimeFrom} - {schedule.availableTimeTo} | {schedule.timeSlotMinutes || "10"} min
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button type="button" onClick={handleContinue} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">Choose Doctor</button>
                 </div>
-                <button type="button" onClick={handleContinue} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">Choose Doctor</button>
-              </div>
             </div>
           ) : null}
         </div>

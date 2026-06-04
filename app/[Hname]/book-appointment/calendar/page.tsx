@@ -14,13 +14,14 @@ type ScheduleRow = {
   availableTimeTo: string;
   daysAvailable: string[];
   consultantDoctorName: string;
+  timeSlotMinutes: number;
 };
 type AppointmentRow = { appointment_date?: string; appointment_time?: string | null };
 type Slot = { value: string; label: string };
 type PatientRow = { id?: number; patient_name?: string; mobile?: string | null };
 
 const SCHEDULE_TABLE = tableNameFromCardTitle("Consultant / Doctor Schedule");
-const PATIENT_TABLE = tableNameFromCardTitle("Patient Details");
+const PATIENT_TABLE = tableNameFromCardTitle("Patient Registration");
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekDayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -56,6 +57,7 @@ function normalizeScheduleRow(row: RawRow): ScheduleRow {
     availableTimeTo: readText(row, ["available_time_to", "availableTimeTo"]),
     daysAvailable: readDaysAvailable(row),
     consultantDoctorName: readText(row, ["consultant_doctor_name", "consultantDoctorName"]),
+    timeSlotMinutes: Number(readText(row, ["time_slot_minutes", "timeSlotMinutes"])) || 10,
   };
 }
 
@@ -229,6 +231,17 @@ export default function AppointmentCalendarPage() {
   }, [scheduleRows, weekDaysList]);
 
   const effectiveSelectedDate = selectedDate ?? firstAvailableDate;
+  const scheduleSlotMinutes = useMemo(() => {
+    const values = selectedDaySchedules
+      .map((row) => row.timeSlotMinutes)
+      .filter((value) => value === 10 || value === 20);
+
+    return values[0] ?? 10;
+  }, [selectedDaySchedules]);
+
+  useEffect(() => {
+    setSelectedStep(scheduleSlotMinutes as 10 | 20);
+  }, [scheduleSlotMinutes]);
 
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
@@ -339,6 +352,7 @@ export default function AppointmentCalendarPage() {
               <option value={10}>10 minutes</option>
               <option value={20}>20 minutes</option>
             </select>
+            <span className="text-xs text-gray-500">From doctor schedule</span>
           </div>
 
           {effectiveSelectedDate ? (
