@@ -675,14 +675,13 @@ export function PricingManagementPage({
       setStatusMessage(
         `${responses.length} pricing row${responses.length === 1 ? "" : "s"} created successfully.`,
       );
+      setSavedFormsOpen(true);
 
       if (resetAfterSave) {
         resetForm(false);
       }
 
-      if (savedFormsOpen) {
-        await loadSavedPricingForms();
-      }
+      await loadSavedPricingForms();
     } catch (error) {
       console.error("Failed to save pricing rows", error);
       setErrorMessage(
@@ -758,20 +757,6 @@ export function PricingManagementPage({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                const nextOpen = !savedFormsOpen;
-                setSavedFormsOpen(nextOpen);
-                if (nextOpen) {
-                  void loadSavedPricingForms();
-                }
-              }}
-              disabled={!resolvedHname}
-              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
-            >
-              {savedFormsOpen ? "View Form" : "View Records"}
-            </button>
             {!savedFormsOpen ? (
               <button
                 type="button"
@@ -781,7 +766,16 @@ export function PricingManagementPage({
               >
                 {loadingItems ? "Loading Items..." : "Select Items"}
               </button>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSavedFormsOpen(false)}
+                disabled={!resolvedHname}
+                className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Add Pricing
+              </button>
+            )}
           </div>
         </div>
 

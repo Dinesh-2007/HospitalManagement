@@ -463,13 +463,15 @@ export default function PharmacyDispensingPage() {
               >
                 View Bills
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveView(activeView === "form" ? "records" : "form")}
-                className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
-              >
-                {activeView === "form" ? "View Records" : "View Form"}
-              </button>
+              {activeView !== "form" ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveView("records")}
+                  className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                >
+                  Add Dispensing
+                </button>
+              ) : null}
             </div>
           </div>
 

@@ -72,6 +72,7 @@ type MastersFormPageProps = {
 
 type SavedRecord = Record<string, unknown>;
 type FormValue = string | string[];
+type SaveMode = "save" | "saveNext";
 
 const fieldSizeClasses: Record<NonNullable<MastersFormField["size"]>, string> = {
   small: "w-full",
@@ -93,6 +94,16 @@ const colStartClasses: Record<number, string> = {
   3: "lg:col-start-3",
   4: "lg:col-start-4",
 };
+
+function getAddButtonLabel(cardTitle: string) {
+  const normalizedTitle = cardTitle
+    .replace(/\bentry\b/gi, "")
+    .replace(/\bmaster\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return `Add ${normalizedTitle || cardTitle}`;
+}
 
 function serializeFormValues(
   values: Record<string, FormValue>,
@@ -302,8 +313,7 @@ export function MastersFormPage({
     [editingRecordId, hname, loadRecords, resetFormState, tableName],
   );
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveForm(mode: SaveMode) {
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitMessage(null);
@@ -339,7 +349,7 @@ export function MastersFormPage({
           : `Saved successfully to ${tableName}.`,
       );
       await loadRecords();
-      setIsShowingForm(false);
+      setIsShowingForm(mode === "saveNext");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to save form values.";
@@ -347,6 +357,11 @@ export function MastersFormPage({
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveForm("save");
   }
 
   const availableRecordColumns = new Set(
@@ -369,6 +384,7 @@ export function MastersFormPage({
     : shouldUseThreeColumns 
       ? "lg:grid-cols-3" 
       : "lg:grid-cols-2";
+  const addButtonLabel = getAddButtonLabel(cardTitle);
 
   return (
     <BlankPage title={title}>
@@ -383,13 +399,15 @@ export function MastersFormPage({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsShowingForm((current) => !current)}
-            className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
-          >
-            {isShowingForm ? "View Records" : "View Form"}
-          </button>
+          {!isShowingForm ? (
+            <button
+              type="button"
+              onClick={() => setIsShowingForm(true)}
+              className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+            >
+              {addButtonLabel}
+            </button>
+          ) : null}
         </div>
 
         <div className="p-4 sm:p-6">
@@ -570,18 +588,29 @@ export function MastersFormPage({
 
                 <div className="flex flex-wrap justify-end gap-3">
                   <button
-                    type="reset"
-                    onClick={resetFormState}
+                    type="button"
+                    onClick={() => {
+                      resetFormState();
+                      setIsShowingForm(false);
+                    }}
                     className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                   >
-                    {editingRecordId ? "Cancel Edit" : "Clear"}
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => void saveForm("saveNext")}
+                    className="inline-flex items-center justify-center rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 transition hover:bg-brand-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                  >
+                    {isSubmitting ? "Saving..." : "Save Next"}
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
                   >
-                    {isSubmitting ? "Saving..." : editingRecordId ? "Update" : "Submit"}
+                    {isSubmitting ? "Saving..." : "Save"}
                   </button>
                 </div>
               </div>
