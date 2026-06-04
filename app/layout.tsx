@@ -16,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en'>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <SidebarProvider>
             <DashboardShell>{children}</DashboardShell>

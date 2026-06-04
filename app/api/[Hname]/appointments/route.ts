@@ -6,8 +6,10 @@ export const runtime = "nodejs";
 
 type AppointmentRecord = {
   appointmentDate?: string;
+  appointmentDay?: string;
   department?: string;
   doctor?: string;
+  patientId?: string;
   patientName?: string;
   patientPhone?: string;
   appointmentTime?: string;
@@ -25,8 +27,10 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
     CREATE TABLE IF NOT EXISTS ${quoteIdentifier(TABLE_NAME)} (
       id BIGSERIAL PRIMARY KEY,
       appointment_date DATE NOT NULL,
+      appointment_day TEXT,
       department TEXT NOT NULL,
       doctor TEXT NOT NULL,
+      patient_id TEXT,
       patient_name TEXT NOT NULL,
       patient_phone TEXT,
       appointment_time TIME,
@@ -59,33 +63,52 @@ export async function GET(
 
     const { searchParams } = new URL(request.url);
     const appointmentDate = searchParams.get("date") ?? "";
+    const startDate = searchParams.get("start") ?? "";
+    const endDate = searchParams.get("end") ?? "";
     const department = searchParams.get("department") ?? "";
     const doctor = searchParams.get("doctor") ?? "";
 
-    if (!appointmentDate || !department || !doctor) {
+    if ((!appointmentDate && (!startDate || !endDate)) || !department || !doctor) {
       return NextResponse.json(
-        { error: "Date, department and doctor are required." },
+        { error: "Date range, department and doctor are required." },
         { status: 400 },
       );
     }
 
-    if (!isValidDate(appointmentDate)) {
+    if (appointmentDate && !isValidDate(appointmentDate)) {
       return NextResponse.json(
         { error: "Invalid appointment date." },
         { status: 400 },
       );
     }
 
+    if (startDate && !isValidDate(startDate)) {
+      return NextResponse.json({ error: "Invalid start date." }, { status: 400 });
+    }
+
+    if (endDate && !isValidDate(endDate)) {
+      return NextResponse.json({ error: "Invalid end date." }, { status: 400 });
+    }
+
     const result = await pool.query(
-      `
-        SELECT *
-        FROM ${quoteIdentifier(TABLE_NAME)}
-        WHERE appointment_date = $1
-          AND department = $2
-          AND doctor = $3
-        ORDER BY appointment_time NULLS LAST, created_at DESC
-      `,
-      [appointmentDate, department, doctor],
+      appointmentDate
+        ? `
+          SELECT *
+          FROM ${quoteIdentifier(TABLE_NAME)}
+          WHERE appointment_date = $1
+            AND department = $2
+            AND doctor = $3
+          ORDER BY appointment_time NULLS LAST, created_at DESC
+        `
+        : `
+          SELECT *
+          FROM ${quoteIdentifier(TABLE_NAME)}
+          WHERE appointment_date BETWEEN $1 AND $2
+            AND department = $3
+            AND doctor = $4
+          ORDER BY appointment_date, appointment_time NULLS LAST, created_at DESC
+        `,
+      appointmentDate ? [appointmentDate, department, doctor] : [startDate, endDate, department, doctor],
     );
 
     return NextResponse.json({ rows: result.rows });
@@ -109,9 +132,11 @@ export async function POST(
 
     const body = (await request.json()) as AppointmentRecord;
     const appointmentDate = String(body.appointmentDate ?? "").trim();
+    const appointmentDay = String(body.appointmentDay ?? "").trim();
     const department = String(body.department ?? "").trim();
     const doctor = String(body.doctor ?? "").trim();
     const patientName = String(body.patientName ?? "").trim();
+    const patientId = String(body.patientId ?? "").trim();
     const patientPhone = String(body.patientPhone ?? "").trim();
     const appointmentTime = String(body.appointmentTime ?? "").trim();
     const reason = String(body.reason ?? "").trim();
@@ -164,21 +189,25 @@ export async function POST(
       `
         INSERT INTO ${quoteIdentifier(TABLE_NAME)} (
           appointment_date,
+          appointment_day,
           department,
           doctor,
           patient_name,
+          patient_id,
           patient_phone,
           appointment_time,
           reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `,
       [
         appointmentDate,
+        appointmentDay || null,
         department,
         doctor,
         patientName,
+        patientId || null,
         patientPhone || null,
         appointmentTime || null,
         reason || null,
