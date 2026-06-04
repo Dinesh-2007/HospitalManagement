@@ -12,7 +12,6 @@ export const mastersData: NavigationSection[] = [
       { title: "Symptoms", href: "/masters/clinical-masters/symptoms" },
       { title: "Allergy", href: "/masters/clinical-masters/allergy" },
       { title: "Disease", href: "/masters/clinical-masters/disease" },
-      { title: "Patient Details", href: "/masters/clinical-masters/patient-details" },
       { title: "Medicine Usage", href: "/masters/clinical-masters/medicine-usage" },
       { title: "Patient Type", href: "/masters/clinical-masters/patient-type" },
     ],
@@ -129,6 +128,10 @@ export const navigation: NavigationSection[] = [
   {
     title: "Book Appointment",
     href: "/book-appointment",
+  },
+  {
+    title: "Patient Registration",
+    href: "/patient-registration",
   },
   {
     title: "Manage Users",
