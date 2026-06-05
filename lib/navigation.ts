@@ -119,6 +119,7 @@ export const navigation: NavigationSection[] = [
       { title: "Out Patient", href: "/queue-management/out-patient" },
       { title: "In Patient", href: "/queue-management/in-patient" },
       { title: "Pharmacist Screen", href: "/queue-management/pharmacist-screen" },
+      { title: "Patient Vitals", href: "/patient-vitals" },
     ],
   },
   {

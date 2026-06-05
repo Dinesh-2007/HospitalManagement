@@ -342,19 +342,23 @@ export default function AppointmentCalendarPage() {
     return Array.from(hours.entries()).map(([value, label]) => ({ value, label }));
   }, [effectiveSelectedDate, selectedDaySchedules]);
 
+  const bookedSlots = useMemo(() => {
+      if (!effectiveSelectedDate) return new Set<string>();
+      return new Set(
+        appointmentRows
+          .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+          .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
+          .map((row) => row.appointment_time ?? "")
+          .filter(Boolean),
+      );
+    }, [appointmentRows, effectiveSelectedDate, isRescheduling, currentAppointmentId]);
+
+  // 2. Generate all sub-slots for the hour without hiding the booked ones
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
-    const taken = new Set(
-      appointmentRows
-        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
-        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
-        .map((row) => row.appointment_time ?? "")
-        .filter(Boolean),
-    );
     const [start, end] = selectedHour.value.split("|");
-    return buildSubSlots(start, end, activeStep).filter((slot) => !taken.has(slot.value));
-  }, [appointmentRows, activeStep, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedHour]);
-
+    return buildSubSlots(start, end, activeStep);
+  }, [selectedHour, effectiveSelectedDate, activeStep]);
   const bookedSlotLabels = useMemo(() => {
     if (!effectiveSelectedDate) return new Set<string>();
     return new Set(
