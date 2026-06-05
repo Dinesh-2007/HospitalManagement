@@ -16,7 +16,24 @@ type ScheduleRow = {
   consultantDoctorName: string;
   timeSlotMinutes: number;
 };
-type AppointmentRow = { appointment_date?: string; appointment_time?: string | null };
+type AppointmentRow = {
+  id?: number;
+  appointment_date?: string;
+  appointment_time?: string | null;
+  patient_id?: string | null;
+  patient_name?: string | null;
+  patient_phone?: string | null;
+  reschedule_count?: number | null;
+  time_slot_minutes?: number | null;
+  status?: string | null;
+  reschedule_history?: Array<{
+    fromDate?: string;
+    fromTime?: string;
+    toDate?: string;
+    toTime?: string;
+    updatedAt?: string;
+  }> | null;
+};
 type Slot = { value: string; label: string };
 type PatientRow = { id?: number; patient_name?: string; mobile?: string | null };
 
@@ -62,9 +79,26 @@ function normalizeScheduleRow(row: RawRow): ScheduleRow {
 }
 
 function normalizeAppointmentRow(row: RawRow): AppointmentRow {
+  const history = row.reschedule_history;
   return {
+    id: row.id ? Number(row.id) : undefined,
     appointment_date: readText(row, ["appointment_date", "appointmentDate"]),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
+    patient_id: readText(row, ["patient_id", "patientId"]) || null,
+    patient_name: readText(row, ["patient_name", "patientName"]) || null,
+    patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
+    reschedule_count: Number(readText(row, ["reschedule_count", "rescheduleCount"])) || 0,
+    time_slot_minutes: Number(readText(row, ["time_slot_minutes", "timeSlotMinutes"])) || null,
+    status: readText(row, ["status"]) || null,
+    reschedule_history: Array.isArray(history)
+      ? history.map((entry) => ({
+          fromDate: String((entry as Record<string, unknown>).fromDate ?? ""),
+          fromTime: String((entry as Record<string, unknown>).fromTime ?? ""),
+          toDate: String((entry as Record<string, unknown>).toDate ?? ""),
+          toTime: String((entry as Record<string, unknown>).toTime ?? ""),
+          updatedAt: String((entry as Record<string, unknown>).updatedAt ?? ""),
+        }))
+      : null,
   };
 }
 
@@ -106,6 +140,12 @@ function formatDisplayTime(value: string) {
   const date = new Date();
   date.setHours(Number(hoursText), Number(minutesText), 0, 0);
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatDisplayDate(value: string) {
+  const parsed = parseKey(value);
+  if (!parsed) return value;
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(parsed);
 }
 
 function addMinutes(value: string, minutesToAdd: number) {
@@ -161,11 +201,13 @@ export default function AppointmentCalendarPage() {
     return date;
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedStep, setSelectedStep] = useState<10 | 20>(10);
+  const [selectedStep, setSelectedStep] = useState<10 | 20 | null>(null);
   const [selectedHour, setSelectedHour] = useState<Slot | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([]);
   const [appointmentRows, setAppointmentRows] = useState<AppointmentRow[]>([]);
+  const [patientAppointments, setPatientAppointments] = useState<AppointmentRow[]>([]);
+  const [isRescheduling, setIsRescheduling] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -191,6 +233,18 @@ export default function AppointmentCalendarPage() {
     }
     void loadSchedule().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load schedule."));
   }, [doctor, hname]);
+
+  useEffect(() => {
+    async function loadPatientAppointments() {
+      if (!patientId || !department || !doctor) return;
+      const rows = await loadRows(
+        hname,
+        `/appointments?patientId=${encodeURIComponent(patientId)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`,
+      );
+      setPatientAppointments(rows.map(normalizeAppointmentRow));
+    }
+    void loadPatientAppointments().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load patient appointments."));
+  }, [department, doctor, hname, patientId]);
 
   useEffect(() => {
     if (!selectedDate || !doctor) return;
@@ -239,15 +293,33 @@ export default function AppointmentCalendarPage() {
     return values[0] ?? 10;
   }, [selectedDaySchedules]);
 
-  useEffect(() => {
-    setSelectedStep(scheduleSlotMinutes as 10 | 20);
-  }, [scheduleSlotMinutes]);
+  const patientAppointment = useMemo(() => {
+    return patientAppointments[0] ?? null;
+  }, [patientAppointments]);
+
+  const activeStep = selectedStep ?? scheduleSlotMinutes;
+  const rescheduleHistory = patientAppointment?.reschedule_history ?? [];
+  const rescheduleCount = patientAppointment?.reschedule_count ?? 0;
+  const rescheduleAttemptsLeft = Math.max(0, 3 - rescheduleCount);
+  const currentAppointmentId = patientAppointment?.id ?? null;
+  const currentAppointmentDateKey = patientAppointment?.appointment_date ?? "";
+  const currentAppointmentTime = patientAppointment?.appointment_time ?? "";
+
+  async function refreshPatientAppointments() {
+    if (!patientId || !department || !doctor) return;
+    const rows = await loadRows(
+      hname,
+      `/appointments?patientId=${encodeURIComponent(patientId)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`,
+    );
+    setPatientAppointments(rows.map(normalizeAppointmentRow));
+  }
 
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
     const taken = new Set(
       appointmentRows
         .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
         .map((row) => row.appointment_time ?? "")
         .filter(Boolean),
     );
@@ -256,32 +328,35 @@ export default function AppointmentCalendarPage() {
       const hourBlocks = buildHourBlocks(schedule.availableTimeFrom, schedule.availableTimeTo);
       for (const block of hourBlocks) {
         const [start, end] = block.value.split("|");
-        const anyFree = buildSubSlots(start, end, selectedStep).some((slot) => !taken.has(slot.value));
+        const anyFree = buildSubSlots(start, end, activeStep).some((slot) => !taken.has(slot.value));
         if (anyFree && !hours.has(block.value)) hours.set(block.value, block.label);
       }
     }
     return Array.from(hours.entries()).map(([value, label]) => ({ value, label }));
-  }, [appointmentRows, effectiveSelectedDate, selectedDaySchedules, selectedStep]);
+  }, [appointmentRows, activeStep, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedDaySchedules]);
 
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
     const taken = new Set(
       appointmentRows
         .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
         .map((row) => row.appointment_time ?? "")
         .filter(Boolean),
     );
     const [start, end] = selectedHour.value.split("|");
-    return buildSubSlots(start, end, selectedStep).filter((slot) => !taken.has(slot.value));
-  }, [appointmentRows, effectiveSelectedDate, selectedHour, selectedStep]);
+    return buildSubSlots(start, end, activeStep).filter((slot) => !taken.has(slot.value));
+  }, [appointmentRows, activeStep, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedHour]);
 
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
     setErrorMessage("");
+    const isReschedule = isRescheduling && Boolean(patientAppointment?.id);
     const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
-      method: "POST",
+      method: isReschedule ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        appointmentId: patientAppointment?.id,
         appointmentDate: toKey(effectiveSelectedDate),
         appointmentDay: weekDayNames[effectiveSelectedDate.getDay()],
         department,
@@ -290,32 +365,48 @@ export default function AppointmentCalendarPage() {
         patientName: patient.patient_name ?? "",
         patientPhone: patient.mobile ?? "",
         appointmentTime: selectedSlot,
+        timeSlotMinutes: activeStep,
       }),
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Failed to save appointment.");
-    alert("appointment as fixed");
-    setMessage("Appointment saved.");
+    setMessage(isReschedule ? "Appointment rescheduled." : "Appointment saved.");
+    setIsRescheduling(false);
     setSelectedSlot("");
     setSelectedHour(null);
+    setSelectedDate(effectiveSelectedDate);
     const rows = await loadRows(hname, `/appointments?date=${encodeURIComponent(toKey(effectiveSelectedDate))}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`);
     setAppointmentRows(rows.map(normalizeAppointmentRow));
+    await refreshPatientAppointments();
+  }
+
+  function handleRescheduleClick() {
+    if (!patientAppointment?.appointment_date) return;
+    const targetDate = parseKey(patientAppointment.appointment_date);
+    setIsRescheduling(true);
+    if (targetDate) {
+      setSelectedDate(targetDate);
+      setSelectedHour(null);
+      setSelectedSlot("");
+    }
+    document.getElementById("booking-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
     <BlankPage title="Appointment Calendar">
-      <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-          <div>
-            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Appointments</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{department} - {doctor}</p>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+            <div>
+              <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Appointments</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{department} - {doctor}</p>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
+              <CalenderIcon className="h-5 w-5" />
+              Weekly
+            </div>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
-            <CalenderIcon className="h-5 w-5" />
-            Weekly
-          </div>
-        </div>
-        <div className="space-y-5 p-4 sm:p-6">
+          <div className="space-y-5 p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <button type="button" disabled className="rounded-lg border px-3 py-2 text-sm opacity-40">Prev</button>
             <div className="text-sm text-gray-600">{formatDay(weekDaysList[0])} - {formatDay(weekDaysList[6])}</div>
@@ -348,7 +439,7 @@ export default function AppointmentCalendarPage() {
 
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-gray-700">Slot size</span>
-            <select value={selectedStep} onChange={(event) => setSelectedStep(Number(event.target.value) as 10 | 20)} className="h-11 rounded-lg border border-gray-300 px-4 text-sm">
+            <select value={activeStep} onChange={(event) => setSelectedStep(Number(event.target.value) as 10 | 20)} className="h-11 rounded-lg border border-gray-300 px-4 text-sm">
               <option value={10}>10 minutes</option>
               <option value={20}>20 minutes</option>
             </select>
@@ -389,19 +480,106 @@ export default function AppointmentCalendarPage() {
                 </div>
               ) : null}
 
-              <div className="rounded-2xl border border-gray-200 p-4">
+              <div id="booking-panel" className="rounded-2xl border border-gray-200 p-4">
                 <div className="text-sm text-gray-600">Selected: {selectedSlot ? formatDisplayTime(selectedSlot) : "-"}</div>
-                <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="mt-4 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
-                  Book Appointment
-                </button>
+                {patientAppointment ? (
+                  <div className="mt-2 text-sm text-gray-500">
+                    Current slot: {patientAppointment.appointment_time ? formatDisplayTime(patientAppointment.appointment_time) : "-"} | Reschedules: {patientAppointment.reschedule_count ?? 0}/3
+                  </div>
+                ) : null}
+                {!patientAppointment ? (
+                  <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="mt-4 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    Book Appointment
+                  </button>
+                ) : isRescheduling ? (
+                  <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="mt-4 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    Confirm Reschedule
+                  </button>
+                ) : (
+                  <p className="mt-4 text-sm text-gray-500">Use the profile panel to reschedule.</p>
+                )}
               </div>
             </div>
           ) : null}
 
           {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
           {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
-        </div>
-      </section>
+          </div>
+        </section>
+
+        <aside className="xl:sticky xl:top-6">
+          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
+            <div className="border-b border-gray-100 pb-4 dark:border-gray-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">User Profile</p>
+              <h4 className="mt-1 text-lg font-semibold text-gray-800 dark:text-white/90">
+                {patient?.patient_name ?? "Patient"}
+              </h4>
+              <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
+            </div>
+
+            <div className="space-y-4 pt-4 text-sm">
+              <div>
+                <p className="text-gray-500">Hospital</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">{hname}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Department</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">{department || "-"}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Doctor</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">{doctor || "-"}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Scheduled</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">
+                  {currentAppointmentDateKey && currentAppointmentTime
+                    ? `${formatDisplayDate(currentAppointmentDateKey)} at ${formatDisplayTime(currentAppointmentTime)}`
+                    : "Not scheduled"}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Slot Length</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">
+                  {patientAppointment?.time_slot_minutes ?? activeStep} minutes
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Reschedule Attempts</p>
+                <p className="font-medium text-gray-800 dark:text-white/90">
+                  {rescheduleCount}/3
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!patientAppointment || rescheduleAttemptsLeft === 0}
+                onClick={handleRescheduleClick}
+                className="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                Reschedule
+              </button>
+
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/[0.02]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">History</p>
+                <div className="mt-3 space-y-3">
+                  {rescheduleHistory.length > 0 ? (
+                    rescheduleHistory.map((entry, index) => (
+                      <div key={`${entry.updatedAt ?? "entry"}-${index}`} className="rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-600 dark:border-gray-800 dark:bg-white/[0.03]">
+                        <p className="font-medium text-gray-800 dark:text-white/90">
+                          {formatDisplayDate(entry.fromDate ?? "")} {entry.fromTime ? ` ${formatDisplayTime(entry.fromTime)}` : ""} to {formatDisplayDate(entry.toDate ?? "")} {entry.toTime ? ` ${formatDisplayTime(entry.toTime)}` : ""}
+                        </p>
+                        <p className="mt-1">Attempt {index + 1}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500">No reschedule history yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
     </BlankPage>
   );
 }

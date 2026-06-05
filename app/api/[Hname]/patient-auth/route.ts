@@ -78,7 +78,7 @@ export async function POST(
       );
 
       return NextResponse.json({
-        exists: result.rowCount > 0,
+        exists: (result.rowCount ?? 0) > 0,
         row: result.rows[0] ?? null,
         patientId: result.rows[0]?.id ?? null,
       });
