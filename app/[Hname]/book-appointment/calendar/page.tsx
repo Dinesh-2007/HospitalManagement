@@ -155,6 +155,16 @@ function addMinutes(value: string, minutesToAdd: number) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function normalizeTime(value: string) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 function buildHourBlocks(fromTime: string, toTime: string) {
   const blocks: Slot[] = [];
   let cursor = fromTime;
@@ -169,10 +179,12 @@ function buildHourBlocks(fromTime: string, toTime: string) {
 
 function buildSubSlots(fromTime: string, toTime: string, step: 10 | 20) {
   const slots: Slot[] = [];
-  let cursor = fromTime;
-  while (cursor < toTime) {
+  let cursor = normalizeTime(fromTime);
+  const endTime = normalizeTime(toTime);
+  if (!cursor || !endTime) return slots;
+  while (cursor < endTime) {
     const next = addMinutes(cursor, step);
-    if (next > toTime) break;
+    if (next > endTime) break;
     slots.push({ value: cursor, label: `${formatDisplayTime(cursor)}-${formatDisplayTime(next)}` });
     cursor = next;
   }
@@ -316,7 +328,7 @@ export default function AppointmentCalendarPage() {
 
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
-    const taken = new Set(
+        const taken = new Set(
       appointmentRows
         .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
         .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))

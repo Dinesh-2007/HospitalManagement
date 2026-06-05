@@ -37,6 +37,7 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
       patient_phone TEXT,
       appointment_time TIME,
       time_slot_minutes INTEGER,
+      patient_type TEXT NOT NULL DEFAULT 'scheduled',
       reason TEXT,
       status TEXT NOT NULL DEFAULT 'Scheduled',
       reschedule_count INTEGER NOT NULL DEFAULT 0,
@@ -62,6 +63,11 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
   `);
 
   await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS patient_type TEXT NOT NULL DEFAULT 'scheduled'
+  `);
+
+  await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS appointments_unique_slot_idx
     ON ${quoteIdentifier(TABLE_NAME)} (appointment_date, department, doctor, appointment_time)
   `);
@@ -69,6 +75,16 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
 
 function isValidTime(value: string) {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function normalizeTime(value: string) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 export async function GET(
@@ -175,7 +191,7 @@ export async function POST(
     const patientName = String(body.patientName ?? "").trim();
     const patientId = String(body.patientId ?? "").trim();
     const patientPhone = String(body.patientPhone ?? "").trim();
-    const appointmentTime = String(body.appointmentTime ?? "").trim();
+    const appointmentTime = normalizeTime(String(body.appointmentTime ?? ""));
     const timeSlotMinutes = Number(body.timeSlotMinutes ?? 0);
     const reason = String(body.reason ?? "").trim();
 
@@ -235,9 +251,10 @@ export async function POST(
           patient_phone,
           appointment_time,
           time_slot_minutes,
+          patient_type,
           reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `,
       [
@@ -250,6 +267,7 @@ export async function POST(
         patientPhone || null,
         appointmentTime || null,
         Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? timeSlotMinutes : null,
+        "scheduled",
         reason || null,
       ],
     );
@@ -293,7 +311,7 @@ export async function PUT(
     const patientId = String(body.patientId ?? "").trim();
     const patientName = String(body.patientName ?? "").trim();
     const patientPhone = String(body.patientPhone ?? "").trim();
-    const appointmentTime = String(body.appointmentTime ?? "").trim();
+    const appointmentTime = normalizeTime(String(body.appointmentTime ?? ""));
     const timeSlotMinutes = Number(body.timeSlotMinutes ?? 0);
     const reason = String(body.reason ?? "").trim();
 
@@ -392,6 +410,7 @@ export async function PUT(
             patient_phone = $7,
             appointment_time = $8::time,
             time_slot_minutes = $9,
+            patient_type = 'scheduled',
             reason = $10,
             status = 'Rescheduled',
             reschedule_history = COALESCE(reschedule_history, '[]'::jsonb) || jsonb_build_array(
