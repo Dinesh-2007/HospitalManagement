@@ -51,6 +51,7 @@ export type MastersFormField = {
   note?: string;
   colStart?: 1 | 2 | 3 | 4;
   onChange?: (value: string) => void;
+  defaultValue?: string | string[];
 };
 
 export type MastersFormPageRenderProps = {
@@ -126,8 +127,12 @@ function serializeFormValues(
 
 function buildInitialFormValues(fields: MastersFormField[]): Record<string, FormValue> {
   return fields.reduce<Record<string, FormValue>>((accumulator, field) => {
-    accumulator[field.id] =
-      field.type === "multiselect" || field.type === "checkbox" ? [] : "";
+    if (field.type === "multiselect" || field.type === "checkbox") {
+      accumulator[field.id] = Array.isArray(field.defaultValue) ? field.defaultValue : [];
+      return accumulator;
+    }
+
+    accumulator[field.id] = typeof field.defaultValue === "string" ? field.defaultValue : "";
     return accumulator;
   }, {});
 }

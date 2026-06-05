@@ -39,6 +39,8 @@ type DeleteBody = {
   id?: number;
 };
 
+const DEFAULT_PATIENT_TYPE = "Walk in";
+
 function resolveTableName(routeTable: string, cardTitle?: string) {
   const safeRouteTable = ensureSafeIdentifier(routeTable, "table");
 
@@ -195,7 +197,7 @@ export async function POST(
     
     const body = (await request.json()) as PostBody;
     const fields = body.fields ?? [];
-    const values = body.values ?? {};
+    const values = { ...(body.values ?? {}) };
 
     if (fields.length === 0) {
       return NextResponse.json(
@@ -205,6 +207,16 @@ export async function POST(
     }
 
     const tableName = resolveTableName(table, body.cardTitle);
+
+    if (
+      tableName === "patient_registration" &&
+      fields.some((field) => field.id === "patientType")
+    ) {
+      const patientTypeValue = values.patientType;
+      if (typeof patientTypeValue !== "string" || patientTypeValue.trim().length === 0) {
+        values.patientType = DEFAULT_PATIENT_TYPE;
+      }
+    }
 
     await ensureTable(pool, tableName, fields);
 
