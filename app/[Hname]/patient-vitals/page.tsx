@@ -105,28 +105,6 @@ export default function PatientVitalsPage() {
     void loadPatients().catch((err) => setError(err instanceof Error ? err.message : "Failed to load patients."));
   }, [date, hname, selectedDoctor]);
 
-  useEffect(() => {
-    if (!selectedRow) return;
-    setForm({
-      patientId: text(selectedRow, ["registration_id", "appointment_patient_id", "patient_id"]),
-      patientName: text(selectedRow, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-      dob: text(selectedRow, ["dob"]).slice(0, 10),
-      age: text(selectedRow, ["age"]),
-      gender: text(selectedRow, ["gender"]),
-      heightCm: text(selectedRow, ["height_cm"]),
-      weightKg: text(selectedRow, ["weight_kg"]),
-      temperature: text(selectedRow, ["temperature"]),
-      pulseRate: text(selectedRow, ["pulse_rate"]),
-      respiratoryRate: text(selectedRow, ["respiratory_rate"]),
-      systolicBp: text(selectedRow, ["systolic_bp"]),
-      diastolicBp: text(selectedRow, ["diastolic_bp"]),
-      spo2: text(selectedRow, ["spo2"]),
-      bloodSugar: text(selectedRow, ["blood_sugar"]),
-      remarks: text(selectedRow, ["remarks"]),
-      status: text(selectedRow, ["vitals_status"]) || "Active",
-    });
-  }, [selectedRow]);
-
   const selectedSummary = useMemo(() => {
     if (!selectedRow) return null;
     return {
@@ -242,7 +220,31 @@ export default function PatientVitalsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <button type="button" onClick={() => setSelectedRow(row)} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedRow(row);
+                                setForm({
+                                  patientId: text(row, ["registration_id", "appointment_patient_id", "patient_id"]),
+                                  patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
+                                  dob: text(row, ["dob"]).slice(0, 10),
+                                  age: text(row, ["age"]),
+                                  gender: text(row, ["gender"]),
+                                  heightCm: text(row, ["height_cm"]),
+                                  weightKg: text(row, ["weight_kg"]),
+                                  temperature: text(row, ["temperature"]),
+                                  pulseRate: text(row, ["pulse_rate"]),
+                                  respiratoryRate: text(row, ["respiratory_rate"]),
+                                  systolicBp: text(row, ["systolic_bp"]),
+                                  diastolicBp: text(row, ["diastolic_bp"]),
+                                  spo2: text(row, ["spo2"]),
+                                  bloodSugar: text(row, ["blood_sugar"]),
+                                  remarks: text(row, ["remarks"]),
+                                  status: text(row, ["vitals_status"]) || "Active",
+                                });
+                              }}
+                              className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700"
+                            >
                               {done ? "View / Update" : "Enter Vitals"}
                             </button>
                           </td>

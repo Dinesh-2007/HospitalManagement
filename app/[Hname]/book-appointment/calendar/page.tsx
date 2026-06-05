@@ -416,15 +416,19 @@ export default function AppointmentCalendarPage() {
   }
 
   async function cancelAppointment() {
-    if (!patientAppointment?.id) return;
-
     setErrorMessage("");
     const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ appointmentId: patientAppointment.id }),
+      body: JSON.stringify({
+        appointmentId: patientAppointment?.id,
+        patientId,
+        department,
+        doctor,
+      }),
     });
-    const data = (await response.json()) as { error?: string };
+
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
 
     setMessage("Appointment cancelled.");

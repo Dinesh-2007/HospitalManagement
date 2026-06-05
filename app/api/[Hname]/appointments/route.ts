@@ -448,3 +448,66 @@ export async function PUT(
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ Hname: string }> },
+) {
+  try {
+    const { Hname } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    await ensureAppointmentsTable(pool);
+
+    const body = (await request.json().catch(() => ({}))) as Partial<AppointmentRecord>;
+    const appointmentId = Number(body.appointmentId ?? 0);
+    const patientId = String(body.patientId ?? "").trim();
+    const department = String(body.department ?? "").trim();
+    const doctor = String(body.doctor ?? "").trim();
+
+    if (Number.isInteger(appointmentId) && appointmentId > 0) {
+      const existing = await pool.query(
+        `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
+        [appointmentId],
+      );
+
+      if (existing.rowCount === 0) {
+        return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
+      }
+
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1`, [appointmentId]);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!patientId || !department || !doctor) {
+      return NextResponse.json(
+        { error: "Appointment id or patient, department and doctor are required." },
+        { status: 400 },
+      );
+    }
+
+    const existing = await pool.query(
+      `
+        SELECT id
+        FROM ${quoteIdentifier(TABLE_NAME)}
+        WHERE patient_id = $1
+          AND department = $2
+          AND doctor = $3
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+      `,
+      [patientId, department, doctor],
+    );
+
+    if (existing.rowCount === 0) {
+      return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
+    }
+
+    const targetId = Number(existing.rows[0]?.id ?? 0);
+    await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1`, [targetId]);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to cancel appointment.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
