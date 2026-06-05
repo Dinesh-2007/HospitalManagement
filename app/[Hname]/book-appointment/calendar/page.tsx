@@ -156,7 +156,9 @@ function addMinutes(value: string, minutesToAdd: number) {
 }
 
 function normalizeTime(value: string) {
-  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) return "";
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
@@ -167,10 +169,12 @@ function normalizeTime(value: string) {
 
 function buildHourBlocks(fromTime: string, toTime: string) {
   const blocks: Slot[] = [];
-  let cursor = fromTime;
-  while (cursor < toTime) {
+  let cursor = normalizeTime(fromTime);
+  const endTime = normalizeTime(toTime);
+  if (!cursor || !endTime) return blocks;
+  while (cursor < endTime) {
     const nextHour = addMinutes(cursor, 60);
-    const end = nextHour > toTime ? toTime : nextHour;
+    const end = nextHour > endTime ? endTime : nextHour;
     blocks.push({ value: `${cursor}|${end}`, label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}` });
     cursor = end;
   }
@@ -328,24 +332,15 @@ export default function AppointmentCalendarPage() {
 
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
-        const taken = new Set(
-      appointmentRows
-        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
-        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
-        .map((row) => row.appointment_time ?? "")
-        .filter(Boolean),
-    );
     const hours = new Map<string, string>();
     for (const schedule of selectedDaySchedules) {
       const hourBlocks = buildHourBlocks(schedule.availableTimeFrom, schedule.availableTimeTo);
       for (const block of hourBlocks) {
-        const [start, end] = block.value.split("|");
-        const anyFree = buildSubSlots(start, end, activeStep).some((slot) => !taken.has(slot.value));
-        if (anyFree && !hours.has(block.value)) hours.set(block.value, block.label);
+        if (!hours.has(block.value)) hours.set(block.value, block.label);
       }
     }
     return Array.from(hours.entries()).map(([value, label]) => ({ value, label }));
-  }, [appointmentRows, activeStep, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedDaySchedules]);
+  }, [effectiveSelectedDate, selectedDaySchedules]);
 
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
@@ -359,6 +354,30 @@ export default function AppointmentCalendarPage() {
     const [start, end] = selectedHour.value.split("|");
     return buildSubSlots(start, end, activeStep).filter((slot) => !taken.has(slot.value));
   }, [appointmentRows, activeStep, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedHour]);
+
+  const bookedSlotLabels = useMemo(() => {
+    if (!effectiveSelectedDate) return new Set<string>();
+    return new Set(
+      appointmentRows
+        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
+        .flatMap((row) => {
+          const bookedTime = normalizeTime(row.appointment_time ?? "");
+          if (!bookedTime) return [];
+          const bookedLabels: string[] = [];
+          for (const schedule of selectedDaySchedules) {
+            const hourBlocks = buildHourBlocks(schedule.availableTimeFrom, schedule.availableTimeTo);
+            for (const block of hourBlocks) {
+              const [start, end] = block.value.split("|");
+              if (bookedTime >= start && bookedTime < end) {
+                bookedLabels.push(block.value);
+              }
+            }
+          }
+          return bookedLabels;
+        }),
+    );
+  }, [appointmentRows, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedDaySchedules]);
 
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
@@ -389,6 +408,35 @@ export default function AppointmentCalendarPage() {
     setSelectedDate(effectiveSelectedDate);
     const rows = await loadRows(hname, `/appointments?date=${encodeURIComponent(toKey(effectiveSelectedDate))}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`);
     setAppointmentRows(rows.map(normalizeAppointmentRow));
+    await refreshPatientAppointments();
+  }
+
+  async function cancelAppointment() {
+    if (!patientAppointment?.id) return;
+
+    setErrorMessage("");
+    const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ appointmentId: patientAppointment.id }),
+    });
+    const data = (await response.json()) as { error?: string };
+    if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
+
+    setMessage("Appointment cancelled.");
+    setIsRescheduling(false);
+    setSelectedSlot("");
+    setSelectedHour(null);
+    setSelectedDate(null);
+
+    if (effectiveSelectedDate) {
+      const rows = await loadRows(
+        hname,
+        `/appointments?date=${encodeURIComponent(toKey(effectiveSelectedDate))}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`,
+      );
+      setAppointmentRows(rows.map(normalizeAppointmentRow));
+    }
+
     await refreshPatientAppointments();
   }
 
@@ -467,8 +515,8 @@ export default function AppointmentCalendarPage() {
                     <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                   ) : (
                     availableHours.map((hour) => (
-                      <button key={hour.value} type="button" onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }} className={`rounded-full border px-4 py-2 text-sm ${selectedHour?.value === hour.value ? "bg-brand-500 text-white" : "bg-white text-gray-700"}`}>
-                        {hour.label}
+                      <button key={hour.value} type="button" onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }} className={`rounded-full border px-4 py-2 text-sm ${selectedHour?.value === hour.value ? "bg-brand-500 text-white" : bookedSlotLabels.has(hour.value) ? "cursor-not-allowed bg-gray-100 text-gray-400" : "bg-white text-gray-700"}`} disabled={bookedSlotLabels.has(hour.value)}>
+                        {hour.label}{bookedSlotLabels.has(hour.value) ? " - Slot booked" : ""}
                       </button>
                     ))
                   )}
@@ -483,8 +531,8 @@ export default function AppointmentCalendarPage() {
                       <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
                     ) : (
                       availableSubSlots.map((slot) => (
-                        <button key={slot.value} type="button" onClick={() => setSelectedSlot(slot.value)} className={`rounded-full border px-4 py-2 text-sm ${selectedSlot === slot.value ? "bg-brand-500 text-white" : "bg-white text-gray-700"}`}>
-                          {slot.label}
+                        <button key={slot.value} type="button" disabled={bookedSlots.has(slot.value)} onClick={() => !bookedSlots.has(slot.value) && setSelectedSlot(slot.value)} className={`rounded-full border px-4 py-2 text-sm ${selectedSlot === slot.value ? "bg-brand-500 text-white" : bookedSlots.has(slot.value) ? "cursor-not-allowed bg-gray-100 text-gray-400" : "bg-white text-gray-700"}`}>
+                          {slot.label}{bookedSlots.has(slot.value) ? " - Slot booked" : ""}
                         </button>
                       ))
                     )}
@@ -500,15 +548,32 @@ export default function AppointmentCalendarPage() {
                   </div>
                 ) : null}
                 {!patientAppointment ? (
-                  <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="mt-4 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
-                    Book Appointment
-                  </button>
+                  <div className="mt-4 flex gap-3">
+                    <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                      Book Appointment
+                    </button>
+                    <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+                      Cancel
+                    </button>
+                  </div>
                 ) : isRescheduling ? (
-                  <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="mt-4 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
-                    Confirm Reschedule
-                  </button>
+                  <div className="mt-4 flex gap-3">
+                    <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                      Confirm Reschedule
+                    </button>
+                    <button type="button" onClick={() => void cancelAppointment().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment."))} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
+                      Cancel
+                    </button>
+                  </div>
                 ) : (
-                  <p className="mt-4 text-sm text-gray-500">Use the profile panel to reschedule.</p>
+                  <div className="mt-4 flex gap-3">
+                    <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                      Reschedule
+                    </button>
+                    <button type="button" onClick={() => void cancelAppointment().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment."))} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
+                      Cancel
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

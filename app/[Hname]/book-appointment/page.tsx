@@ -172,7 +172,6 @@ export default function BookAppointmentPage() {
     }
 
     const saved = window.localStorage.getItem(storageKey(hname));
-
     if (!saved) {
       return null;
     }
