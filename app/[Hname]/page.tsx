@@ -28,8 +28,8 @@ export default function HospitalLoginPage({ params }: Props) {
     startTransition(async () => {
       try {
         await loginAction(formData);
-      } catch (err: any) {
-        setErrorMessages(err.message || "Failed to login");
+      } catch (error) {
+        setErrorMessages(error instanceof Error ? error.message : "Failed to login");
       }
     });
   };

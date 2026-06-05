@@ -38,28 +38,34 @@ export default function ManageUsersPage() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function loadUsers() {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/manage-users`, {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as { rows?: UserRow[]; error?: string };
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Failed to load users.");
-      }
-
-      setUsers(data.rows ?? []);
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Failed to load users.");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   useEffect(() => {
+    let active = true;
+    const loadUsers = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/${encodeURIComponent(hname)}/manage-users`, {
+          cache: "no-store",
+        });
+        const data = (await response.json()) as { rows?: UserRow[]; error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load users.");
+        }
+
+        if (active) setUsers(data.rows ?? []);
+      } catch (error) {
+        if (active) {
+          setSubmitError(error instanceof Error ? error.message : "Failed to load users.");
+        }
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
     void loadUsers();
+    return () => {
+      active = false;
+    };
   }, [hname]);
 
   async function saveUser(mode: "save" | "saveNext") {

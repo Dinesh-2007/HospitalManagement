@@ -75,8 +75,8 @@ export default function AllergyPage() {
             if (res.ok) {
               const data = await res.json();
               if (data.rows && data.rows.length > 0) {
-                const match = data.rows.find((r: any) => 
-                  String(r.code).toLowerCase() === value.toLowerCase()
+                const match = data.rows.find((r: Record<string, unknown>) =>
+                  String(r.code ?? "").toLowerCase() === value.toLowerCase(),
                 );
                 const descEl = document.getElementById("description") as HTMLTextAreaElement | null;
                 if (descEl) {

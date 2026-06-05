@@ -54,11 +54,11 @@ export async function addUser(hname: string, formData: FormData) {
       "INSERT INTO users (username, password, role) VALUES ($1, $2, $3)",
       [username, hashedPassword, role]
     );
-  } catch (e: any) {
-    if (e.code === '23505') { // Unique violation
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
       throw new Error("Username already exists");
     }
-    throw e;
+    throw error;
   }
 }
 

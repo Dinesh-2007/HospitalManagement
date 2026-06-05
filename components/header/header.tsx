@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
-import { BellIcon, ChevronDownIcon } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
 import { useParams } from "next/navigation";
@@ -19,8 +18,6 @@ export function Header() {
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : "HSMS";
 
   useEffect(() => {
-    setMounted(true);
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -28,6 +25,7 @@ export function Header() {
       }
     };
 
+    Promise.resolve().then(() => setMounted(true));
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {

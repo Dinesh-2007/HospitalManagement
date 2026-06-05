@@ -290,20 +290,22 @@ export default function PharmacyDispensingPage() {
   }, [medicineRows]);
 
   useEffect(() => {
-    setMedicineRows((currentRows) =>
-      currentRows.map((row) => {
-        const sellingPrice = pricingMap[normalizeMedicineName(row.medicineName)] ?? 0;
-        const receivedQty = Number(row.receivedQty);
+    Promise.resolve().then(() => {
+      setMedicineRows((currentRows) =>
+        currentRows.map((row) => {
+          const sellingPrice = pricingMap[normalizeMedicineName(row.medicineName)] ?? 0;
+          const receivedQty = Number(row.receivedQty);
 
-        return {
-          ...row,
-          medicineAmount:
-            Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
-              ? formatMoney(sellingPrice * receivedQty)
-              : "",
-        };
-      }),
-    );
+          return {
+            ...row,
+            medicineAmount:
+              Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
+                ? formatMoney(sellingPrice * receivedQty)
+                : "",
+          };
+        }),
+      );
+    });
   }, [pricingMap]);
 
   const updateMedicineRow = (

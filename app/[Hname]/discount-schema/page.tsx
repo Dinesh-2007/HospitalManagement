@@ -11,7 +11,5 @@ export default async function TenantDiscountSchemaPage({
 }: {
   params: Promise<{ Hname: string }>;
 }) {
-  const { Hname } = await params;
-
   return <DiscountSchemaPage />;
 }
