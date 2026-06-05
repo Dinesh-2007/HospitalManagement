@@ -99,6 +99,10 @@ function readText(row: MasterRow, keys: string[]) {
   return "";
 }
 
+function normalizePhone(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "").trim();
+}
+
 async function fetchMasterRows(hname: string, tableName: string) {
   const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/${tableName}`, {
     method: "GET",
@@ -186,20 +190,31 @@ export default function BookAppointmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    async function loadPatients() {
+      if (!hname) return;
+      try {
+        const rows = await fetchMasterRows(hname, PATIENT_TABLE);
+        setPatientRows(rows);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to load patient records.");
+      }
+    }
+    void loadPatients();
+  }, [hname]);
+
+  useEffect(() => {
     async function loadOptions() {
       if (!hname || !authenticatedPatient) return;
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const [departmentRows, doctorRows, patientRows, scheduleRows] = await Promise.all([
+        const [departmentRows, doctorRows, scheduleRows] = await Promise.all([
           fetchMasterRows(hname, DEPARTMENT_TABLE),
           fetchMasterRows(hname, DOCTOR_TABLE),
-          fetchMasterRows(hname, PATIENT_TABLE),
           fetchMasterRows(hname, SCHEDULE_TABLE),
         ]);
         setDepartments(Array.from(new Set(departmentRows.map(normalizeDepartment).filter(Boolean))).sort((left, right) => left.localeCompare(right)));
         setDoctorRows(doctorRows);
-        setPatientRows(patientRows);
         setScheduleRows(scheduleRows.map(normalizeSchedule).filter((row) => row.doctorName));
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Failed to load appointment options.");
@@ -227,7 +242,7 @@ export default function BookAppointmentPage() {
       .map((row) => ({
         id: Number(row.id ?? 0),
         name: readText(row, ["patient_name", "patientName"]),
-        phone: readText(row, ["mobile", "phoneOffice", "phoneResi"]),
+        phone: readText(row, ["mobile"]),
       }))
       .filter((row) => row.id && row.name)
       .sort((left, right) => left.name.localeCompare(right.name));
@@ -244,11 +259,8 @@ export default function BookAppointmentPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const selectedPatient = patientOptions.find(
-        (row) =>
-          row.phone === authForm.phone ||
-          row.name.trim().toLowerCase() === authForm.name.trim().toLowerCase(),
-      );
+      const phone = normalizePhone(authForm.phone);
+      const selectedPatient = patientOptions.find((row) => normalizePhone(row.phone) === phone);
 
       if (selectedPatient) {
         const payload = { id: selectedPatient.id, name: selectedPatient.name, phone: selectedPatient.phone };
@@ -316,33 +328,12 @@ export default function BookAppointmentPage() {
             {mode === "signin" ? (
               <form onSubmit={(event) => void handleSignin(event)} className="space-y-4 max-w-xl">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Patient</label>
-                  <select
-                    value={authForm.phone}
-                    onChange={(event) => {
-                      const selectedPatient = patientOptions.find((row) => row.phone === event.target.value);
-                      setAuthForm({
-                        name: selectedPatient?.name ?? "",
-                        phone: selectedPatient?.phone ?? event.target.value,
-                      });
-                    }}
-                    className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
-                  >
-                    <option value="">Select Patient</option>
-                    {patientOptions.map((patient) => (
-                      <option key={patient.id} value={patient.phone}>
-                        {patient.name} - {patient.phone}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
                   <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number</label>
-                  <input value={authForm.phone} onChange={(event) => setAuthForm((current) => ({ ...current, phone: event.target.value }))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
+                  <input value={authForm.phone} onChange={(event) => setAuthForm((current) => ({ ...current, phone: event.target.value }))} inputMode="tel" maxLength={10} pattern="[0-9]{10}" className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
                 </div>
                 <div className="flex gap-3">
                   <button type="submit" disabled={isSubmitting} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">{isSubmitting ? "Checking..." : "Signin"}</button>
