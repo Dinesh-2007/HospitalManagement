@@ -370,27 +370,68 @@ export function PricingManagementPage({
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (initialHname) {
-      setResolvedHname(initialHname);
-      return;
-    }
+    const nextHname =
+      initialHname ||
+      (typeof params?.Hname === "string" && params.Hname.trim().length > 0
+        ? params.Hname
+        : getCookieTenant());
 
-    if (typeof params?.Hname === "string" && params.Hname.trim().length > 0) {
-      setResolvedHname(params.Hname);
-      return;
-    }
-
-    const cookieTenant = getCookieTenant();
-
-    if (cookieTenant) {
-      setResolvedHname(cookieTenant);
+    if (nextHname) {
+      Promise.resolve().then(() => setResolvedHname(nextHname));
     }
   }, [initialHname, params]);
 
   useEffect(() => {
-    if (resolvedHname && savedFormsOpen) {
-      void loadSavedPricingForms();
+    if (!resolvedHname || !savedFormsOpen) {
+      return;
     }
+
+    let active = true;
+
+    const loadSavedForms = async () => {
+      setLoadingSavedForms(true);
+      setSavedFormsError("");
+
+      try {
+        const response = await fetch(
+          `/api/${encodeURIComponent(resolvedHname)}/forms/pricing`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to load saved pricing forms.");
+        }
+
+        const data = (await response.json()) as {
+          rows?: ItemMasterRow[];
+        };
+
+        if (active) {
+          setSavedForms(data.rows ?? []);
+        }
+      } catch (error) {
+        if (active) {
+          setSavedFormsError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load saved pricing forms.",
+          );
+        }
+      } finally {
+        if (active) {
+          setLoadingSavedForms(false);
+        }
+      }
+    };
+
+    void loadSavedForms();
+
+    return () => {
+      active = false;
+    };
   }, [resolvedHname, savedFormsOpen]);
 
   useEffect(() => {

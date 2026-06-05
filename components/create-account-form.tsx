@@ -73,10 +73,6 @@ export function CreateAccountForm() {
 
     const formData = new FormData(event.currentTarget);
     const hospitalName = String(formData.get("hospitalName") ?? "").trim();
-    const adminMail = String(formData.get("adminMail") ?? "").trim();
-    const creatorName = String(formData.get("creatorName") ?? "").trim();
-    const siteName = String(formData.get("siteName") ?? "").trim();
-
     setSubmitMessage(
       `Initializing ${hospitalName} database... Please wait.`
     );
@@ -84,8 +80,10 @@ export function CreateAccountForm() {
     startTransition(async () => {
       try {
         await createAccountAction(formData);
-      } catch (e: any) {
-        setSubmitMessage(`Failed to create account: ${e.message}`);
+      } catch (error) {
+        setSubmitMessage(
+          `Failed to create account: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
       }
     });
   }
