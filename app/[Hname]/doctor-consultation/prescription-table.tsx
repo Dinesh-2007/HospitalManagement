@@ -29,7 +29,11 @@ type ItemMasterRow = {
 type PrescriptionRow = {
   id: string;
   medicine: Medicine;
-  frequency: string;
+  schedule: {
+    morning: boolean;
+    afternoon: boolean;
+    night: boolean;
+  };
   foodTiming: string;
   days: string;
   totalQty: string;
@@ -41,7 +45,10 @@ type SerializedPrescriptionLine = {
   medicineType: string;
   strength: string;
   uom: string;
-  frequency: string;
+  frequency?: string;
+  morning?: boolean;
+  afternoon?: boolean;
+  night?: boolean;
   foodTiming: string;
   days: string;
   totalQty: string;
@@ -68,22 +75,26 @@ function buildEmptyMedicine(): Medicine {
   };
 }
 
-function isValidFrequencyPattern(value: string): boolean {
-  return /^[01]{3}$/.test(value);
+function buildEmptySchedule() {
+  return {
+    morning: false,
+    afternoon: false,
+    night: false,
+  };
 }
 
-function calculateTotalQty(frequency: string, days: string): string {
-  if (!isValidFrequencyPattern(frequency)) {
-    return "";
-  }
+function serializeSchedule(schedule: PrescriptionRow["schedule"]): string {
+  return [schedule.morning, schedule.afternoon, schedule.night].map((value) => (value ? "1" : "0")).join("");
+}
 
+function calculateTotalQty(schedule: PrescriptionRow["schedule"], days: string): string {
   const totalDays = Number(days);
 
   if (!Number.isFinite(totalDays) || totalDays < 0) {
     return "";
   }
 
-  const dosesPerDay = frequency.split("").reduce((sum, digit) => sum + Number(digit), 0);
+  const dosesPerDay = Number(schedule.morning) + Number(schedule.afternoon) + Number(schedule.night);
   return String(dosesPerDay * totalDays);
 }
 
@@ -94,7 +105,10 @@ function serializeRows(rows: PrescriptionRow[]): string {
     medicineType: row.medicine.type,
     strength: row.medicine.strength,
     uom: row.medicine.uom,
-    frequency: row.frequency,
+    frequency: serializeSchedule(row.schedule),
+    morning: row.schedule.morning,
+    afternoon: row.schedule.afternoon,
+    night: row.schedule.night,
     foodTiming: row.foodTiming,
     days: row.days,
     totalQty: row.totalQty,
@@ -117,6 +131,20 @@ function parseRows(value?: string): PrescriptionRow[] {
 
     return parsed.map((item) => {
       const line = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+      const schedule =
+        typeof line.morning === "boolean" || typeof line.afternoon === "boolean" || typeof line.night === "boolean"
+          ? {
+              morning: Boolean(line.morning),
+              afternoon: Boolean(line.afternoon),
+              night: Boolean(line.night),
+            }
+          : typeof line.frequency === "string" && /^[01]{3}$/.test(line.frequency)
+            ? {
+                morning: line.frequency[0] === "1",
+                afternoon: line.frequency[1] === "1",
+                night: line.frequency[2] === "1",
+              }
+            : buildEmptySchedule();
 
       return {
         id: crypto.randomUUID(),
@@ -138,16 +166,13 @@ function parseRows(value?: string): PrescriptionRow[] {
           strength: typeof line.strength === "string" ? line.strength : "",
           uom: typeof line.uom === "string" ? line.uom : "",
         },
-        frequency: typeof line.frequency === "string" ? line.frequency : "",
+        schedule,
         foodTiming:
           typeof line.foodTiming === "string" && FOOD_TIMING_OPTIONS.includes(line.foodTiming as (typeof FOOD_TIMING_OPTIONS)[number])
             ? line.foodTiming
             : DEFAULT_FOOD_TIMING,
         days: typeof line.days === "string" ? line.days : "",
-        totalQty: calculateTotalQty(
-          typeof line.frequency === "string" ? line.frequency : "",
-          typeof line.days === "string" ? line.days : "",
-        ),
+        totalQty: calculateTotalQty(schedule, typeof line.days === "string" ? line.days : ""),
       };
     });
   } catch {
@@ -287,7 +312,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
     const newRows: PrescriptionRow[] = medicinesToAdd.map((m) => ({
       id: crypto.randomUUID(),
       medicine: m,
-      frequency: "",
+      schedule: buildEmptySchedule(),
       foodTiming: DEFAULT_FOOD_TIMING,
       days: "",
       totalQty: "",
@@ -307,7 +332,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
     const emptyRow: PrescriptionRow = {
       id: rowId,
       medicine: buildEmptyMedicine(),
-      frequency: "",
+      schedule: buildEmptySchedule(),
       foodTiming: DEFAULT_FOOD_TIMING,
       days: "",
       totalQty: "",
@@ -337,7 +362,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
 
   const updateRowField = (
     rowId: string,
-    field: keyof Pick<PrescriptionRow, "frequency" | "foodTiming" | "days">,
+    field: keyof Pick<PrescriptionRow, "foodTiming" | "days">,
     value: string
   ) => {
     const nextValue =
@@ -351,12 +376,34 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
           ? {
               ...row,
               [field]: nextValue,
-              totalQty: calculateTotalQty(
-                field === "frequency" ? nextValue : row.frequency,
-                field === "days" ? nextValue : row.days,
-              ),
+              totalQty: calculateTotalQty(row.schedule, field === "days" ? nextValue : row.days),
             }
           : row
+      );
+      onChange?.(serializeRows(updatedRows));
+      return updatedRows;
+    });
+  };
+
+  const updateScheduleField = (rowId: string, field: keyof PrescriptionRow["schedule"], checked: boolean) => {
+    setRows((currentRows) => {
+      const updatedRows = currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              schedule: {
+                ...row.schedule,
+                [field]: checked,
+              },
+              totalQty: calculateTotalQty(
+                {
+                  ...row.schedule,
+                  [field]: checked,
+                },
+                row.days,
+              ),
+            }
+          : row,
       );
       onChange?.(serializeRows(updatedRows));
       return updatedRows;
@@ -398,7 +445,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
     <div className="mt-8 space-y-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-800 dark:text-white/90">
-          Prescription Line Item Table
+          Prescription Table
         </h4>
         <button
           type="button"
@@ -492,14 +539,32 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                       />
                     </td>
                     <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        placeholder="e.g. 101"
-                        value={row.frequency}
-                        onChange={(e) => updateRowField(row.id, "frequency", e.target.value)}
-                        className={editableInputClass("min-w-[80px]", isEditing)}
-                      />
+                      {isEditing ? (
+                        <div className="flex min-w-[200px] items-center gap-3">
+                          {([
+                            ["morning", "Morning"],
+                            ["afternoon", "Afternoon"],
+                            ["night", "Night"],
+                          ] as const).map(([key, label]) => (
+                            <label key={key} className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={row.schedule[key]}
+                                onChange={(e) => updateScheduleField(row.id, key, e.target.checked)}
+                                className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          readOnly
+                          value={serializeSchedule(row.schedule)}
+                          className={editableInputClass("min-w-[80px]", false)}
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <select

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useParams } from "next/navigation";
+import { City, Country, State } from "country-state-city";
 import { getCurrentUser, getCurrentUserRole } from "../../app/actions/user";
 import { logoutAction } from "../../app/actions/auth";
 import { changePasswordAction } from "../../app/actions/user-settings";
@@ -117,10 +119,10 @@ const DEPARTMENT_OPTIONS = [
 type FieldConfig = {
   key: ProfileFieldKey;
   label: string;
-  inputType?: "text" | "date" | "email" | "number";
+  inputType?: "text" | "date" | "email" | "number" | "file";
   pattern?: string;
   maxLength?: number;
-  optionGroup?: keyof typeof LOVS | "specialization" | "department";
+  optionGroup?: keyof typeof LOVS | "specialization" | "department" | "country" | "state" | "city";
   fullWidth?: boolean;
 };
 
@@ -133,15 +135,15 @@ const FIELD_CONFIG: FieldConfig[] = [
   { key: "dateOfBirth", label: "Date of Birth", inputType: "date" },
   { key: "bloodGroup", label: "Blood Group", optionGroup: "bloodGroup" },
   { key: "maritalStatus", label: "Marital Status", optionGroup: "maritalStatus" },
-  { key: "profilePhoto", label: "Profile Photo", inputType: "text", maxLength: 255 },
+  { key: "profilePhoto", label: "Profile Photo", inputType: "file" },
   { key: "mobileNumber", label: "Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
   { key: "alternateMobileNumber", label: "Alternate Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
   { key: "emailId", label: "Email ID", inputType: "email", maxLength: 255 },
   { key: "emergencyContactNumber", label: "Emergency Contact Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
   { key: "address", label: "Address", inputType: "text", fullWidth: true, maxLength: 255 },
   { key: "country", label: "Country", optionGroup: "country" },
-  { key: "state", label: "State", inputType: "text", pattern: "[A-Za-z ]*", maxLength: 100 },
-  { key: "city", label: "City", inputType: "text", pattern: "[A-Za-z ]*", maxLength: 100 },
+  { key: "state", label: "State", optionGroup: "state" },
+  { key: "city", label: "City", optionGroup: "city" },
   { key: "pincode", label: "Pincode", inputType: "text", pattern: "[0-9]*", maxLength: 10 },
   { key: "registrationNumber", label: "Registration Number (Medical Council Number)", inputType: "text", pattern: "[A-Za-z0-9-]*", maxLength: 100 },
   { key: "specialization", label: "Specialization", optionGroup: "specialization" },
@@ -209,7 +211,30 @@ export function HeaderUserDropdown() {
           return { ...field, options: LOVS.maritalStatus };
         }
         if (field.optionGroup === "country") {
-          return { ...field, options: LOVS.country };
+          return { ...field, options: Country.getAllCountries().map((item) => item.name) };
+        }
+        if (field.optionGroup === "state") {
+          return {
+            ...field,
+            options: profileForm.country
+              ? State.getStatesOfCountry(
+                  Country.getAllCountries().find((item) => item.name === profileForm.country)?.isoCode ?? "",
+                ).map((item) => item.name)
+              : [],
+          };
+        }
+        if (field.optionGroup === "city") {
+          const selectedCountry = Country.getAllCountries().find((item) => item.name === profileForm.country);
+          const selectedState = State.getStatesOfCountry(selectedCountry?.isoCode ?? "").find(
+            (item) => item.name === profileForm.state,
+          );
+          return {
+            ...field,
+            options:
+              selectedCountry && selectedState
+                ? City.getCitiesOfState(selectedCountry.isoCode, selectedState.isoCode).map((item) => item.name)
+                : [],
+          };
         }
         if (field.optionGroup === "employeeType") {
           return { ...field, options: LOVS.employeeType };
@@ -225,7 +250,7 @@ export function HeaderUserDropdown() {
         }
         return field;
       }),
-    [],
+    [profileForm.country, profileForm.state],
   );
 
   if (!user) return null;
@@ -278,6 +303,8 @@ export function HeaderUserDropdown() {
     let nextValue = value;
     if (config.inputType === "number") {
       nextValue = sanitizeDigits(value, config.maxLength);
+    } else if (key === "profilePhoto") {
+      nextValue = value.slice(0, 255);
     } else if (key === "mobileNumber" || key === "alternateMobileNumber" || key === "emergencyContactNumber" || key === "pincode" || key === "accountNumber" || key === "aadhaarNumber") {
       nextValue = sanitizeDigits(value, config.maxLength);
     } else if (key === "ifscCode" || key === "panNumber" || key === "doctorId" || key === "doctorCode" || key === "registrationNumber" || key === "licenseNumber") {
@@ -289,6 +316,20 @@ export function HeaderUserDropdown() {
     }
 
     setProfileForm((current) => ({ ...current, [key]: nextValue }));
+  }
+
+  function handleProfilePhotoUpload(file: File | null) {
+    if (!file) {
+      setProfileForm((current) => ({ ...current, profilePhoto: "" }));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setProfileForm((current) => ({ ...current, profilePhoto: result }));
+    };
+    reader.readAsDataURL(file);
   }
 
   return (
@@ -360,38 +401,60 @@ export function HeaderUserDropdown() {
             {profileError ? <div className="mb-4 text-sm text-red-500">{profileError}</div> : null}
             {profileMessage ? <div className="mb-4 text-sm text-green-600">{profileMessage}</div> : null}
             <form onSubmit={handleProfileSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {doctorFields.map((field) => (
-                <div key={field.key} className={field.fullWidth ? "md:col-span-2" : undefined}>
-                  <Label htmlFor={field.key}>{field.label}</Label>
-                  {field.options ? (
-                    <select
-                      id={field.key}
-                      name={field.key}
-                      value={profileForm[field.key]}
-                      onChange={(event) => updateField(field.key, event.target.value)}
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 outline-hidden focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    >
-                      <option value="">Select</option>
-                      {field.options.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <InputField
-                      id={field.key}
-                      name={field.key}
-                      type={field.inputType ?? "text"}
-                      value={profileForm[field.key]}
-                      onChange={(event) => updateField(field.key, event.target.value)}
-                      pattern={field.pattern}
-                      maxLength={field.maxLength}
-                      required={["doctorId", "doctorCode", "firstName", "lastName", "mobileNumber", "emailId", "address"].includes(field.key)}
+              <div className="md:col-start-2 md:row-start-1 md:row-span-3 md:justify-self-end">
+                <div className="flex w-52 flex-col items-stretch gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                    {profileForm.profilePhoto ? (
+                      <Image src={profileForm.profilePhoto} alt="Profile preview" width={208} height={208} className="h-full w-full object-cover" unoptimized />
+                    ) : (
+                      <span className="text-xs text-gray-400">Photo</span>
+                    )}
+                  </div>
+                  <label className="cursor-pointer self-center rounded-lg bg-brand-500 px-3 py-2 text-xs font-medium text-white transition hover:bg-brand-600">
+                    Upload Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => handleProfilePhotoUpload(event.target.files?.[0] ?? null)}
                     />
-                  )}
+                  </label>
                 </div>
-              ))}
+              </div>
+              {doctorFields
+                .filter((field) => field.key !== "profilePhoto")
+                .map((field) => (
+                  <div key={field.key} className={field.fullWidth ? "md:col-span-2" : undefined}>
+                    <Label htmlFor={field.key}>{field.label}</Label>
+                    {field.options ? (
+                      <select
+                        id={field.key}
+                        name={field.key}
+                        value={profileForm[field.key]}
+                        onChange={(event) => updateField(field.key, event.target.value)}
+                        className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 outline-hidden focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                      >
+                        <option value="">Select</option>
+                        {field.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <InputField
+                        id={field.key}
+                        name={field.key}
+                        type={field.inputType ?? "text"}
+                        value={profileForm[field.key]}
+                        onChange={(event) => updateField(field.key, event.target.value)}
+                        pattern={field.pattern}
+                        maxLength={field.maxLength}
+                        required={["doctorId", "doctorCode", "firstName", "lastName", "mobileNumber", "emailId", "address"].includes(field.key)}
+                      />
+                    )}
+                  </div>
+                ))}
               <div className="md:col-span-2 flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={() => setProfileModalOpen(false)}>
                   Cancel
