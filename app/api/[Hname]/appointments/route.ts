@@ -105,6 +105,20 @@ export async function GET(
     const doctor = searchParams.get("doctor") ?? "";
     const patientId = searchParams.get("patientId") ?? "";
 
+    if (patientId && !department && !doctor) {
+      const result = await pool.query(
+        `
+          SELECT *
+          FROM ${quoteIdentifier(TABLE_NAME)}
+          WHERE patient_id = $1
+          ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC
+        `,
+        [patientId],
+      );
+
+      return NextResponse.json({ rows: result.rows });
+    }
+
     if (patientId && department && doctor) {
       const result = await pool.query(
         `
@@ -475,7 +489,15 @@ export async function DELETE(
         return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
       }
 
-      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1`, [appointmentId]);
+      await pool.query(
+        `
+          UPDATE ${quoteIdentifier(TABLE_NAME)}
+          SET status = 'Cancelled',
+              updated_at = NOW()
+          WHERE id = $1
+        `,
+        [appointmentId],
+      );
       return NextResponse.json({ ok: true });
     }
 
@@ -504,7 +526,15 @@ export async function DELETE(
     }
 
     const targetId = Number(existing.rows[0]?.id ?? 0);
-    await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1`, [targetId]);
+    await pool.query(
+      `
+        UPDATE ${quoteIdentifier(TABLE_NAME)}
+        SET status = 'Cancelled',
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [targetId],
+    );
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to cancel appointment.";

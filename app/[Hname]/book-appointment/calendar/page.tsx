@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { BlankPage } from "../../../../components/blank-page";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
@@ -26,6 +26,8 @@ type AppointmentRow = {
   reschedule_count?: number | null;
   time_slot_minutes?: number | null;
   status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   reschedule_history?: Array<{
     fromDate?: string;
     fromTime?: string;
@@ -142,12 +144,6 @@ function formatDisplayTime(value: string) {
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
 }
 
-function formatDisplayDate(value: string) {
-  const parsed = parseKey(value);
-  if (!parsed) return value;
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(parsed);
-}
-
 function addMinutes(value: string, minutesToAdd: number) {
   const [hoursText, minutesText = "00"] = value.split(":");
   const date = new Date();
@@ -204,6 +200,7 @@ async function loadRows(hname: string, url: string) {
 
 export default function AppointmentCalendarPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const hname = params?.Hname as string;
   const department = searchParams.get("department") ?? "";
@@ -224,6 +221,7 @@ export default function AppointmentCalendarPage() {
   const [appointmentRows, setAppointmentRows] = useState<AppointmentRow[]>([]);
   const [patientAppointments, setPatientAppointments] = useState<AppointmentRow[]>([]);
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -314,12 +312,14 @@ export default function AppointmentCalendarPage() {
   }, [patientAppointments]);
 
   const activeStep = selectedStep ?? scheduleSlotMinutes;
-  const rescheduleHistory = patientAppointment?.reschedule_history ?? [];
-  const rescheduleCount = patientAppointment?.reschedule_count ?? 0;
-  const rescheduleAttemptsLeft = Math.max(0, 3 - rescheduleCount);
   const currentAppointmentId = patientAppointment?.id ?? null;
-  const currentAppointmentDateKey = patientAppointment?.appointment_date ?? "";
-  const currentAppointmentTime = patientAppointment?.appointment_time ?? "";
+  const patientAvatarLabel =
+    (patient?.patient_name ?? "User")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "U";
 
   async function refreshPatientAppointments() {
     if (!patientId || !department || !doctor) return;
@@ -406,6 +406,7 @@ export default function AppointmentCalendarPage() {
     const data = (await response.json()) as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Failed to save appointment.");
     setMessage(isReschedule ? "Appointment rescheduled." : "Appointment saved.");
+    setDialogMessage(isReschedule ? "Appointment rescheduled." : "Appointment booked.");
     setIsRescheduling(false);
     setSelectedSlot("");
     setSelectedHour(null);
@@ -432,6 +433,7 @@ export default function AppointmentCalendarPage() {
     if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
 
     setMessage("Appointment cancelled.");
+    setDialogMessage("Appointment cancelled.");
     setIsRescheduling(false);
     setSelectedSlot("");
     setSelectedHour(null);
@@ -462,16 +464,32 @@ export default function AppointmentCalendarPage() {
 
   return (
     <BlankPage title="Appointment Calendar">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 xl:grid-cols-1">
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
             <div>
               <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Appointments</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{department} - {doctor}</p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
-              <CalenderIcon className="h-5 w-5" />
-              Weekly
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push(`/${encodeURIComponent(hname)}/book-appointment/profile?patientId=${encodeURIComponent(patientId)}`)}
+                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50"
+                aria-label="Open user profile"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">
+                  {patientAvatarLabel}
+                </div>
+                <div className="hidden text-left sm:block">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">User image</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white/90">Profile</p>
+                </div>
+              </button>
+              <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
+                <CalenderIcon className="h-5 w-5" />
+                Weekly
+              </div>
             </div>
           </div>
           <div className="space-y-5 p-4 sm:p-6">
@@ -569,17 +587,17 @@ export default function AppointmentCalendarPage() {
                     <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
                       Confirm Reschedule
                     </button>
-                    <button type="button" onClick={() => void cancelAppointment().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment."))} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
-                      Cancel
+                    <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+                      Cancel Reschedule
                     </button>
                   </div>
                 ) : (
                   <div className="mt-4 flex gap-3">
                     <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
-                      Reschedule
+                      Reschedule Appointment
                     </button>
                     <button type="button" onClick={() => void cancelAppointment().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment."))} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
-                      Cancel
+                      Cancel Appointment
                     </button>
                   </div>
                 )}
@@ -587,84 +605,29 @@ export default function AppointmentCalendarPage() {
             </div>
           ) : null}
 
-          {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
-          {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
+              {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
+              {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
           </div>
         </section>
 
-        <aside className="xl:sticky xl:top-6">
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
-            <div className="border-b border-gray-100 pb-4 dark:border-gray-800">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">User Profile</p>
-              <h4 className="mt-1 text-lg font-semibold text-gray-800 dark:text-white/90">
-                {patient?.patient_name ?? "Patient"}
-              </h4>
-              <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
-            </div>
-
-            <div className="space-y-4 pt-4 text-sm">
-              <div>
-                <p className="text-gray-500">Hospital</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">{hname}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Department</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">{department || "-"}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Doctor</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">{doctor || "-"}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Scheduled</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">
-                  {currentAppointmentDateKey && currentAppointmentTime
-                    ? `${formatDisplayDate(currentAppointmentDateKey)} at ${formatDisplayTime(currentAppointmentTime)}`
-                    : "Not scheduled"}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Slot Length</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">
-                  {patientAppointment?.time_slot_minutes ?? activeStep} minutes
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Reschedule Attempts</p>
-                <p className="font-medium text-gray-800 dark:text-white/90">
-                  {rescheduleCount}/3
-                </p>
-              </div>
+      </div>
+      {dialogMessage ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Status</h2>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{dialogMessage}</p>
+            <div className="mt-5 flex justify-end">
               <button
                 type="button"
-                disabled={!patientAppointment || rescheduleAttemptsLeft === 0}
-                onClick={handleRescheduleClick}
-                className="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
+                onClick={() => setDialogMessage("")}
+                className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white"
               >
-                Reschedule
+                OK
               </button>
-
-              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/[0.02]">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">History</p>
-                <div className="mt-3 space-y-3">
-                  {rescheduleHistory.length > 0 ? (
-                    rescheduleHistory.map((entry, index) => (
-                      <div key={`${entry.updatedAt ?? "entry"}-${index}`} className="rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-600 dark:border-gray-800 dark:bg-white/[0.03]">
-                        <p className="font-medium text-gray-800 dark:text-white/90">
-                          {formatDisplayDate(entry.fromDate ?? "")} {entry.fromTime ? ` ${formatDisplayTime(entry.fromTime)}` : ""} to {formatDisplayDate(entry.toDate ?? "")} {entry.toTime ? ` ${formatDisplayTime(entry.toTime)}` : ""}
-                        </p>
-                        <p className="mt-1">Attempt {index + 1}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">No reschedule history yet.</p>
-                  )}
-                </div>
-              </div>
             </div>
-          </section>
-        </aside>
-      </div>
+          </div>
+        </div>
+      ) : null}
     </BlankPage>
   );
 }
