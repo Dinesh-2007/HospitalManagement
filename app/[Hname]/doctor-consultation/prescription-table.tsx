@@ -75,6 +75,16 @@ function buildEmptyMedicine(): Medicine {
   };
 }
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(text.trim() ? "Unexpected non-JSON response from server." : "Empty response from server.");
+  }
+}
+
 function buildEmptySchedule() {
   return {
     morning: false,
@@ -212,10 +222,10 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
           method: "GET",
           cache: "no-store",
         });
-        const data = (await response.json()) as {
+        const data = await readJsonResponse<{
           rows?: ItemMasterRow[];
           error?: string;
-        };
+        }>(response);
 
         if (!response.ok) {
           throw new Error(data.error ?? "Failed to load medicines from item master.");
