@@ -120,7 +120,7 @@ export async function POST(
       [String(body.username ?? "")],
     );
 
-    if (existing.rowCount > 0) {
+    if ((existing.rowCount ?? 0) > 0) {
       await pool.query(
         `
           UPDATE ${quoteIdentifier(TABLE_NAME)}

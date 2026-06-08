@@ -123,6 +123,7 @@ type FieldConfig = {
   pattern?: string;
   maxLength?: number;
   optionGroup?: keyof typeof LOVS | "specialization" | "department" | "country" | "state" | "city";
+  options?: readonly string[];
   fullWidth?: boolean;
 };
 

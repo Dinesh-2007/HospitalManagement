@@ -38,9 +38,7 @@ export default function ManageUsersPage() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    const loadUsers = async () => {
+  async function loadUsers(active = true) {
       setIsLoading(true);
       try {
         const response = await fetch(`/api/${encodeURIComponent(hname)}/manage-users`, {
@@ -60,11 +58,12 @@ export default function ManageUsersPage() {
       } finally {
         if (active) setIsLoading(false);
       }
-    };
+  }
 
+  useEffect(() => {
     void loadUsers();
     return () => {
-      active = false;
+      // no-op
     };
   }, [hname]);
 
