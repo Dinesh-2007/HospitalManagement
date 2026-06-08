@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { BlankPage } from "../../../components/blank-page";
 import { CalenderIcon, CheckCircleIcon } from "../../../components/icons";
@@ -26,8 +26,6 @@ type FormState = {
   remarks: string;
   status: string;
 };
-
-const todayKey = new Date().toISOString().slice(0, 10);
 
 function emptyForm(): FormState {
   return {
@@ -65,7 +63,7 @@ function isCompleted(row: VitalsRow) {
 export default function PatientVitalsPage() {
   const params = useParams();
   const hname = params?.Hname as string;
-  const [date, setDate] = useState(todayKey);
+  const [date, setDate] = useState("");
   const [doctors, setDoctors] = useState<DoctorRow[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
@@ -75,26 +73,43 @@ export default function PatientVitalsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
+
+  const dateLabel = useMemo(() => {
+    if (!date) return "All dates";
+    const [year, month, day] = date.split("-");
+    return `${day}-${month}-${year}`;
+  }, [date]);
+
+  const buildVitalsUrl = useCallback((selectedDate: string, selectedDoctorName: string) => {
+    const url = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
+    if (selectedDate) url.searchParams.set("date", selectedDate);
+    if (selectedDoctorName) url.searchParams.set("doctor", selectedDoctorName);
+    return url.toString();
+  }, [hname]);
 
   useEffect(() => {
     async function loadDoctors() {
       if (!hname) return;
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/vitals?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+      const response = await fetch(buildVitalsUrl(date, ""), { cache: "no-store" });
       const data = (await response.json()) as { rows?: DoctorRow[]; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Failed to load doctors.");
       const nextDoctors = data.rows ?? [];
       setDoctors(nextDoctors);
-      if (!selectedDoctor && nextDoctors.length > 0) setSelectedDoctor(String(nextDoctors[0].doctor ?? ""));
+      const nextSelectedDoctor = String(nextDoctors[0]?.doctor ?? "");
+      if (!nextDoctors.some((doctor) => String(doctor.doctor ?? "") === selectedDoctor)) {
+        setSelectedDoctor(nextSelectedDoctor);
+      }
     }
     void loadDoctors().catch((err) => setError(err instanceof Error ? err.message : "Failed to load doctors."));
-  }, [date, hname, selectedDoctor]);
+  }, [buildVitalsUrl, date, hname, selectedDoctor]);
 
   useEffect(() => {
     async function loadPatients() {
       if (!hname || !selectedDoctor) return;
       setLoading(true);
       try {
-        const response = await fetch(`/api/${encodeURIComponent(hname)}/vitals?date=${encodeURIComponent(date)}&doctor=${encodeURIComponent(selectedDoctor)}`, { cache: "no-store" });
+        const response = await fetch(buildVitalsUrl(date, selectedDoctor), { cache: "no-store" });
         const data = (await response.json()) as { rows?: VitalsRow[]; error?: string };
         if (!response.ok) throw new Error(data.error ?? "Failed to load patients.");
         setRows(data.rows ?? []);
@@ -103,7 +118,7 @@ export default function PatientVitalsPage() {
       }
     }
     void loadPatients().catch((err) => setError(err instanceof Error ? err.message : "Failed to load patients."));
-  }, [date, hname, selectedDoctor]);
+  }, [buildVitalsUrl, date, hname, selectedDoctor]);
 
   const selectedSummary = useMemo(() => {
     if (!selectedRow) return null;
@@ -132,7 +147,7 @@ export default function PatientVitalsPage() {
       setMessage("Vitals saved.");
       setSelectedRow(null);
       setForm(emptyForm());
-      const refreshed = await fetch(`/api/${encodeURIComponent(hname)}/vitals?date=${encodeURIComponent(date)}&doctor=${encodeURIComponent(selectedDoctor)}`, { cache: "no-store" });
+      const refreshed = await fetch(buildVitalsUrl(date, selectedDoctor), { cache: "no-store" });
       const refreshedData = (await refreshed.json()) as { rows?: VitalsRow[] };
       setRows(refreshedData.rows ?? []);
     } catch (err) {
@@ -151,10 +166,30 @@ export default function PatientVitalsPage() {
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Today&apos;s doctors, patients, and vitals entry.</p>
           </div>
           <div className="flex items-center gap-3">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 rounded-lg border border-gray-300 px-3 text-sm" />
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400">
+            <button
+              type="button"
+              onClick={() => dateInputRef.current?.showPicker?.()}
+              className="flex h-11 min-w-[160px] items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-800"
+            >
+              <span>{dateLabel}</span>
+              <span className="text-xs text-gray-400">{date ? "Change" : "Choose"}</span>
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="sr-only"
+              aria-label="Select appointment date"
+            />
+            <button
+              type="button"
+              onClick={() => dateInputRef.current?.showPicker?.()}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400"
+              aria-label="Open date picker"
+            >
               <CalenderIcon className="h-5 w-5" />
-            </span>
+            </button>
           </div>
         </div>
         <div className="grid gap-6 p-4 sm:p-6 xl:grid-cols-[300px_minmax(0,1fr)]">
