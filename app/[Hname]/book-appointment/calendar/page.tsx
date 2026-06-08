@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { BlankPage } from "../../../../components/blank-page";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
+import PatientProfilePage from "../../../../components/profile/page";
 
 type RawRow = Record<string, unknown>;
 type ScheduleRow = {
@@ -462,6 +463,10 @@ export default function AppointmentCalendarPage() {
     document.getElementById("booking-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  const [show, setShow] = useState(false);
+  if(show){
+    return <div className="flex justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
+  }
   return (
     <BlankPage title="Appointment Calendar">
       <div className="grid gap-6 xl:grid-cols-1">
@@ -474,7 +479,7 @@ export default function AppointmentCalendarPage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => router.push(`/${encodeURIComponent(hname)}/book-appointment/profile?patientId=${encodeURIComponent(patientId)}`)}
+                onClick={() => setShow(true)}
                 className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50"
                 aria-label="Open user profile"
               >

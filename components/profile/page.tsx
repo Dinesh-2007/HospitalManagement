@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { BlankPage } from "../../../../components/blank-page";
-import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
+import { tableNameFromCardTitle } from "../../lib/master-form-table";
 
 type RawRow = Record<string, unknown>;
 type PatientRow = { id?: number; patient_name?: string; mobile?: string | null };
@@ -140,12 +139,12 @@ function buildHistory(appointments: AppointmentRow[]) {
   return items.sort((left, right) => `${right.date} ${right.time ?? ""}`.localeCompare(`${left.date} ${left.time ?? ""}`));
 }
 
-export default function PatientProfilePage() {
+export default function PatientProfilePage(props: { searchParams?: { patientId?: string }; onClose?: () => void }) {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const hname = params?.Hname as string;
-  const patientId = searchParams.get("patientId") ?? "";
+  const patientId = props.searchParams?.patientId;
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
@@ -166,7 +165,6 @@ export default function PatientProfilePage() {
   const history = useMemo(() => buildHistory(appointments), [appointments]);
 
   return (
-    <BlankPage title="User Profile">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
           <div>
@@ -174,7 +172,7 @@ export default function PatientProfilePage() {
             <h1 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{patient?.patient_name ?? "Patient"}</h1>
             <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
           </div>
-          <button type="button" onClick={() => router.back()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+          <button type="button" onClick={() => props.onClose?.()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
             Back
           </button>
         </div>
@@ -208,6 +206,5 @@ export default function PatientProfilePage() {
           </section>
         </div>
       </div>
-    </BlankPage>
   );
 }
