@@ -43,15 +43,9 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
       active_from TIMESTAMP,
       inactive_from TIMESTAMP,
       inactive_reason TEXT,
-      type TEXT NOT NULL DEFAULT 'Appointment',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
-  `);
-
-  await pool.query(`
-    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
-    ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'Appointment'
   `);
 }
 
@@ -127,11 +121,10 @@ export async function POST(
           relationship_ship_linked_patient,
           active_from,
           inactive_from,
-          inactive_reason,
-          type
+          inactive_reason
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
         )
         RETURNING *
       `,
@@ -161,7 +154,6 @@ export async function POST(
         normalizeText(patient.activeFrom) || null,
         normalizeText(patient.inactiveFrom) || null,
         normalizeText(patient.inactiveReason),
-        "Appointment",
       ],
     );
 
