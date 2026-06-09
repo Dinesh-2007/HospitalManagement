@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
-import { CalenderIcon, CheckCircleIcon } from "../../../components/icons";
+import { CheckCircleIcon } from "../../../components/icons";
 
 type DoctorRow = { doctor?: string; first_time?: string | null; total?: number };
-type VitalsRow = Record<string, unknown>;
+type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null };
 
 type FormState = {
   patientId: string;
@@ -54,6 +54,18 @@ function text(row: VitalsRow, keys: string[]) {
     if (value !== null && value !== undefined && String(value).trim()) return String(value).trim();
   }
   return "";
+}
+
+function formatDisplayTime(value: string) {
+  const [hoursText, minutesText = "00"] = value.split(":");
+  const date = new Date();
+  date.setHours(Number(hoursText), Number(minutesText), 0, 0);
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
 function isCompleted(row: VitalsRow) {
@@ -126,6 +138,7 @@ export default function PatientVitalsPage() {
       name: text(selectedRow, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
       type: text(selectedRow, ["patient_type"]) || (selectedRow.appointment_id ? "Appointment" : "Walk in"),
       time: text(selectedRow, ["appointment_time"]),
+      endTime: text(selectedRow, ["appointment_end_time"]),
       slot: text(selectedRow, ["time_slot_minutes"]),
       completed: isCompleted(selectedRow),
     };
@@ -237,7 +250,11 @@ export default function PatientVitalsPage() {
                             <div className="text-xs text-gray-500">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</div>
                           </td>
                           <td className="px-4 py-3 text-gray-600">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</td>
-                          <td className="px-4 py-3 text-gray-600">{text(row, ["appointment_time"]) || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {text(row, ["appointment_time"])
+                              ? formatTimeRange(text(row, ["appointment_time"]), text(row, ["appointment_end_time"]) || null)
+                              : "-"}
+                          </td>
                           <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
                           <td className="px-4 py-3">
                             {done ? (

@@ -22,6 +22,7 @@ type AppointmentRow = {
   id?: number;
   appointment_date?: string;
   appointment_time?: string | null;
+  appointment_end_time?: string | null;
   patient_id?: string | null;
   patient_name?: string | null;
   patient_phone?: string | null;
@@ -50,6 +51,7 @@ type HistoryItem = {
   status: string;
   date: string;
   time?: string;
+  endTime?: string;
   note: string;
 };
 
@@ -85,6 +87,7 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     id: row.id ? Number(row.id) : undefined,
     appointment_date: readText(row, ["appointment_date", "appointmentDate"]),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
+    appointment_end_time: readText(row, ["appointment_end_time", "appointmentEndTime"]) || null,
     patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || null,
     patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
@@ -115,6 +118,11 @@ function formatDisplayTime(value: string) {
   const date = new Date();
   date.setHours(Number(hoursText), Number(minutesText), 0, 0);
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
 function formatDisplayDate(value: string) {
@@ -171,6 +179,7 @@ function buildHistory(appointments: AppointmentRow[]) {
       status: "Scheduled",
       date: entry.appointment_date ?? "",
       time: entry.appointment_time ?? undefined,
+      endTime: entry.appointment_end_time ?? undefined,
       note: `${entry.doctor ? `Booked with ${entry.doctor}` : "Appointment booked"}${entry.department ? ` - ${entry.department}` : ""}`,
     });
 
@@ -192,6 +201,7 @@ function buildHistory(appointments: AppointmentRow[]) {
         status: "Cancelled",
         date: entry.appointment_date ?? "",
         time: entry.appointment_time ?? undefined,
+        endTime: entry.appointment_end_time ?? undefined,
         note: buildCancellationNote(entry),
       });
     }
@@ -282,7 +292,7 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
                     </p>
                     <p className="mt-1 text-sm text-red-600">
                       {entry.appointment_date ? formatDisplayDate(entry.appointment_date) : "-"}
-                      {entry.appointment_time ? ` at ${formatDisplayTime(entry.appointment_time)}` : ""}
+                      {entry.appointment_time ? ` at ${formatTimeRange(entry.appointment_time, entry.appointment_end_time)}` : ""}
                     </p>
                     <p className="mt-1 text-sm text-red-600">{buildCancellationNote(entry)}</p>
                   </div>
@@ -298,7 +308,7 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
                 <div key={item.key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-gray-800 dark:text-white/90">
-                      {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatDisplayTime(item.time)}` : ""}
+                      {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatTimeRange(item.time, item.endTime)}` : ""}
                     </p>
                     <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium uppercase text-gray-600">{item.status}</span>
                   </div>

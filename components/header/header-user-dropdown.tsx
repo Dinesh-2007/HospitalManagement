@@ -137,10 +137,10 @@ const FIELD_CONFIG: FieldConfig[] = [
   { key: "bloodGroup", label: "Blood Group", optionGroup: "bloodGroup" },
   { key: "maritalStatus", label: "Marital Status", optionGroup: "maritalStatus" },
   { key: "profilePhoto", label: "Profile Photo", inputType: "file" },
-  { key: "mobileNumber", label: "Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
-  { key: "alternateMobileNumber", label: "Alternate Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
+  { key: "mobileNumber", label: "Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 10 },
+  { key: "alternateMobileNumber", label: "Alternate Mobile Number", inputType: "text", pattern: "[0-9]*", maxLength: 10 },
   { key: "emailId", label: "Email ID", inputType: "email", maxLength: 255 },
-  { key: "emergencyContactNumber", label: "Emergency Contact Number", inputType: "text", pattern: "[0-9]*", maxLength: 15 },
+  { key: "emergencyContactNumber", label: "Emergency Contact Number", inputType: "text", pattern: "[0-9]*", maxLength: 10 },
   { key: "address", label: "Address", inputType: "text", fullWidth: true, maxLength: 255 },
   { key: "country", label: "Country", optionGroup: "country" },
   { key: "state", label: "State", optionGroup: "state" },
@@ -189,6 +189,7 @@ export function HeaderUserDropdown() {
   const [profileError, setProfileError] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
   const [profileForm, setProfileForm] = useState<ProfileFormState>(INITIAL_PROFILE_FORM);
+  const isDoctor = role?.toLowerCase() === "doctor";
 
   useEffect(() => {
     if (hname !== "HSMS") {
@@ -197,7 +198,70 @@ export function HeaderUserDropdown() {
     }
   }, [hname]);
 
-  const isDoctor = role?.toLowerCase() === "doctor";
+  useEffect(() => {
+    async function loadDoctorProfile() {
+      if (!isDoctor || !user || !isProfileModalOpen) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/${encodeURIComponent(hname)}/doctor-profile?username=${encodeURIComponent(user)}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json().catch(() => ({}))) as { row?: Record<string, unknown> | null; error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Failed to load profile");
+        }
+
+        const row = data.row ?? null;
+        if (!row) {
+          setProfileForm(INITIAL_PROFILE_FORM);
+          return;
+        }
+
+        setProfileForm({
+          doctorId: String(row.doctor_id ?? ""),
+          doctorCode: String(row.doctor_code ?? ""),
+          firstName: String(row.first_name ?? ""),
+          lastName: String(row.last_name ?? ""),
+          gender: String(row.gender ?? ""),
+          dateOfBirth: row.date_of_birth ? String(row.date_of_birth).slice(0, 10) : "",
+          bloodGroup: String(row.blood_group ?? ""),
+          maritalStatus: String(row.marital_status ?? ""),
+          profilePhoto: String(row.profile_photo ?? ""),
+          mobileNumber: String(row.mobile_number ?? ""),
+          alternateMobileNumber: String(row.alternate_mobile_number ?? ""),
+          emailId: String(row.email_id ?? ""),
+          emergencyContactNumber: String(row.emergency_contact_number ?? ""),
+          address: String(row.address ?? ""),
+          country: String(row.country ?? ""),
+          state: String(row.state ?? ""),
+          city: String(row.city ?? ""),
+          pincode: String(row.pincode ?? ""),
+          registrationNumber: String(row.registration_number ?? ""),
+          specialization: String(row.specialization ?? ""),
+          department: String(row.department ?? ""),
+          qualification: String(row.qualification ?? ""),
+          experienceYears: String(row.experience_years ?? ""),
+          designation: String(row.designation ?? ""),
+          licenseNumber: String(row.license_number ?? ""),
+          employeeType: String(row.employee_type ?? ""),
+          shift: String(row.shift ?? ""),
+          bankName: String(row.bank_name ?? ""),
+          accountNumber: String(row.account_number ?? ""),
+          ifscCode: String(row.ifsc_code ?? ""),
+          panNumber: String(row.pan_number ?? ""),
+          aadhaarNumber: String(row.aadhaar_number ?? ""),
+        });
+      } catch (error) {
+        setProfileError(error instanceof Error ? error.message : "Failed to load profile");
+      }
+    }
+
+    void loadDoctorProfile();
+  }, [hname, isDoctor, isProfileModalOpen, user]);
 
   const doctorFields = useMemo(
     () =>
@@ -451,6 +515,16 @@ export function HeaderUserDropdown() {
                         onChange={(event) => updateField(field.key, event.target.value)}
                         pattern={field.pattern}
                         maxLength={field.maxLength}
+                        inputMode={
+                          field.key === "mobileNumber" ||
+                          field.key === "alternateMobileNumber" ||
+                          field.key === "emergencyContactNumber" ||
+                          field.key === "pincode" ||
+                          field.key === "accountNumber" ||
+                          field.key === "aadhaarNumber"
+                            ? "tel"
+                            : undefined
+                        }
                         required={["doctorId", "doctorCode", "firstName", "lastName", "mobileNumber", "emailId", "address"].includes(field.key)}
                       />
                     )}

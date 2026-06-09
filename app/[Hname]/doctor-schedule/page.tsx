@@ -22,6 +22,7 @@ type AppointmentRow = {
   id?: number;
   appointment_date?: string;
   appointment_time?: string | null;
+  appointment_end_time?: string | null;
   patient_id?: string | null;
   patient_name?: string | null;
   patient_phone?: string | null;
@@ -81,6 +82,7 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     id: row.id ? Number(row.id) : undefined,
     appointment_date: normalizeDateKey(readText(row, ["appointment_date", "appointmentDate"])),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
+    appointment_end_time: readText(row, ["appointment_end_time", "appointmentEndTime"]) || null,
     patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || null,
     patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
@@ -142,6 +144,11 @@ function formatDisplayTime(value: string) {
   const date = new Date();
   date.setHours(Number(hoursText), Number(minutesText), 0, 0);
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
 function normalizeDateKey(value: string | null | undefined) {
@@ -575,7 +582,7 @@ export default function DoctorSchedulePage() {
                               {appointment.patient_name ?? "Patient"}
                             </button>
                             <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
-                              {appointment.appointment_time ? formatDisplayTime(appointment.appointment_time) : "-"}
+                              {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
                             </span>
                           </div>
                           <p className="mt-2 text-sm text-gray-500">Department: {appointment.department ?? "-"}</p>
@@ -619,7 +626,7 @@ export default function DoctorSchedulePage() {
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
             <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
               Cancel the appointment for {cancelTarget.patient_name ?? "this patient"}
-              {cancelTarget.appointment_time ? ` at ${formatDisplayTime(cancelTarget.appointment_time)}` : ""}?
+              {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
             </p>
             <div className="mt-5 flex justify-end gap-3">
               <button

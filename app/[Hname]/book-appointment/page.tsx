@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { BlankPage } from "../../../components/blank-page";
 import { CalenderIcon } from "../../../components/icons";
@@ -18,6 +19,47 @@ type ScheduleSummary = {
   availableTimeFrom: string;
   availableTimeTo: string;
   timeSlotMinutes: string;
+};
+type DoctorOption = {
+  doctorId: string;
+  doctorCode: string;
+  name: string;
+  department: string;
+  specialization: string;
+  clinic: string;
+  phone: string;
+  email: string;
+  roomNo: string;
+  registrationNumber: string;
+};
+type DoctorProfile = {
+  doctorId: string;
+  doctorCode: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  dateOfBirth: string;
+  bloodGroup: string;
+  maritalStatus: string;
+  profilePhoto: string;
+  mobileNumber: string;
+  alternateMobileNumber: string;
+  emailId: string;
+  emergencyContactNumber: string;
+  address: string;
+  country: string;
+  state: string;
+  city: string;
+  pincode: string;
+  registrationNumber: string;
+  specialization: string;
+  department: string;
+  qualification: string;
+  experienceYears: string;
+  designation: string;
+  licenseNumber: string;
+  employeeType: string;
+  shift: string;
 };
 
 type PatientSignupState = {
@@ -117,9 +159,11 @@ function normalizeDepartment(row: MasterRow) {
   return readText(row, ["department_type", "departmentType", "department_name", "name", "code"]);
 }
 
-function normalizeDoctor(row: MasterRow) {
+function normalizeDoctor(row: MasterRow): DoctorOption {
   const name = readText(row, ["doctor_consultant_name", "doctorConsultantName", "consultant_doctor_name", "name"]);
   return {
+    doctorId: readText(row, ["doctor_id", "doctorId"]),
+    doctorCode: readText(row, ["doctor_code", "doctorCode", "code"]),
     name,
     department: readText(row, ["clinic", "department", "department_type", "departmentType"]),
     specialization: readText(row, ["specialization"]),
@@ -154,6 +198,39 @@ function normalizeSchedule(row: MasterRow): ScheduleSummary {
   };
 }
 
+function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
+  if (!row) return null;
+  return {
+    doctorId: readText(row, ["doctor_id", "doctorId"]),
+    doctorCode: readText(row, ["doctor_code", "doctorCode"]),
+    firstName: readText(row, ["first_name", "firstName"]),
+    lastName: readText(row, ["last_name", "lastName"]),
+    gender: readText(row, ["gender"]),
+    dateOfBirth: readText(row, ["date_of_birth", "dateOfBirth"]),
+    bloodGroup: readText(row, ["blood_group", "bloodGroup"]),
+    maritalStatus: readText(row, ["marital_status", "maritalStatus"]),
+    profilePhoto: readText(row, ["profile_photo", "profilePhoto"]),
+    mobileNumber: readText(row, ["mobile_number", "mobileNumber"]),
+    alternateMobileNumber: readText(row, ["alternate_mobile_number", "alternateMobileNumber"]),
+    emailId: readText(row, ["email_id", "emailId"]),
+    emergencyContactNumber: readText(row, ["emergency_contact_number", "emergencyContactNumber"]),
+    address: readText(row, ["address"]),
+    country: readText(row, ["country"]),
+    state: readText(row, ["state"]),
+    city: readText(row, ["city"]),
+    pincode: readText(row, ["pincode"]),
+    registrationNumber: readText(row, ["registration_number", "registrationNumber"]),
+    specialization: readText(row, ["specialization"]),
+    department: readText(row, ["department"]),
+    qualification: readText(row, ["qualification"]),
+    experienceYears: readText(row, ["experience_years", "experienceYears"]),
+    designation: readText(row, ["designation"]),
+    licenseNumber: readText(row, ["license_number", "licenseNumber"]),
+    employeeType: readText(row, ["employee_type", "employeeType"]),
+    shift: readText(row, ["shift"]),
+  };
+}
+
 export default function BookAppointmentPage() {
   const params = useParams();
   const router = useRouter();
@@ -164,6 +241,9 @@ export default function BookAppointmentPage() {
   const [scheduleRows, setScheduleRows] = useState<ScheduleSummary[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
+  const [selectedDoctorOption, setSelectedDoctorOption] = useState<DoctorOption | null>(null);
+  const [doctorDetails, setDoctorDetails] = useState<DoctorProfile | null>(null);
+  const [isDoctorPopupOpen, setIsDoctorPopupOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authenticatedPatient, setAuthenticatedPatient] = useState<PatientAuthState | null>(() => {
@@ -252,6 +332,29 @@ export default function BookAppointmentPage() {
       (row) => row.doctorName.trim().toLowerCase() === selectedDoctor.trim().toLowerCase(),
     );
   }, [scheduleRows, selectedDoctor]);
+
+  async function openDoctorPopup(doctor: DoctorOption) {
+    setSelectedDoctor(doctor.name);
+    setSelectedDoctorOption(doctor);
+    setIsDoctorPopupOpen(true);
+    setErrorMessage(null);
+    try {
+      const query = new URLSearchParams();
+      if (doctor.doctorId) query.set("doctorId", doctor.doctorId);
+      if (doctor.doctorCode) query.set("doctorCode", doctor.doctorCode);
+      if (doctor.name) query.set("doctorName", doctor.name);
+      const response = await fetch(
+        `/api/${encodeURIComponent(hname)}/doctor-profile?${query.toString()}`,
+        { cache: "no-store" },
+      );
+      const data = (await response.json().catch(() => ({}))) as { row?: MasterRow | null; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to load doctor profile.");
+      setDoctorDetails(normalizeDoctorProfile(data.row ?? null));
+    } catch (error) {
+      setDoctorDetails(null);
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load doctor profile.");
+    }
+  }
 
   async function handleSignin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -429,7 +532,7 @@ export default function BookAppointmentPage() {
                 {doctorOptions.map((doctor) => {
                   const isActive = doctor.name === selectedDoctor;
                   return (
-                    <button key={doctor.name} type="button" onClick={() => setSelectedDoctor(doctor.name)} className={`rounded-2xl border px-5 py-5 text-left transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
+                    <button key={doctor.name} type="button" onClick={() => void openDoctorPopup(doctor)} className={`rounded-2xl border px-5 py-5 text-left transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
                       <p className="text-base font-semibold text-gray-800">{doctor.name}</p>
                       <p className="mt-2 text-sm text-gray-500">{doctor.specialization || doctor.department || "Doctor"}</p>
                     </button>
@@ -438,28 +541,81 @@ export default function BookAppointmentPage() {
               </div>
             </div>
           ) : null}
-          {selectedDoctor ? (
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-800">{selectedDoctor}</h4>
-                    <p className="mt-1 text-sm text-gray-500">{selectedDepartment}</p>
-                    {selectedDoctorSchedule.length > 0 ? (
-                      <div className="mt-3 space-y-1 text-sm text-gray-600">
-                        {selectedDoctorSchedule.map((schedule, index) => (
-                          <p key={`${schedule.doctorName}-${index}`}>
-                            {schedule.daysAvailable.join(", ") || "All Days"} | {schedule.availableTimeFrom} - {schedule.availableTimeTo} | {schedule.timeSlotMinutes || "10"} min
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <button type="button" onClick={handleContinue} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">Choose Doctor</button>
-                </div>
-            </div>
-          ) : null}
         </div>
       </section>
+      {isDoctorPopupOpen ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <button
+              type="button"
+              onClick={() => setIsDoctorPopupOpen(false)}
+              className="absolute right-4 top-4 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+            >
+              Close
+            </button>
+            <div className="grid gap-6 md:grid-cols-[180px_minmax(0,1fr)]">
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 p-4 dark:border-gray-800">
+                <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800">
+                  {doctorDetails?.profilePhoto ? (
+                    <Image src={doctorDetails.profilePhoto} alt={selectedDoctor} fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="text-sm text-gray-400">No photo</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleContinue}
+                  className="mt-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white"
+                >
+                  Book Appointment
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                    {doctorDetails?.firstName || doctorDetails?.lastName
+                      ? `${doctorDetails.firstName} ${doctorDetails.lastName}`.trim()
+                      : selectedDoctorOption?.name || selectedDoctor}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {doctorDetails?.designation || doctorDetails?.qualification || doctorDetails?.specialization || "Doctor"}
+                  </p>
+                  {selectedDoctorSchedule.length > 0 ? (
+                    <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-800/40">
+                      {selectedDoctorSchedule.map((schedule, index) => (
+                        <p key={`${schedule.doctorName}-${index}`}>
+                          {schedule.daysAvailable.join(", ") || "All Days"} | {schedule.availableTimeFrom} - {schedule.availableTimeTo} | {schedule.timeSlotMinutes || "10"} min
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ["Gender", doctorDetails?.gender],
+                    ["Phone", doctorDetails?.mobileNumber],
+                    ["Alternate Phone", doctorDetails?.alternateMobileNumber],
+                    ["Email", doctorDetails?.emailId],
+                    ["Qualification", doctorDetails?.qualification],
+                    ["Experience", doctorDetails?.experienceYears ? `${doctorDetails.experienceYears} years` : ""],
+                    ["Specialization", doctorDetails?.specialization],
+                    ["Department", doctorDetails?.department],
+                    ["Registration No.", doctorDetails?.registrationNumber],
+                    ["License No.", doctorDetails?.licenseNumber],
+                    ["Employee Type", doctorDetails?.employeeType],
+                    ["Shift", doctorDetails?.shift],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+                      <div className="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{value || "-"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </BlankPage>
   );
 }

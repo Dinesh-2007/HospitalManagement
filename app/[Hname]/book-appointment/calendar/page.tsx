@@ -21,6 +21,7 @@ type AppointmentRow = {
   id?: number;
   appointment_date?: string;
   appointment_time?: string | null;
+  appointment_end_time?: string | null;
   patient_id?: string | null;
   patient_name?: string | null;
   patient_phone?: string | null;
@@ -87,6 +88,7 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     id: row.id ? Number(row.id) : undefined,
     appointment_date: readText(row, ["appointment_date", "appointmentDate"]),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
+    appointment_end_time: readText(row, ["appointment_end_time", "appointmentEndTime"]) || null,
     patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || null,
     patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
@@ -143,6 +145,11 @@ function formatDisplayTime(value: string) {
   const date = new Date();
   date.setHours(Number(hoursText), Number(minutesText), 0, 0);
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
 function addMinutes(value: string, minutesToAdd: number) {
@@ -206,12 +213,15 @@ export default function AppointmentCalendarPage() {
   const department = searchParams.get("department") ?? "";
   const doctor = searchParams.get("doctor") ?? "";
   const patientId = searchParams.get("patientId") ?? "";
-  const [patient, setPatient] = useState<PatientRow | null>(null);
-  const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
+  const todayWeekStart = useMemo(() => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
     date.setDate(date.getDate() - date.getDay());
     return date;
+  }, []);
+  const [patient, setPatient] = useState<PatientRow | null>(null);
+  const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
+    return new Date(todayWeekStart);
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedStep, setSelectedStep] = useState<10 | 20 | null>(null);
@@ -269,6 +279,24 @@ export default function AppointmentCalendarPage() {
   }, [department, doctor, hname, selectedDate]);
 
   const weekDaysList = useMemo(() => buildWeek(selectedWeekStart), [selectedWeekStart]);
+  const todayDate = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+  const isDateAvailable = useMemo(() => {
+    return (date: Date) => {
+      if (date <= todayDate) return false;
+      const dayName = weekDayNames[date.getDay()];
+      return scheduleRows.some((row) => {
+        const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
+        const to = row.appointmentToDate ? parseKey(row.appointmentToDate) : null;
+        if (from && date < from) return false;
+        if (to && date > to) return false;
+        return row.daysAvailable.length === 0 || row.daysAvailable.includes(dayName);
+      });
+    };
+  }, [scheduleRows, todayDate]);
   const selectedDaySchedules = useMemo(() => {
     if (!selectedDate) return [];
     const dayName = weekDayNames[selectedDate.getDay()];
@@ -286,7 +314,7 @@ export default function AppointmentCalendarPage() {
     today.setHours(0, 0, 0, 0);
 
     return weekDaysList.find((date) => {
-      if (date < today) return false;
+      if (date <= today) return false;
       const dayName = weekDayNames[date.getDay()];
       return scheduleRows.some((row) => {
         const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
@@ -330,6 +358,34 @@ export default function AppointmentCalendarPage() {
     setPatientAppointments(rows.map(normalizeAppointmentRow));
   }
 
+  function handlePreviousWeek() {
+    setSelectedWeekStart(
+      new Date(
+        selectedWeekStart.getFullYear(),
+        selectedWeekStart.getMonth(),
+        selectedWeekStart.getDate() - 7,
+      ),
+    );
+  }
+
+  function handlePreviousWeek() {
+    setSelectedWeekStart((current) => {
+      const previousWeek = new Date(current);
+      previousWeek.setDate(previousWeek.getDate() - 7);
+      return previousWeek < todayWeekStart ? todayWeekStart : previousWeek;
+    });
+  }
+
+  function handleNextWeek() {
+    setSelectedWeekStart(
+      new Date(
+        selectedWeekStart.getFullYear(),
+        selectedWeekStart.getMonth(),
+        selectedWeekStart.getDate() + 7,
+      ),
+    );
+  }
+
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
     const hours = new Map<string, string>();
@@ -348,41 +404,48 @@ export default function AppointmentCalendarPage() {
         appointmentRows
           .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
           .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
-          .map((row) => row.appointment_time ?? "")
+          .map((row) => normalizeTime(row.appointment_time ?? ""))
           .filter(Boolean),
-      );
-    }, [appointmentRows, effectiveSelectedDate, isRescheduling, currentAppointmentId]);
+    );
+  }, [appointmentRows, effectiveSelectedDate, isRescheduling, currentAppointmentId]);
+
+  const bookedHours = useMemo(() => {
+    if (!effectiveSelectedDate) return new Set<string>();
+    return new Set(
+      availableHours
+        .filter((hour) => {
+          const [start, end] = hour.value.split("|");
+          const subSlots = buildSubSlots(start, end, activeStep);
+          return subSlots.some((slot) => bookedSlots.has(slot.value));
+        })
+        .map((hour) => hour.value),
+    );
+  }, [activeStep, availableHours, bookedSlots, effectiveSelectedDate]);
+
+  const currentPatientBookedSlots = useMemo(() => {
+    if (!patientId || !effectiveSelectedDate) return new Set<string>();
+    return new Set(
+      appointmentRows
+        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+        .filter((row) => String(row.patient_id ?? "") === String(patientId))
+        .map((row) => normalizeTime(row.appointment_time ?? ""))
+        .filter(Boolean),
+    );
+  }, [appointmentRows, effectiveSelectedDate, patientId]);
 
   // 2. Generate all sub-slots for the hour without hiding the booked ones
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
     const [start, end] = selectedHour.value.split("|");
-    return buildSubSlots(start, end, activeStep);
-  }, [selectedHour, effectiveSelectedDate, activeStep]);
-  const bookedSlotLabels = useMemo(() => {
-    if (!effectiveSelectedDate) return new Set<string>();
-    return new Set(
-      appointmentRows
-        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
-        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
-        .flatMap((row) => {
-          const bookedTime = normalizeTime(row.appointment_time ?? "");
-          if (!bookedTime) return [];
-          const bookedLabels: string[] = [];
-          for (const schedule of selectedDaySchedules) {
-            const hourBlocks = buildHourBlocks(schedule.availableTimeFrom, schedule.availableTimeTo);
-            for (const block of hourBlocks) {
-              const [start, end] = block.value.split("|");
-              if (bookedTime >= start && bookedTime < end) {
-                bookedLabels.push(block.value);
-              }
-            }
-          }
-          return bookedLabels;
-        }),
+    const hourSubSlots = buildSubSlots(start, end, activeStep);
+    const isHourBookedByOthers = hourSubSlots.some(
+      (slot) => bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value),
     );
-  }, [appointmentRows, currentAppointmentId, effectiveSelectedDate, isRescheduling, selectedDaySchedules]);
-
+    if (isHourBookedByOthers) {
+      return hourSubSlots.filter((slot) => currentPatientBookedSlots.has(slot.value));
+    }
+    return hourSubSlots;
+  }, [activeStep, bookedSlots, currentPatientBookedSlots, effectiveSelectedDate, selectedHour]);
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
     setErrorMessage("");
@@ -500,30 +563,48 @@ export default function AppointmentCalendarPage() {
           </div>
           <div className="space-y-5 p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
-            <button type="button" disabled className="rounded-lg border px-3 py-2 text-sm opacity-40">Prev</button>
+            <button
+              type="button"
+              onClick={handlePreviousWeek}
+              disabled={selectedWeekStart <= todayWeekStart}
+              className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Prev
+            </button>
             <div className="text-sm text-gray-600">{formatDay(weekDaysList[0])} - {formatDay(weekDaysList[6])}</div>
-            <button type="button" onClick={() => setSelectedWeekStart(new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + 7))} className="rounded-lg border px-3 py-2 text-sm">Next</button>
+            <button type="button" onClick={handleNextWeek} className="rounded-lg border px-3 py-2 text-sm">
+              Next
+            </button>
           </div>
 
           <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
             {weekDays.map((day, index) => {
               const current = weekDaysList[index];
-              const isPast = current < new Date(new Date().setHours(0, 0, 0, 0));
+              const isPast = current <= todayDate;
+              const isAvailable = isDateAvailable(current);
+              const isSelected = effectiveSelectedDate?.toDateString() === current.toDateString();
+              const dayColorClass = isAvailable ? "text-emerald-700" : "text-red-600";
               return (
                 <button
                   key={day}
                   type="button"
                   onClick={() => {
-                    if (!isPast) {
+                    if (!isPast && isAvailable) {
                       setSelectedDate(current);
                       setSelectedHour(null);
                       setSelectedSlot("");
                     }
                   }}
-                  className={`min-h-24 border-r border-b p-3 text-left last:border-r-0 ${effectiveSelectedDate?.toDateString() === current.toDateString() ? "bg-brand-50" : "bg-white"} ${isPast ? "bg-red-50 text-red-400" : ""}`}
+                  className={`min-h-24 border-r border-b p-3 text-left last:border-r-0 transition ${
+                    isSelected
+                      ? "bg-emerald-50 ring-1 ring-emerald-200"
+                      : isAvailable
+                        ? "bg-white hover:bg-emerald-50/60"
+                        : "bg-red-50 hover:bg-red-100/60"
+                  } ${isPast ? "opacity-70" : ""}`}
                 >
-                  <div className="text-xs font-semibold uppercase">{day}</div>
-                  <div className="mt-3 text-sm font-medium">{current.getDate()}</div>
+                  <div className={`text-xs font-semibold uppercase ${dayColorClass}`}>{day}</div>
+                  <div className={`mt-3 text-sm font-medium ${dayColorClass}`}>{current.getDate()}</div>
                 </button>
               );
             })}
@@ -547,8 +628,23 @@ export default function AppointmentCalendarPage() {
                     <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                   ) : (
                     availableHours.map((hour) => (
-                      <button key={hour.value} type="button" onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }} className={`rounded-full border px-4 py-2 text-sm ${selectedHour?.value === hour.value ? "bg-brand-500 text-white" : bookedSlotLabels.has(hour.value) ? "cursor-not-allowed bg-gray-100 text-gray-400" : "bg-white text-gray-700"}`} disabled={bookedSlotLabels.has(hour.value)}>
-                        {hour.label}{bookedSlotLabels.has(hour.value) ? " - Slot booked" : ""}
+                      <button
+                        key={hour.value}
+                        type="button"
+                        onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
+                        className={`rounded-full border px-4 py-2 text-sm ${
+                          selectedHour?.value === hour.value
+                            ? bookedHours.has(hour.value)
+                              ? "bg-red-500 text-white"
+                              : "bg-brand-500 text-white"
+                            : bookedHours.has(hour.value)
+                              ? "cursor-not-allowed border-red-300 bg-red-50 text-red-600 line-through decoration-2 decoration-red-500"
+                              : "bg-white text-gray-700"
+                        }`}
+                        disabled={bookedHours.has(hour.value)}
+                      >
+                        {hour.label}
+                        {bookedHours.has(hour.value) ? " - Booked" : ""}
                       </button>
                     ))
                   )}
@@ -563,8 +659,20 @@ export default function AppointmentCalendarPage() {
                       <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
                     ) : (
                       availableSubSlots.map((slot) => (
-                        <button key={slot.value} type="button" disabled={bookedSlots.has(slot.value)} onClick={() => !bookedSlots.has(slot.value) && setSelectedSlot(slot.value)} className={`rounded-full border px-4 py-2 text-sm ${selectedSlot === slot.value ? "bg-brand-500 text-white" : bookedSlots.has(slot.value) ? "cursor-not-allowed bg-gray-100 text-gray-400" : "bg-white text-gray-700"}`}>
-                          {slot.label}{bookedSlots.has(slot.value) ? " - Slot booked" : ""}
+                        <button
+                          key={slot.value}
+                          type="button"
+                          disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
+                          onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.value)}
+                          className={`rounded-full border px-4 py-2 text-sm ${
+                            selectedSlot === slot.value
+                              ? "bg-brand-500 text-white"
+                              : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
+                                ? "cursor-not-allowed border-red-300 bg-red-50 text-red-600 line-through decoration-2 decoration-red-500"
+                                : "bg-white text-gray-700"
+                          }`}
+                        >
+                          {slot.label}
                         </button>
                       ))
                     )}
@@ -573,10 +681,12 @@ export default function AppointmentCalendarPage() {
               ) : null}
 
               <div id="booking-panel" className="rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm text-gray-600">Selected: {selectedSlot ? formatDisplayTime(selectedSlot) : "-"}</div>
+                <div className="text-sm text-gray-600">
+                  Selected: {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "-"}
+                </div>
                 {patientAppointment ? (
                   <div className="mt-2 text-sm text-gray-500">
-                    Current slot: {patientAppointment.appointment_time ? formatDisplayTime(patientAppointment.appointment_time) : "-"} | Reschedules: {patientAppointment.reschedule_count ?? 0}/3
+                    Current slot: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"} | Reschedules: {patientAppointment.reschedule_count ?? 0}/3
                   </div>
                 ) : null}
                 {!patientAppointment ? (

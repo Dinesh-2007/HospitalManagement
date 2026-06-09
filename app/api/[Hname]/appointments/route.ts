@@ -49,6 +49,16 @@ function normalizeTime(value: string) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function addMinutes(value: string, minutesToAdd: number) {
+  const match = String(value ?? "").trim().match(/^(\d{2}):(\d{2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const date = new Date();
+  date.setHours(hours, minutes + minutesToAdd, 0, 0);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function parseDoctorNames(value: string) {
   return Array.from(
     new Set(
@@ -72,6 +82,7 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
       patient_name TEXT NOT NULL,
       patient_phone TEXT,
       appointment_time TIME,
+      appointment_end_time TIME,
       time_slot_minutes INTEGER,
       patient_type TEXT NOT NULL DEFAULT 'scheduled',
       reason TEXT,
@@ -91,6 +102,11 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
   await pool.query(`
     ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
     ADD COLUMN IF NOT EXISTS time_slot_minutes INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS appointment_end_time TIME
   `);
 
   await pool.query(`
@@ -321,6 +337,7 @@ export async function POST(
     const patientPhone = String(body.patientPhone ?? "").trim();
     const appointmentTime = normalizeTime(String(body.appointmentTime ?? ""));
     const timeSlotMinutes = Number(body.timeSlotMinutes ?? 0);
+    const appointmentEndTime = Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? addMinutes(appointmentTime, timeSlotMinutes) : "";
     const reason = String(body.reason ?? "").trim();
 
     if (!appointmentDate || !department || !doctor || !patientName || !appointmentTime) {
@@ -379,11 +396,12 @@ export async function POST(
           patient_id,
           patient_phone,
           appointment_time,
+          appointment_end_time,
           time_slot_minutes,
           patient_type,
           reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
       `,
       [
@@ -395,6 +413,7 @@ export async function POST(
         patientId || null,
         patientPhone || null,
         appointmentTime || null,
+        appointmentEndTime || null,
         Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? timeSlotMinutes : null,
         "scheduled",
         reason || null,
@@ -442,6 +461,7 @@ export async function PUT(
     const patientPhone = String(body.patientPhone ?? "").trim();
     const appointmentTime = normalizeTime(String(body.appointmentTime ?? ""));
     const timeSlotMinutes = Number(body.timeSlotMinutes ?? 0);
+    const appointmentEndTime = Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? addMinutes(appointmentTime, timeSlotMinutes) : "";
     const reason = String(body.reason ?? "").trim();
 
     if (!Number.isInteger(appointmentId) || appointmentId <= 0) {
@@ -538,9 +558,10 @@ export async function PUT(
             patient_id = $6,
             patient_phone = $7,
             appointment_time = $8::time,
-            time_slot_minutes = $9,
+            appointment_end_time = $9::time,
+            time_slot_minutes = $10,
             patient_type = 'scheduled',
-            reason = $10,
+            reason = $11,
             status = 'Rescheduled',
             cancelled_by_role = NULL,
             cancelled_by_name = NULL,
@@ -558,7 +579,7 @@ export async function PUT(
             ),
             reschedule_count = reschedule_count + 1,
             updated_at = NOW()
-        WHERE id = $11
+        WHERE id = $12
         RETURNING *
       `,
       [
@@ -570,6 +591,7 @@ export async function PUT(
         patientId || null,
         patientPhone || null,
         appointmentTime || null,
+        appointmentEndTime || null,
         Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? timeSlotMinutes : null,
         reason || null,
         appointmentId,

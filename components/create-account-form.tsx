@@ -67,6 +67,9 @@ const accountFields: AccountField[] = [
 export function CreateAccountForm() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+  };
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -121,6 +124,10 @@ export function CreateAccountForm() {
                       type={field.type}
                       placeholder={field.placeholder}
                       autoComplete={field.autoComplete}
+                      inputMode={field.id === "phoneNumber" ? "tel" : undefined}
+                      maxLength={field.id === "phoneNumber" ? 10 : undefined}
+                      pattern={field.id === "phoneNumber" ? "[0-9]{10}" : undefined}
+                      onChange={field.id === "phoneNumber" ? handlePhoneChange : undefined}
                       required
                     />
                   </div>
