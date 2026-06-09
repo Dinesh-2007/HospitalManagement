@@ -1,4 +1,8 @@
-import { Pool, type QueryResult, type QueryResultRow } from "pg";
+import { Pool, type QueryResult, type QueryResultRow, types } from "pg";
+
+// Force DATE (oid 1082) to be returned as a string (YYYY-MM-DD) instead of a Date object
+// to prevent timezone shifting in JSON serialization.
+types.setTypeParser(1082, (val) => val);
 
 declare global {
   var __hsmsPool: Pool | undefined;

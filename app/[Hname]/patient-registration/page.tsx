@@ -86,6 +86,12 @@ export default function PatientRegistrationPage() {
     () => [
       { id: "patientId", label: "Patient ID", type: "text", maxLength: 50, pattern: "[a-zA-Z0-9]*", size: "small" },
       { id: "patientName", label: "Patient Name", type: "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium" },
+      {
+        id: "gender",
+        label: "Gender",
+        type: "select",
+        options: ["Male", "Female", "Others"],
+      },
       { id: "address", label: "Address", type: "textarea", size: "medium" },
       {
         id: "country",
