@@ -164,28 +164,124 @@ export async function GET(
     await ensurePatientTable(pool);
 
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+    const date = searchParams.get("date");
     const doctor = searchParams.get("doctor") ?? "";
-
     if (!doctor) {
-      const doctors = await pool.query(
-        `
-          SELECT doctor, MIN(appointment_time) AS first_time, COUNT(*)::int AS total
-          FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
-          WHERE appointment_date = $1
-            AND status IN ('Scheduled', 'Rescheduled')
-          GROUP BY doctor
-          ORDER BY MIN(appointment_time) NULLS LAST, doctor ASC
-        `,
-        [date],
-      );
+      const doctors = date
+        ? await pool.query(
+            `
+              SELECT doctor, MIN(appointment_time) AS first_time, COUNT(*)::int AS total
+              FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
+              WHERE appointment_date = $1
+                AND status IN ('Scheduled', 'Rescheduled')
+              GROUP BY doctor
+              ORDER BY MIN(appointment_time) NULLS LAST, doctor ASC
+            `,
+            [date],
+          )
+        : await pool.query(
+            `
+              SELECT doctor, MIN(appointment_time) AS first_time, COUNT(*)::int AS total
+              FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
+              WHERE status IN ('Scheduled', 'Rescheduled')
+              GROUP BY doctor
+              ORDER BY MIN(appointment_time) NULLS LAST, doctor ASC
+            `,
+          );
 
       return NextResponse.json({ rows: doctors.rows });
     }
 
-    const result = await pool.query(
-      `
-        WITH appointment_rows AS (
+    const result = date
+      ? await pool.query(
+          `
+            WITH appointment_rows AS (
+              SELECT
+                a.id AS appointment_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.time_slot_minutes,
+                a.department,
+                a.doctor,
+                a.patient_id AS appointment_patient_id,
+                a.patient_name AS appointment_patient_name,
+                a.patient_phone,
+                a.reason,
+                a.status AS appointment_status,
+                a.created_at AS appointment_created_at,
+                a.updated_at AS appointment_updated_at,
+                a.reschedule_count,
+                p.id AS registration_id,
+                p.patient_id AS registration_patient_id,
+                p.patient_name AS registration_patient_name,
+                p.mobile,
+                p.patient_type,
+                p.address,
+                p.country,
+                p.state,
+                p.city,
+                p.zip_code,
+                p.email,
+                p.phone_office,
+                p.phone_resi,
+                p.hn_number,
+                p.number_of_visits,
+                p.last_visit_date_time,
+                p.last_visit_doctor_name,
+                p.profession,
+                p.preferred_payment_type,
+                p.mediclaim_policy_available,
+                p.policy_details,
+                p.linked_patient_id,
+                p.relationship_ship_linked_patient,
+                p.active_from,
+                p.inactive_from,
+                p.inactive_reason,
+                v.id AS vitals_id,
+                v.registration_date,
+                v.height_cm,
+                v.weight_kg,
+                v.temperature,
+                v.pulse_rate,
+                v.respiratory_rate,
+                v.systolic_bp,
+                v.diastolic_bp,
+                v.spo2,
+                v.blood_sugar,
+                v.bmi,
+                v.remarks,
+                v.status AS vitals_status,
+                v.created_at AS vitals_created_at,
+                v.updated_at AS vitals_updated_at
+              FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
+              LEFT JOIN ${quoteIdentifier(PATIENTS_TABLE)} p
+                ON (
+                  (a.patient_id IS NOT NULL AND a.patient_id <> '' AND a.patient_id = p.patient_id)
+                  OR (
+                    (a.patient_id IS NULL OR a.patient_id = '')
+                    AND a.patient_phone IS NOT NULL
+                    AND a.patient_phone <> ''
+                    AND regexp_replace(COALESCE(p.mobile, ''), '\D', '', 'g') = regexp_replace(a.patient_phone, '\D', '', 'g')
+                  )
+                )
+              LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
+                ON v.patient_id = COALESCE(
+                  NULLIF(a.patient_id, ''),
+                  NULLIF(p.patient_id, ''),
+                  NULLIF(p.id::text, '')
+                )
+              WHERE a.appointment_date = $1
+                AND a.doctor = $2
+                AND a.status IN ('Scheduled', 'Rescheduled')
+              ORDER BY a.appointment_time NULLS LAST, a.created_at DESC
+            )
+            SELECT * FROM appointment_rows
+          `,
+          [date, doctor],
+        )
+      : await pool.query(
+          `
+            WITH appointment_rows AS (
           SELECT
             a.id AS appointment_id,
             a.appointment_date,
@@ -260,15 +356,14 @@ export async function GET(
               NULLIF(p.patient_id, ''),
               NULLIF(p.id::text, '')
             )
-          WHERE a.appointment_date = $1
-            AND a.doctor = $2
+          WHERE a.doctor = $1
             AND a.status IN ('Scheduled', 'Rescheduled')
-          ORDER BY a.appointment_time NULLS LAST, a.created_at DESC
+          ORDER BY a.appointment_date DESC, a.appointment_time NULLS LAST, a.created_at DESC
         )
         SELECT * FROM appointment_rows
       `,
-      [date, doctor],
-    );
+          [doctor],
+        );
 
     return NextResponse.json({ rows: result.rows });
   } catch (error) {
