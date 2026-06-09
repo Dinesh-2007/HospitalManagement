@@ -138,4 +138,8 @@ export const navigation: NavigationSection[] = [
     title: "Manage Users",
     href: "/manage-users",
   },
+  {
+    title: "Schedule",
+    href: "/doctor-schedule",
+  }
 ];

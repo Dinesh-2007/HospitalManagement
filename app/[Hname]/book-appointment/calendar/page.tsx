@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { BlankPage } from "../../../../components/blank-page";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
@@ -201,7 +201,6 @@ async function loadRows(hname: string, url: string) {
 
 export default function AppointmentCalendarPage() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const hname = params?.Hname as string;
   const department = searchParams.get("department") ?? "";
@@ -427,6 +426,8 @@ export default function AppointmentCalendarPage() {
         patientId,
         department,
         doctor,
+        cancelledByRole: "patient",
+        cancelledByName: patient?.patient_name ?? patientId,
       }),
     });
 
@@ -465,7 +466,7 @@ export default function AppointmentCalendarPage() {
 
   const [show, setShow] = useState(false);
   if(show){
-    return <div className="flex justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
+    return <div className="justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
   }
   return (
     <BlankPage title="Appointment Calendar">

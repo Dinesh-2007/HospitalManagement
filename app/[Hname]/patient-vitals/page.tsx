@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { BlankPage } from "../../../components/blank-page";
+
 import { CalenderIcon, CheckCircleIcon } from "../../../components/icons";
 
 type DoctorRow = { doctor?: string; first_time?: string | null; total?: number };
@@ -143,7 +143,7 @@ export default function PatientVitalsPage() {
   }
 
   return (
-    <BlankPage title="Patient Vitals">
+ 
       <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -337,6 +337,6 @@ export default function PatientVitalsPage() {
           </div>
         </div>
       </section>
-    </BlankPage>
+
   );
 }

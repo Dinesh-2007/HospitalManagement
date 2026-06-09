@@ -159,18 +159,29 @@ async function tableExists(pool: Pool, tableName: string) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ Hname: string; table: string }> },
 ) {
   try {
     const { Hname, table } = await params;
     const decodedHname = decodeURIComponent(Hname);
     const pool = await getTenantDB(decodedHname);
+    const { searchParams } = new URL(request.url);
+    const recordId = Number(searchParams.get("id") ?? 0);
     
     const tableName = ensureSafeIdentifier(table, "table");
 
     if (!(await tableExists(pool, tableName))) {
       return NextResponse.json({ rows: [] });
+    }
+
+    if (Number.isInteger(recordId) && recordId > 0) {
+      const rowResult = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(tableName)} WHERE id = $1 LIMIT 1`,
+        [recordId],
+      );
+
+      return NextResponse.json({ rows: rowResult.rows });
     }
 
     const rowsResult = await pool.query(
