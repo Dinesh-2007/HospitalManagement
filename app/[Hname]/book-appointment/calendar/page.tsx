@@ -38,7 +38,7 @@ type AppointmentRow = {
     updatedAt?: string;
   }> | null;
 };
-type Slot = { value: string; label: string };
+type Slot = { value: string; start: string; end: string; label: string };
 type PatientRow = { id?: number; patient_name?: string; mobile?: string | null };
 
 const SCHEDULE_TABLE = tableNameFromCardTitle("Consultant / Doctor Schedule");
@@ -159,6 +159,10 @@ function addMinutes(value: string, minutesToAdd: number) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function slotKey(start: string, end: string) {
+  return `${start}|${end}`;
+}
+
 function normalizeTime(value: string) {
   const match = String(value ?? "")
     .trim()
@@ -179,7 +183,12 @@ function buildHourBlocks(fromTime: string, toTime: string) {
   while (cursor < endTime) {
     const nextHour = addMinutes(cursor, 60);
     const end = nextHour > endTime ? endTime : nextHour;
-    blocks.push({ value: `${cursor}|${end}`, label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}` });
+    blocks.push({
+      value: slotKey(cursor, end),
+      start: cursor,
+      end,
+      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}`,
+    });
     cursor = end;
   }
   return blocks;
@@ -193,7 +202,12 @@ function buildSubSlots(fromTime: string, toTime: string, step: 10 | 20) {
   while (cursor < endTime) {
     const next = addMinutes(cursor, step);
     if (next > endTime) break;
-    slots.push({ value: cursor, label: `${formatDisplayTime(cursor)}-${formatDisplayTime(next)}` });
+    slots.push({
+      value: slotKey(cursor, next),
+      start: cursor,
+      end: next,
+      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(next)}`,
+    });
     cursor = next;
   }
   return slots;
@@ -359,16 +373,6 @@ export default function AppointmentCalendarPage() {
   }
 
   function handlePreviousWeek() {
-    setSelectedWeekStart(
-      new Date(
-        selectedWeekStart.getFullYear(),
-        selectedWeekStart.getMonth(),
-        selectedWeekStart.getDate() - 7,
-      ),
-    );
-  }
-
-  function handlePreviousWeek() {
     setSelectedWeekStart((current) => {
       const previousWeek = new Date(current);
       previousWeek.setDate(previousWeek.getDate() - 7);
@@ -399,28 +403,19 @@ export default function AppointmentCalendarPage() {
   }, [effectiveSelectedDate, selectedDaySchedules]);
 
   const bookedSlots = useMemo(() => {
-      if (!effectiveSelectedDate) return new Set<string>();
-      return new Set(
-        appointmentRows
-          .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
-          .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
-          .map((row) => normalizeTime(row.appointment_time ?? ""))
-          .filter(Boolean),
-    );
-  }, [appointmentRows, effectiveSelectedDate, isRescheduling, currentAppointmentId]);
-
-  const bookedHours = useMemo(() => {
     if (!effectiveSelectedDate) return new Set<string>();
     return new Set(
-      availableHours
-        .filter((hour) => {
-          const [start, end] = hour.value.split("|");
-          const subSlots = buildSubSlots(start, end, activeStep);
-          return subSlots.some((slot) => bookedSlots.has(slot.value));
+      appointmentRows
+        .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
+        .filter((row) => !isRescheduling || String(row.id ?? "") !== String(currentAppointmentId ?? ""))
+        .map((row) => {
+          const start = normalizeTime(row.appointment_time ?? "");
+          const end = normalizeTime(row.appointment_end_time ?? "") || (start ? addMinutes(start, row.time_slot_minutes ?? activeStep) : "");
+          return start && end ? slotKey(start, end) : "";
         })
-        .map((hour) => hour.value),
+        .filter(Boolean),
     );
-  }, [activeStep, availableHours, bookedSlots, effectiveSelectedDate]);
+  }, [appointmentRows, effectiveSelectedDate, isRescheduling, currentAppointmentId, activeStep]);
 
   const currentPatientBookedSlots = useMemo(() => {
     if (!patientId || !effectiveSelectedDate) return new Set<string>();
@@ -428,24 +423,20 @@ export default function AppointmentCalendarPage() {
       appointmentRows
         .filter((row) => row.appointment_date === toKey(effectiveSelectedDate))
         .filter((row) => String(row.patient_id ?? "") === String(patientId))
-        .map((row) => normalizeTime(row.appointment_time ?? ""))
+        .map((row) => {
+          const start = normalizeTime(row.appointment_time ?? "");
+          const end = normalizeTime(row.appointment_end_time ?? "") || (start ? addMinutes(start, row.time_slot_minutes ?? activeStep) : "");
+          return start && end ? slotKey(start, end) : "";
+        })
         .filter(Boolean),
     );
-  }, [appointmentRows, effectiveSelectedDate, patientId]);
+  }, [appointmentRows, effectiveSelectedDate, patientId, activeStep]);
 
-  // 2. Generate all sub-slots for the hour without hiding the booked ones
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
     const [start, end] = selectedHour.value.split("|");
-    const hourSubSlots = buildSubSlots(start, end, activeStep);
-    const isHourBookedByOthers = hourSubSlots.some(
-      (slot) => bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value),
-    );
-    if (isHourBookedByOthers) {
-      return hourSubSlots.filter((slot) => currentPatientBookedSlots.has(slot.value));
-    }
-    return hourSubSlots;
-  }, [activeStep, bookedSlots, currentPatientBookedSlots, effectiveSelectedDate, selectedHour]);
+    return buildSubSlots(start, end, activeStep);
+  }, [activeStep, effectiveSelectedDate, selectedHour]);
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
     setErrorMessage("");
@@ -627,24 +618,18 @@ export default function AppointmentCalendarPage() {
                   {availableHours.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                   ) : (
-                    availableHours.map((hour) => (
+                      availableHours.map((hour) => (
                       <button
                         key={hour.value}
                         type="button"
                         onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
                         className={`rounded-full border px-4 py-2 text-sm ${
                           selectedHour?.value === hour.value
-                            ? bookedHours.has(hour.value)
-                              ? "bg-red-500 text-white"
-                              : "bg-brand-500 text-white"
-                            : bookedHours.has(hour.value)
-                              ? "cursor-not-allowed border-red-300 bg-red-50 text-red-600 line-through decoration-2 decoration-red-500"
-                              : "bg-white text-gray-700"
+                            ? "bg-brand-500 text-white"
+                            : "bg-white text-gray-700"
                         }`}
-                        disabled={bookedHours.has(hour.value)}
                       >
                         {hour.label}
-                        {bookedHours.has(hour.value) ? " - Booked" : ""}
                       </button>
                     ))
                   )}
@@ -663,13 +648,13 @@ export default function AppointmentCalendarPage() {
                           key={slot.value}
                           type="button"
                           disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
-                          onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.value)}
+                          onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.start)}
                           className={`rounded-full border px-4 py-2 text-sm ${
-                            selectedSlot === slot.value
+                            selectedSlot === slot.start
                               ? "bg-brand-500 text-white"
                               : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
                                 ? "cursor-not-allowed border-red-300 bg-red-50 text-red-600 line-through decoration-2 decoration-red-500"
-                                : "bg-white text-gray-700"
+                                : "border-emerald-300 bg-emerald-50 text-emerald-700"
                           }`}
                         >
                           {slot.label}
