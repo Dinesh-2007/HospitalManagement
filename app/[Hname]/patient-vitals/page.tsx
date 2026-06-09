@@ -76,7 +76,7 @@ export default function PatientVitalsPage() {
   const dateInputRef = useRef<HTMLInputElement | null>(null);
 
   const dateLabel = useMemo(() => {
-    if (!date) return "All dates";
+    if (!date) return "Select date";
     const [year, month, day] = date.split("-");
     return `${day}-${month}-${year}`;
   }, [date]);
@@ -182,14 +182,9 @@ export default function PatientVitalsPage() {
               className="sr-only"
               aria-label="Select appointment date"
             />
-            <button
-              type="button"
-              onClick={() => dateInputRef.current?.showPicker?.()}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400"
-              aria-label="Open date picker"
-            >
-              <CalenderIcon className="h-5 w-5" />
-            </button>
+
+            
+       
           </div>
         </div>
         <div className="grid gap-6 p-4 sm:p-6 xl:grid-cols-[300px_minmax(0,1fr)]">
