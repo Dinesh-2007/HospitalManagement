@@ -16,12 +16,48 @@ type AppointmentRecord = {
   appointmentTime?: string;
   timeSlotMinutes?: string | number;
   reason?: string;
+  cancelledByRole?: string;
+  cancelledByName?: string;
+  cancelledByUsername?: string;
+  cancellationReason?: string;
+};
+
+type CancellationMeta = {
+  cancelledByRole: string | null;
+  cancelledByName: string | null;
+  cancelledByUsername: string | null;
+  cancellationReason: string | null;
 };
 
 const TABLE_NAME = "appointments";
 
 function isValidDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isValidTime(value: string) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function normalizeTime(value: string) {
+  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function parseDoctorNames(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
@@ -42,6 +78,11 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
       status TEXT NOT NULL DEFAULT 'Scheduled',
       reschedule_count INTEGER NOT NULL DEFAULT 0,
       reschedule_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+      cancelled_by_role TEXT,
+      cancelled_by_name TEXT,
+      cancelled_by_username TEXT,
+      cancelled_reason TEXT,
+      cancelled_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -68,23 +109,64 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
   `);
 
   await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS cancelled_by_role TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS cancelled_by_name TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS cancelled_by_username TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS cancelled_reason TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+    ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS appointments_unique_slot_idx
     ON ${quoteIdentifier(TABLE_NAME)} (appointment_date, department, doctor, appointment_time)
   `);
 }
 
-function isValidTime(value: string) {
-  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
+async function cancelAppointmentById(
+  pool: Awaited<ReturnType<typeof getTenantDB>>,
+  appointmentId: number,
+  meta: CancellationMeta,
+) {
+  const result = await pool.query(
+    `
+      UPDATE ${quoteIdentifier(TABLE_NAME)}
+      SET status = 'Cancelled',
+          cancelled_by_role = $2,
+          cancelled_by_name = $3,
+          cancelled_by_username = $4,
+          cancelled_reason = $5,
+          cancelled_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [
+      appointmentId,
+      meta.cancelledByRole,
+      meta.cancelledByName,
+      meta.cancelledByUsername,
+      meta.cancellationReason,
+    ],
+  );
 
-function normalizeTime(value: string) {
-  const match = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return "";
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  return result.rows[0] ?? null;
 }
 
 export async function GET(
@@ -104,8 +186,12 @@ export async function GET(
     const department = searchParams.get("department") ?? "";
     const doctor = searchParams.get("doctor") ?? "";
     const patientId = searchParams.get("patientId") ?? "";
+    const doctorNames = parseDoctorNames(searchParams.get("doctorNames") ?? "");
+    const requestedDoctorNames = Array.from(
+      new Set([doctor, ...doctorNames].map((value) => value.trim()).filter(Boolean)),
+    );
 
-    if (patientId && !department && !doctor) {
+    if (patientId && !department && requestedDoctorNames.length === 0) {
       const result = await pool.query(
         `
           SELECT *
@@ -119,25 +205,42 @@ export async function GET(
       return NextResponse.json({ rows: result.rows });
     }
 
-    if (patientId && department && doctor) {
+    if (patientId && (department || requestedDoctorNames.length > 0)) {
+      const filters = [`patient_id = $1`, `status IN ('Scheduled', 'Rescheduled')`];
+      const values: unknown[] = [patientId];
+      let index = 2;
+
+      if (department) {
+        filters.push(`department = $${index}`);
+        values.push(department);
+        index += 1;
+      }
+
+      if (requestedDoctorNames.length === 1) {
+        filters.push(`doctor = $${index}`);
+        values.push(requestedDoctorNames[0]);
+        index += 1;
+      } else if (requestedDoctorNames.length > 1) {
+        filters.push(`LOWER(doctor) = ANY($${index})`);
+        values.push(requestedDoctorNames.map((value) => value.toLowerCase()));
+      }
+
       const result = await pool.query(
         `
           SELECT *
           FROM ${quoteIdentifier(TABLE_NAME)}
-          WHERE patient_id = $1
-            AND department = $2
-            AND doctor = $3
+          WHERE ${filters.join(" AND ")}
           ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC
         `,
-        [patientId, department, doctor],
+        values,
       );
 
       return NextResponse.json({ rows: result.rows });
     }
 
-    if ((!appointmentDate && (!startDate || !endDate)) || !department || !doctor) {
+    if ((!appointmentDate && (!startDate || !endDate)) || requestedDoctorNames.length === 0) {
       return NextResponse.json(
-        { error: "Date range, department and doctor are required." },
+        { error: "Date range and doctor are required." },
         { status: 400 },
       );
     }
@@ -157,25 +260,36 @@ export async function GET(
       return NextResponse.json({ error: "Invalid end date." }, { status: 400 });
     }
 
+    const filters = [appointmentDate ? `appointment_date = $1` : `appointment_date BETWEEN $1 AND $2`];
+    const values: unknown[] = appointmentDate ? [appointmentDate] : [startDate, endDate];
+    let index = appointmentDate ? 2 : 3;
+
+    if (department) {
+      filters.push(`department = $${index}`);
+      values.push(department);
+      index += 1;
+    }
+
+    if (requestedDoctorNames.length === 1) {
+      filters.push(`doctor = $${index}`);
+      values.push(requestedDoctorNames[0]);
+      index += 1;
+    } else {
+      filters.push(`LOWER(doctor) = ANY($${index})`);
+      values.push(requestedDoctorNames.map((value) => value.toLowerCase()));
+      index += 1;
+    }
+
+    filters.push(`status IN ('Scheduled', 'Rescheduled')`);
+
     const result = await pool.query(
-      appointmentDate
-        ? `
-          SELECT *
-          FROM ${quoteIdentifier(TABLE_NAME)}
-          WHERE appointment_date = $1
-            AND department = $2
-            AND doctor = $3
-          ORDER BY appointment_time NULLS LAST, created_at DESC
-        `
-        : `
-          SELECT *
-          FROM ${quoteIdentifier(TABLE_NAME)}
-          WHERE appointment_date BETWEEN $1 AND $2
-            AND department = $3
-            AND doctor = $4
-          ORDER BY appointment_date, appointment_time NULLS LAST, created_at DESC
-        `,
-      appointmentDate ? [appointmentDate, department, doctor] : [startDate, endDate, department, doctor],
+      `
+        SELECT *
+        FROM ${quoteIdentifier(TABLE_NAME)}
+        WHERE ${filters.join(" AND ")}
+        ORDER BY appointment_date, appointment_time NULLS LAST, created_at DESC
+      `,
+      values,
     );
 
     return NextResponse.json({ rows: result.rows });
@@ -241,6 +355,7 @@ export async function POST(
           AND department = $2
           AND doctor = $3
           AND appointment_time = $4
+          AND status IN ('Scheduled', 'Rescheduled')
         LIMIT 1
       `,
       [appointmentDate, department, doctor, appointmentTime],
@@ -365,7 +480,6 @@ export async function PUT(
     const currentRow = current.rows[0] as {
       patient_id?: string | null;
       reschedule_count?: number | string | null;
-      reschedule_history?: unknown;
       appointment_date?: string | null;
       appointment_time?: string | null;
       department?: string | null;
@@ -400,6 +514,7 @@ export async function PUT(
           AND doctor = $3
           AND appointment_time = $4
           AND id <> $5
+          AND status IN ('Scheduled', 'Rescheduled')
         LIMIT 1
       `,
       [appointmentDate, department, doctor, appointmentTime, appointmentId],
@@ -427,6 +542,11 @@ export async function PUT(
             patient_type = 'scheduled',
             reason = $10,
             status = 'Rescheduled',
+            cancelled_by_role = NULL,
+            cancelled_by_name = NULL,
+            cancelled_by_username = NULL,
+            cancelled_reason = NULL,
+            cancelled_at = NULL,
             reschedule_history = COALESCE(reschedule_history, '[]'::jsonb) || jsonb_build_array(
               jsonb_build_object(
                 'fromDate', appointment_date::text,
@@ -478,6 +598,12 @@ export async function DELETE(
     const patientId = String(body.patientId ?? "").trim();
     const department = String(body.department ?? "").trim();
     const doctor = String(body.doctor ?? "").trim();
+    const meta: CancellationMeta = {
+      cancelledByRole: String(body.cancelledByRole ?? "").trim().toLowerCase() || null,
+      cancelledByName: String(body.cancelledByName ?? "").trim() || null,
+      cancelledByUsername: String(body.cancelledByUsername ?? "").trim() || null,
+      cancellationReason: String(body.cancellationReason ?? "").trim() || null,
+    };
 
     if (Number.isInteger(appointmentId) && appointmentId > 0) {
       const existing = await pool.query(
@@ -489,15 +615,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
       }
 
-      await pool.query(
-        `
-          UPDATE ${quoteIdentifier(TABLE_NAME)}
-          SET status = 'Cancelled',
-              updated_at = NOW()
-          WHERE id = $1
-        `,
-        [appointmentId],
-      );
+      await cancelAppointmentById(pool, appointmentId, meta);
       return NextResponse.json({ ok: true });
     }
 
@@ -515,6 +633,7 @@ export async function DELETE(
         WHERE patient_id = $1
           AND department = $2
           AND doctor = $3
+          AND status IN ('Scheduled', 'Rescheduled')
         ORDER BY updated_at DESC, created_at DESC
         LIMIT 1
       `,
@@ -526,15 +645,7 @@ export async function DELETE(
     }
 
     const targetId = Number(existing.rows[0]?.id ?? 0);
-    await pool.query(
-      `
-        UPDATE ${quoteIdentifier(TABLE_NAME)}
-        SET status = 'Cancelled',
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [targetId],
-    );
+    await cancelAppointmentById(pool, targetId, meta);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to cancel appointment.";

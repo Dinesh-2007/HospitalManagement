@@ -70,6 +70,8 @@ function getSectionIcon(title: string) {
       return <UserCircleIcon />;
     case "Lab Hospital Facility Masters":
       return <BoxCubeIcon />;
+    case "Schedule":
+      return <CalenderIcon />;
     default:
       return <FolderIcon />;
   }

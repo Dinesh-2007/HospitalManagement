@@ -1,11 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { tableNameFromCardTitle } from "../../lib/master-form-table";
 
 type RawRow = Record<string, unknown>;
-type PatientRow = { id?: number; patient_name?: string; mobile?: string | null };
+type PatientRow = {
+  id?: number;
+  patient_name?: string;
+  mobile?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  patient_type?: string | null;
+  profession?: string | null;
+  last_visit_doctor_name?: string | null;
+};
 type AppointmentRow = {
   id?: number;
   appointment_date?: string;
@@ -13,10 +25,16 @@ type AppointmentRow = {
   patient_id?: string | null;
   patient_name?: string | null;
   patient_phone?: string | null;
+  doctor?: string | null;
+  department?: string | null;
   reschedule_count?: number | null;
   status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  cancelled_by_role?: string | null;
+  cancelled_by_name?: string | null;
+  cancelled_reason?: string | null;
+  cancelled_at?: string | null;
   reschedule_history?: Array<{
     fromDate?: string;
     fromTime?: string;
@@ -24,6 +42,15 @@ type AppointmentRow = {
     toTime?: string;
     updatedAt?: string;
   }> | null;
+};
+
+type HistoryItem = {
+  key: string;
+  label: string;
+  status: string;
+  date: string;
+  time?: string;
+  note: string;
 };
 
 const PATIENT_TABLE = tableNameFromCardTitle("Patient Registration");
@@ -41,6 +68,14 @@ function normalizePatientRow(row: RawRow): PatientRow {
     id: row.id ? Number(row.id) : undefined,
     patient_name: readText(row, ["patient_name", "patientName"]) || undefined,
     mobile: readText(row, ["mobile"]) || null,
+    email: readText(row, ["email"]) || null,
+    address: readText(row, ["address"]) || null,
+    city: readText(row, ["city"]) || null,
+    state: readText(row, ["state"]) || null,
+    country: readText(row, ["country"]) || null,
+    patient_type: readText(row, ["patient_type", "patientType"]) || null,
+    profession: readText(row, ["profession"]) || null,
+    last_visit_doctor_name: readText(row, ["last_visit_doctor_name", "lastVisitDoctorName"]) || null,
   };
 }
 
@@ -53,10 +88,16 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || null,
     patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
+    doctor: readText(row, ["doctor"]) || null,
+    department: readText(row, ["department"]) || null,
     reschedule_count: Number(readText(row, ["reschedule_count", "rescheduleCount"])) || 0,
     status: readText(row, ["status"]) || null,
     created_at: readText(row, ["created_at", "createdAt"]) || null,
     updated_at: readText(row, ["updated_at", "updatedAt"]) || null,
+    cancelled_by_role: readText(row, ["cancelled_by_role", "cancelledByRole"]) || null,
+    cancelled_by_name: readText(row, ["cancelled_by_name", "cancelledByName"]) || null,
+    cancelled_reason: readText(row, ["cancelled_reason", "cancelledReason"]) || null,
+    cancelled_at: readText(row, ["cancelled_at", "cancelledAt"]) || null,
     reschedule_history: Array.isArray(history)
       ? history.map((entry) => ({
           fromDate: String((entry as Record<string, unknown>).fromDate ?? ""),
@@ -83,6 +124,18 @@ function formatDisplayDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
+function formatDisplayDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 async function loadRows(hname: string, url: string) {
   const response = await fetch(`/api/${encodeURIComponent(hname)}${url}`, { cache: "no-store" });
   const data = (await response.json()) as { rows?: RawRow[]; error?: string };
@@ -90,14 +143,22 @@ async function loadRows(hname: string, url: string) {
   return data.rows ?? [];
 }
 
-type HistoryItem = {
-  key: string;
-  label: string;
-  status: string;
-  date: string;
-  time?: string;
-  note: string;
-};
+function buildCancellationNote(entry: AppointmentRow) {
+  const cancelledByRole = (entry.cancelled_by_role ?? "").toLowerCase();
+  const cancelledByName = entry.cancelled_by_name || entry.doctor || "Doctor";
+  const cancelledAt = entry.cancelled_at ? ` on ${formatDisplayDateTime(entry.cancelled_at)}` : "";
+  const reason = entry.cancelled_reason ? ` Reason: ${entry.cancelled_reason}` : "";
+
+  if (cancelledByRole === "doctor") {
+    return `${cancelledByName} cancelled this appointment${cancelledAt}.${reason}`;
+  }
+
+  if (cancelledByRole === "patient") {
+    return `You cancelled this appointment${cancelledAt}.${reason}`;
+  }
+
+  return `Appointment cancelled${cancelledAt}.${reason}`;
+}
 
 function buildHistory(appointments: AppointmentRow[]) {
   const items: HistoryItem[] = [];
@@ -110,7 +171,7 @@ function buildHistory(appointments: AppointmentRow[]) {
       status: "Scheduled",
       date: entry.appointment_date ?? "",
       time: entry.appointment_time ?? undefined,
-      note: "Appointment booked",
+      note: `${entry.doctor ? `Booked with ${entry.doctor}` : "Appointment booked"}${entry.department ? ` - ${entry.department}` : ""}`,
     });
 
     for (const historyEntry of entry.reschedule_history ?? []) {
@@ -131,7 +192,7 @@ function buildHistory(appointments: AppointmentRow[]) {
         status: "Cancelled",
         date: entry.appointment_date ?? "",
         time: entry.appointment_time ?? undefined,
-        note: "Appointment cancelled",
+        note: buildCancellationNote(entry),
       });
     }
   }
@@ -141,8 +202,6 @@ function buildHistory(appointments: AppointmentRow[]) {
 
 export default function PatientProfilePage(props: { searchParams?: { patientId?: string }; onClose?: () => void }) {
   const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const hname = params?.Hname as string;
   const patientId = props.searchParams?.patientId;
   const [patient, setPatient] = useState<PatientRow | null>(null);
@@ -153,49 +212,93 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
     async function loadProfile() {
       if (!patientId) return;
       const [patientRows, appointmentRows] = await Promise.all([
-        loadRows(hname, `/forms/${PATIENT_TABLE}`),
+        loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(patientId)}`),
         loadRows(hname, `/appointments?patientId=${encodeURIComponent(patientId)}`),
       ]);
-      setPatient(patientRows.map(normalizePatientRow).find((row) => String(row.id ?? "") === patientId) ?? null);
+      setPatient(patientRows.map(normalizePatientRow)[0] ?? null);
       setAppointments(appointmentRows.map(normalizeAppointmentRow));
     }
+
     void loadProfile().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load profile."));
   }, [hname, patientId]);
 
   const history = useMemo(() => buildHistory(appointments), [appointments]);
+  const doctorNotifications = useMemo(
+    () =>
+      appointments
+        .filter(
+          (entry) =>
+            (entry.status ?? "").toLowerCase() === "cancelled" &&
+            (entry.cancelled_by_role ?? "").toLowerCase() === "doctor",
+        )
+        .sort((left, right) => String(right.cancelled_at ?? right.updated_at ?? "").localeCompare(String(left.cancelled_at ?? left.updated_at ?? ""))),
+    [appointments],
+  );
 
   return (
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">User Profile</p>
-            <h1 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{patient?.patient_name ?? "Patient"}</h1>
-            <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
-          </div>
-          <button type="button" onClick={() => props.onClose?.()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
-            Back
-          </button>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Patient Profile</p>
+          <h1 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{patient?.patient_name ?? "Patient"}</h1>
+          <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
         </div>
+        <button type="button" onClick={() => props.onClose?.()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+          Back
+        </button>
+      </div>
 
-        {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
+      {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
 
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
-            <div className="space-y-4 text-sm">
-              <div><p className="text-gray-500">Patient ID</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.id ?? "-"}</p></div>
-              <div><p className="text-gray-500">Hospital</p><p className="font-medium text-gray-800 dark:text-white/90">{hname}</p></div>
-              <div><p className="text-gray-500">Appointments</p><p className="font-medium text-gray-800 dark:text-white/90">{appointments.length}</p></div>
+      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <section className="space-y-6 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="space-y-4 text-sm">
+            <div><p className="text-gray-500">Patient ID</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.id ?? "-"}</p></div>
+            <div><p className="text-gray-500">Email</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.email ?? "-"}</p></div>
+            <div><p className="text-gray-500">Patient Type</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.patient_type ?? "-"}</p></div>
+            <div><p className="text-gray-500">Profession</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.profession ?? "-"}</p></div>
+            <div><p className="text-gray-500">Last Visit Doctor</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.last_visit_doctor_name ?? "-"}</p></div>
+            <div><p className="text-gray-500">Appointments</p><p className="font-medium text-gray-800 dark:text-white/90">{appointments.length}</p></div>
+          </div>
+
+          <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Address</p>
+            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{patient?.address ?? "-"}</p>
+            <p className="mt-2 text-sm text-gray-500">
+              {[patient?.city, patient?.state, patient?.country].filter(Boolean).join(", ") || "-"}
+            </p>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          {doctorNotifications.length > 0 ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Notifications</p>
+              <div className="mt-4 space-y-3">
+                {doctorNotifications.map((entry) => (
+                  <div key={`notification-${entry.id ?? entry.cancelled_at ?? entry.appointment_date}`} className="rounded-xl border border-red-200 bg-white p-4">
+                    <p className="font-medium text-red-700">
+                      {entry.cancelled_by_name || entry.doctor || "Doctor"} cancelled your appointment
+                    </p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {entry.appointment_date ? formatDisplayDate(entry.appointment_date) : "-"}
+                      {entry.appointment_time ? ` at ${formatDisplayTime(entry.appointment_time)}` : ""}
+                    </p>
+                    <p className="mt-1 text-sm text-red-600">{buildCancellationNote(entry)}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </section>
+          ) : null}
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total History</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Appointment History</p>
             <div className="mt-4 space-y-3">
               {history.length > 0 ? history.map((item) => (
                 <div key={item.key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-gray-800 dark:text-white/90">
-                      {item.label} — {formatDisplayDate(item.date)}{item.time ? ` at ${formatDisplayTime(item.time)}` : ""}
+                      {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatDisplayTime(item.time)}` : ""}
                     </p>
                     <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium uppercase text-gray-600">{item.status}</span>
                   </div>
@@ -204,7 +307,8 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
               )) : <p className="text-sm text-gray-500">No history yet.</p>}
             </div>
           </section>
-        </div>
+        </section>
       </div>
+    </div>
   );
 }

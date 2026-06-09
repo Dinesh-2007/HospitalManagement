@@ -50,7 +50,7 @@ async function ensureTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ Hname: string }> },
 ) {
   try {
@@ -58,7 +58,14 @@ export async function GET(
     const hname = decodeURIComponent(Hname);
     const pool = await getTenantDB(hname);
     await ensureTable(pool);
-    const rows = await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
+    const { searchParams } = new URL(request.url);
+    const username = String(searchParams.get("username") ?? "").trim();
+    const rows = username
+      ? await pool.query(
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE username = $1 LIMIT 1`,
+          [username],
+        )
+      : await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
     return NextResponse.json({ row: rows.rows[0] ?? null });
   } catch (error) {
     return NextResponse.json(
