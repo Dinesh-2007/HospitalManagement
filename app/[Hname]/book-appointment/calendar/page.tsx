@@ -392,14 +392,14 @@ export default function AppointmentCalendarPage() {
 
   const availableHours = useMemo(() => {
     if (!effectiveSelectedDate) return [];
-    const hours = new Map<string, string>();
+    const hours = new Map<string, Slot>();
     for (const schedule of selectedDaySchedules) {
       const hourBlocks = buildHourBlocks(schedule.availableTimeFrom, schedule.availableTimeTo);
       for (const block of hourBlocks) {
-        if (!hours.has(block.value)) hours.set(block.value, block.label);
+        if (!hours.has(block.value)) hours.set(block.value, block);
       }
     }
-    return Array.from(hours.entries()).map(([value, label]) => ({ value, label }));
+    return Array.from(hours.values());
   }, [effectiveSelectedDate, selectedDaySchedules]);
 
   const bookedSlots = useMemo(() => {
