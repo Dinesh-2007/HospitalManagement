@@ -54,6 +54,9 @@ type HistoryItem = {
   endTime?: string;
   note: string;
   variant: "green" | "red" | "gray";
+  doctor?: string | null;
+  department?: string | null;
+  isPreviewable?: boolean;
 };
 
 const PATIENT_TABLE = tableNameFromCardTitle("Patient Registration");
@@ -185,6 +188,9 @@ function buildHistory(appointments: AppointmentRow[]) {
       endTime: entry.appointment_end_time ?? undefined,
       note: `${entry.doctor ? `Booked with ${entry.doctor}` : "Appointment booked"}${entry.department ? ` - ${entry.department}` : ""}`,
       variant: hasRescheduleHistory ? "red" : "green",
+      doctor: entry.doctor,
+      department: entry.department,
+      isPreviewable: true,
     });
 
     for (const historyEntry of entry.reschedule_history ?? []) {
@@ -194,8 +200,12 @@ function buildHistory(appointments: AppointmentRow[]) {
         status: "Rescheduled",
         date: historyEntry.toDate ?? "",
         time: historyEntry.toTime ?? undefined,
+        endTime: undefined,
         note: `Moved from ${formatDisplayDate(historyEntry.fromDate ?? "")}${historyEntry.fromTime ? ` at ${formatDisplayTime(historyEntry.fromTime)}` : ""}`,
         variant: "green",
+        doctor: entry.doctor,
+        department: entry.department,
+        isPreviewable: true,
       });
     }
 
@@ -223,6 +233,7 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [previewItem, setPreviewItem] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
@@ -316,9 +327,15 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
                   : item.variant === "red"
                     ? "bg-red-100 text-red-700"
                     : "bg-gray-100 text-gray-600";
+                const isClickable = item.isPreviewable && (item.status === "Scheduled" || item.status === "Rescheduled");
 
                 return (
-                  <div key={item.key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => isClickable && setPreviewItem(item)}
+                    className={`w-full text-left rounded-xl border border-gray-200 p-4 dark:border-gray-800 ${isClickable ? "cursor-pointer hover:border-brand-300 hover:bg-brand-50/50" : ""}`}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-gray-800 dark:text-white/90">
                         {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatTimeRange(item.time, item.endTime)}` : ""}
@@ -328,13 +345,50 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-gray-500">{item.note}</p>
-                  </div>
+                  </button>
                 );
               }) : <p className="text-sm text-gray-500">No history yet.</p>}
             </div>
           </section>
         </section>
       </div>
+      {previewItem ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Preview</p>
+                <h2 className="mt-1 text-xl font-semibold text-gray-900 dark:text-white/90">{previewItem.status} Appointment</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewItem(null)}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid gap-4">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-sm uppercase tracking-wide text-gray-500">Doctor</p>
+                <p className="mt-1 text-base font-medium text-gray-900 dark:text-white/90">{previewItem.doctor ?? "Not specified"}</p>
+                <p className="mt-1 text-sm text-gray-500">{previewItem.department ?? "Department not available"}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-sm uppercase tracking-wide text-gray-500">Booked Slot</p>
+                <p className="mt-1 text-base font-medium text-gray-900 dark:text-white/90">{formatDisplayDate(previewItem.date)}</p>
+                {previewItem.time ? (
+                  <p className="mt-1 text-sm text-gray-500">{formatTimeRange(previewItem.time, previewItem.endTime)}</p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-sm uppercase tracking-wide text-gray-500">Note</p>
+                <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">{previewItem.note}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
