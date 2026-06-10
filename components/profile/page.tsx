@@ -53,6 +53,7 @@ type HistoryItem = {
   time?: string;
   endTime?: string;
   note: string;
+  variant: "green" | "red" | "gray";
 };
 
 const PATIENT_TABLE = tableNameFromCardTitle("Patient Registration");
@@ -173,6 +174,8 @@ function buildHistory(appointments: AppointmentRow[]) {
 
   for (const entry of appointments) {
     const baseKey = String(entry.id ?? `${entry.appointment_date}-${entry.appointment_time}`);
+    const hasRescheduleHistory = Array.isArray(entry.reschedule_history) && entry.reschedule_history.length > 0;
+
     items.push({
       key: `${baseKey}-scheduled`,
       label: "Scheduled",
@@ -181,6 +184,7 @@ function buildHistory(appointments: AppointmentRow[]) {
       time: entry.appointment_time ?? undefined,
       endTime: entry.appointment_end_time ?? undefined,
       note: `${entry.doctor ? `Booked with ${entry.doctor}` : "Appointment booked"}${entry.department ? ` - ${entry.department}` : ""}`,
+      variant: hasRescheduleHistory ? "red" : "green",
     });
 
     for (const historyEntry of entry.reschedule_history ?? []) {
@@ -191,6 +195,7 @@ function buildHistory(appointments: AppointmentRow[]) {
         date: historyEntry.toDate ?? "",
         time: historyEntry.toTime ?? undefined,
         note: `Moved from ${formatDisplayDate(historyEntry.fromDate ?? "")}${historyEntry.fromTime ? ` at ${formatDisplayTime(historyEntry.fromTime)}` : ""}`,
+        variant: "green",
       });
     }
 
@@ -203,6 +208,7 @@ function buildHistory(appointments: AppointmentRow[]) {
         time: entry.appointment_time ?? undefined,
         endTime: entry.appointment_end_time ?? undefined,
         note: buildCancellationNote(entry),
+        variant: "red",
       });
     }
   }
@@ -304,17 +310,27 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
           <section className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Appointment History</p>
             <div className="mt-4 space-y-3">
-              {history.length > 0 ? history.map((item) => (
-                <div key={item.key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-gray-800 dark:text-white/90">
-                      {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatTimeRange(item.time, item.endTime)}` : ""}
-                    </p>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium uppercase text-gray-600">{item.status}</span>
+              {history.length > 0 ? history.map((item) => {
+                const badgeClasses = item.variant === "green"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : item.variant === "red"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-100 text-gray-600";
+
+                return (
+                  <div key={item.key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-gray-800 dark:text-white/90">
+                        {item.label} - {formatDisplayDate(item.date)}{item.time ? ` at ${formatTimeRange(item.time, item.endTime)}` : ""}
+                      </p>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium uppercase ${badgeClasses}`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-500">{item.note}</p>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500">{item.note}</p>
-                </div>
-              )) : <p className="text-sm text-gray-500">No history yet.</p>}
+                );
+              }) : <p className="text-sm text-gray-500">No history yet.</p>}
             </div>
           </section>
         </section>

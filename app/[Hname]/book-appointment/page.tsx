@@ -246,27 +246,26 @@ export default function BookAppointmentPage() {
   const [isDoctorPopupOpen, setIsDoctorPopupOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [authenticatedPatient, setAuthenticatedPatient] = useState<PatientAuthState | null>(() => {
-    if (typeof window === "undefined" || !hname) {
-      return null;
-    }
+  const [authenticatedPatient, setAuthenticatedPatient] = useState<PatientAuthState | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
 
+  useEffect(() => {
+    if (!hname) return;
     const saved = window.localStorage.getItem(storageKey(hname));
-    if (!saved) {
-      return null;
+    if (saved) {
+      try {
+        setAuthenticatedPatient(JSON.parse(saved) as PatientAuthState);
+      } catch {
+        window.localStorage.removeItem(storageKey(hname));
+      }
     }
-
-    try {
-      return JSON.parse(saved) as PatientAuthState;
-    } catch {
-      window.localStorage.removeItem(storageKey(hname));
-      return null;
-    }
-  });
+    setIsHydrated(true);
+  }, [hname]);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [authForm, setAuthForm] = useState<PatientAuthState>({ name: "", phone: "" });
   const [signupForm, setSignupForm] = useState<PatientSignupState>(emptySignupState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showBookConfirmation, setShowBookConfirmation] = useState(false);
 
   useEffect(() => {
     async function loadPatients() {
@@ -406,6 +405,11 @@ export default function BookAppointmentPage() {
   }
 
   function handleContinue() {
+    setShowBookConfirmation(true);
+  }
+
+  function executeBooking() {
+    setShowBookConfirmation(false);
     if (!selectedDepartment || !selectedDoctor) return;
     const query = new URLSearchParams({
       department: selectedDepartment,
@@ -612,6 +616,30 @@ export default function BookAppointmentPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showBookConfirmation ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Confirmation</h2>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">ARE YOU CONFIRM TO BOOK</p>
+            <div className="mt-5 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowBookConfirmation(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={executeBooking}
+                className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white"
+              >
+                Yes
+              </button>
             </div>
           </div>
         </div>

@@ -248,6 +248,7 @@ export default function AppointmentCalendarPage() {
   const [dialogMessage, setDialogMessage] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<{ type: "book" | "reschedule" | "cancel" | null } | null>(null);
 
   useEffect(() => {
     async function loadPatient() {
@@ -518,6 +519,45 @@ export default function AppointmentCalendarPage() {
     document.getElementById("booking-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function showBookConfirmation() {
+    setConfirmDialog({ type: "book" });
+  }
+
+  function showRescheduleConfirmation() {
+    setConfirmDialog({ type: "reschedule" });
+  }
+
+  function showCancelConfirmation() {
+    setConfirmDialog({ type: "cancel" });
+  }
+
+  async function handleConfirmBook() {
+    setConfirmDialog(null);
+    try {
+      await bookSlot();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment.");
+    }
+  }
+
+  async function handleConfirmReschedule() {
+    setConfirmDialog(null);
+    try {
+      await bookSlot();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment.");
+    }
+  }
+
+  async function handleConfirmCancel() {
+    setConfirmDialog(null);
+    try {
+      await cancelAppointment();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment.");
+    }
+  }
+
   const [show, setShow] = useState(false);
   if(show){
     return <div className="justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
@@ -649,11 +689,11 @@ export default function AppointmentCalendarPage() {
                           type="button"
                           disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
                           onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.start)}
-                          className={`rounded-full border px-4 py-2 text-sm ${
+                          className={`rounded-full border px-4 py-2 text-sm transition ${
                             selectedSlot === slot.start
                               ? "bg-brand-500 text-white"
                               : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
-                                ? "cursor-not-allowed border-red-300 bg-red-50 text-red-600 line-through decoration-2 decoration-red-500"
+                                ? "cursor-not-allowed border-red-300 bg-red-100 text-red-700"
                                 : "border-emerald-300 bg-emerald-50 text-emerald-700"
                           }`}
                         >
@@ -676,7 +716,7 @@ export default function AppointmentCalendarPage() {
                 ) : null}
                 {!patientAppointment ? (
                   <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
                       Book Appointment
                     </button>
                     <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
@@ -685,7 +725,7 @@ export default function AppointmentCalendarPage() {
                   </div>
                 ) : isRescheduling ? (
                   <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={() => void bookSlot().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment."))} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
                       Confirm Reschedule
                     </button>
                     <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
@@ -697,7 +737,7 @@ export default function AppointmentCalendarPage() {
                     <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
                       Reschedule Appointment
                     </button>
-                    <button type="button" onClick={() => void cancelAppointment().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment."))} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
+                    <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
                       Cancel Appointment
                     </button>
                   </div>
@@ -724,6 +764,42 @@ export default function AppointmentCalendarPage() {
                 className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {confirmDialog ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Confirmation</h2>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+              {confirmDialog.type === "book" && "ARE YOU CONFIRM TO BOOK"}
+              {confirmDialog.type === "reschedule" && "ARE YOU CONFIRM TO RESCHEDULE"}
+              {confirmDialog.type === "cancel" && "ARE YOU CONFIRM TO CANCEL"}
+            </p>
+            <div className="mt-5 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={
+                  confirmDialog.type === "book"
+                    ? handleConfirmBook
+                    : confirmDialog.type === "reschedule"
+                      ? handleConfirmReschedule
+                      : handleConfirmCancel
+                }
+                className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white ${
+                  confirmDialog.type === "cancel" ? "bg-red-500" : "bg-brand-500"
+                }`}
+              >
+                Yes
               </button>
             </div>
           </div>
