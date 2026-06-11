@@ -43,3 +43,7 @@ next-env.d.ts
 
 #Template
 /Template
+COMPLETE.txt
+Deep.txt
+file_list.txt
+.gitignore

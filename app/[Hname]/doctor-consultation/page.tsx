@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
 
-type TabType = "Vitals" | "Draft" | "Completed";
+type QueueTab = "Vitals" | "Draft" | "Completed";
+type DetailTab = "Patient Details" | "Vitals" | "History" | "Consultation Form";
 
 type VitalsRow = Record<string, unknown> & {
   vitals_id?: number | null;
@@ -19,14 +20,32 @@ type ConsultationRow = Record<string, unknown> & {
   id: number;
   status?: string;
   tokenNumber?: string;
+  token_number?: string;
   patientDetails?: string;
+  patient_details?: string;
   diagnosisName?: string;
+  diagnosis_name?: string;
   symptoms?: string;
   remarks?: string;
   followUpDays?: string;
+  follow_up_days?: string;
   consultationAmount?: string;
+  consultation_amount?: string;
   prescriptionData?: string;
+  prescription_data?: string;
 };
+
+type AppointmentHistoryRow = Record<string, unknown> & {
+  id?: number;
+  appointment_date?: string;
+  appointment_time?: string | null;
+  appointment_end_time?: string | null;
+  doctor?: string | null;
+  department?: string | null;
+  status?: string | null;
+};
+
+const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "History", "Consultation Form"];
 
 function text(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -40,18 +59,49 @@ function isVitalsCompleted(row: VitalsRow) {
   return Boolean(row.vitals_id || row.vitals_status);
 }
 
+function patientName(row: Record<string, unknown>) {
+  return text(row, ["registration_patient_name", "appointment_patient_name", "patient_name", "patient_details", "patientDetails"]);
+}
+
+function display(value: string) {
+  return value || "-";
+}
+
+function formatDisplayDate(value: string) {
+  const dateText = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return value;
+  const [year, month, day] = dateText.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(year, month - 1, day));
+}
+
+function formatDisplayTime(value: string) {
+  const [hoursText, minutesText = "00"] = value.split(":");
+  const date = new Date();
+  date.setHours(Number(hoursText), Number(minutesText), 0, 0);
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
+}
+
 export default function DoctorConsultationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
 
-  const [activeTab, setActiveTab] = useState<TabType>("Vitals");
+  const [queueTab, setQueueTab] = useState<QueueTab>("Vitals");
+  const [detailTab, setDetailTab] = useState<DetailTab>("Patient Details");
   const [doctorsList, setDoctorsList] = useState<{ name: string }[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
 
   const [vitalsRows, setVitalsRows] = useState<VitalsRow[]>([]);
   const [consultationRows, setConsultationRows] = useState<ConsultationRow[]>([]);
+  const [selectedPatientRow, setSelectedPatientRow] = useState<VitalsRow | null>(null);
+  const [historyRows, setHistoryRows] = useState<AppointmentHistoryRow[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -100,7 +150,7 @@ export default function DoctorConsultationPage() {
         vUrl.searchParams.set("doctor", "all");
       }
 
-      const cUrl = new URL(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation`, window.location.origin);
+      const cUrl = new URL(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation_entry`, window.location.origin);
 
       const [vRes, cRes] = await Promise.all([
         fetch(vUrl.toString(), { cache: "no-store" }),
@@ -124,6 +174,36 @@ export default function DoctorConsultationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hname, selectedDoctor]);
 
+  useEffect(() => {
+    async function loadHistory() {
+      if (!hname || !selectedPatientRow) {
+        setHistoryRows([]);
+        return;
+      }
+
+      const patientId = text(selectedPatientRow, ["appointment_patient_id", "registration_id", "registration_patient_id", "patient_id"]);
+      if (!patientId) {
+        setHistoryRows([]);
+        return;
+      }
+
+      setIsHistoryLoading(true);
+      try {
+        const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+        const data = (await response.json()) as { rows?: AppointmentHistoryRow[]; error?: string };
+        if (!response.ok) throw new Error(data.error ?? "Failed to load patient history.");
+        setHistoryRows(data.rows ?? []);
+      } catch (err) {
+        setHistoryRows([]);
+        setErrorMessage(err instanceof Error ? err.message : "Failed to load patient history.");
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    }
+
+    void loadHistory();
+  }, [hname, selectedPatientRow]);
+
   const displayedVitals = useMemo(() => {
     const sorted = [...vitalsRows].sort((a, b) => {
       // Completed first, then pending
@@ -144,27 +224,67 @@ export default function DoctorConsultationPage() {
   }, [vitalsRows]);
 
   const draftRows = useMemo(() => {
-    let rows = consultationRows.filter(r => r.status === "Draft");
+    let rows = consultationRows.filter(r => text(r, ["status"]) === "Draft");
     if (selectedDoctor) {
-      rows = rows.filter(r => r.doctor === selectedDoctor);
+      rows = rows.filter(r => text(r, ["doctor"]) === selectedDoctor);
     }
     return rows;
   }, [consultationRows, selectedDoctor]);
 
   const completedRows = useMemo(() => {
-    let rows = consultationRows.filter(r => r.status === "Completed");
+    let rows = consultationRows.filter(r => text(r, ["status"]) === "Completed");
     if (selectedDoctor) {
-      rows = rows.filter(r => r.doctor === selectedDoctor);
+      rows = rows.filter(r => text(r, ["doctor"]) === selectedDoctor);
     }
     return rows;
   }, [consultationRows, selectedDoctor]);
 
+  const patientDetailFields = useMemo(() => {
+    if (!selectedPatientRow) return [];
+    return [
+      ["Appointment Number", text(selectedPatientRow, ["appointment_id"])],
+      ["Patient Name", patientName(selectedPatientRow)],
+      ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
+      ["Gender", text(selectedPatientRow, ["gender"])],
+      ["Inactive Reason", text(selectedPatientRow, ["inactive_reason"])],
+      ["Profession", text(selectedPatientRow, ["profession"])],
+    ];
+  }, [selectedPatientRow]);
+
+  const vitalsDetailFields = useMemo(() => {
+    if (!selectedPatientRow) return [];
+    return [
+      ["Vitals Status", text(selectedPatientRow, ["vitals_status"]) || "Active"],
+      ["Age", text(selectedPatientRow, ["age"])],
+      ["Height (cm)", text(selectedPatientRow, ["height_cm"])],
+      ["Weight (kg)", text(selectedPatientRow, ["weight_kg"])],
+      ["BMI", text(selectedPatientRow, ["bmi"])],
+      ["Temperature", text(selectedPatientRow, ["temperature"])],
+      ["Pulse Rate", text(selectedPatientRow, ["pulse_rate"])],
+      ["Respiratory Rate", text(selectedPatientRow, ["respiratory_rate"])],
+      ["Systolic BP", text(selectedPatientRow, ["systolic_bp"])],
+      ["Diastolic BP", text(selectedPatientRow, ["diastolic_bp"])],
+      ["SpO2", text(selectedPatientRow, ["spo2"])],
+      ["Blood Sugar", text(selectedPatientRow, ["blood_sugar"])],
+      ["Remarks", text(selectedPatientRow, ["remarks"])],
+    ];
+  }, [selectedPatientRow]);
+
+  const previousHistoryRows = useMemo(() => {
+    const appointmentId = selectedPatientRow ? text(selectedPatientRow, ["appointment_id"]) : "";
+    return historyRows
+      .filter((row) => !appointmentId || String(row.id ?? "") !== appointmentId)
+      .sort((a, b) => `${text(b, ["appointment_date"])} ${text(b, ["appointment_time"])}`.localeCompare(`${text(a, ["appointment_date"])} ${text(a, ["appointment_time"])}`));
+  }, [historyRows, selectedPatientRow]);
+
   const handleVitalsClick = (row: VitalsRow) => {
-    const patientName = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+    const selectedName = patientName(row);
+    setSelectedPatientRow(row);
+    setDetailTab("Patient Details");
     setEditingRecordId(null);
     setFormValues({
-      tokenNumber: "",
-      patientDetails: patientName,
+      tokenNumber: text(row, ["appointment_id"]),
+      patientDetails: selectedName,
       diagnosisName: "",
       symptoms: "",
       remarks: "",
@@ -177,16 +297,25 @@ export default function DoctorConsultationPage() {
   };
 
   const handleConsultationClick = (row: ConsultationRow) => {
+    const tokenNumber = text(row, ["tokenNumber", "token_number"]);
+    const selectedName = text(row, ["patientDetails", "patient_details"]);
+    const matchedPatient = vitalsRows.find((vitalsRow) =>
+      (tokenNumber && text(vitalsRow, ["appointment_id"]) === tokenNumber) ||
+      (selectedName && patientName(vitalsRow) === selectedName)
+    );
+
+    setSelectedPatientRow(matchedPatient ?? { appointment_id: tokenNumber, appointment_patient_name: selectedName });
+    setDetailTab("Consultation Form");
     setEditingRecordId(row.id);
     setFormValues({
-      tokenNumber: row.tokenNumber || "",
-      patientDetails: row.patientDetails || "",
-      diagnosisName: row.diagnosisName || "",
-      symptoms: row.symptoms || "",
-      remarks: row.remarks || "",
-      followUpDays: row.followUpDays || "",
-      consultationAmount: row.consultationAmount || "",
-      prescriptionData: row.prescriptionData || "",
+      tokenNumber,
+      patientDetails: selectedName,
+      diagnosisName: text(row, ["diagnosisName", "diagnosis_name"]),
+      symptoms: text(row, ["symptoms"]),
+      remarks: text(row, ["remarks"]),
+      followUpDays: text(row, ["followUpDays", "follow_up_days"]),
+      consultationAmount: text(row, ["consultationAmount", "consultation_amount"]),
+      prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -219,7 +348,7 @@ export default function DoctorConsultationPage() {
         }
       };
 
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation`, {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation_entry`, {
         method: editingRecordId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -243,9 +372,9 @@ export default function DoctorConsultationPage() {
 
       // Switch tab automatically based on save action
       if (status === "Draft") {
-        setActiveTab("Draft");
+        setQueueTab("Draft");
       } else {
-        setActiveTab("Completed");
+        setQueueTab("Completed");
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save.");
@@ -278,12 +407,12 @@ export default function DoctorConsultationPage() {
         </div>
 
         <div className="flex shrink-0 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-          {(["Vitals", "Draft", "Completed"] as TabType[]).map((tab) => (
+          {(["Vitals", "Draft", "Completed"] as QueueTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition ${activeTab === tab
+              onClick={() => setQueueTab(tab)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition ${queueTab === tab
                 ? "bg-white text-gray-900 shadow-xs dark:bg-gray-700 dark:text-white"
                 : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 }`}
@@ -296,7 +425,7 @@ export default function DoctorConsultationPage() {
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {isLoading ? (
             <div className="text-center text-sm text-gray-500 p-4">Loading...</div>
-          ) : activeTab === "Vitals" ? (
+          ) : queueTab === "Vitals" ? (
             displayedVitals.length === 0 ? (
               <div className="text-center text-sm text-gray-500 p-4">No vitals found.</div>
             ) : (
@@ -321,7 +450,7 @@ export default function DoctorConsultationPage() {
                 </button>
               ))
             )
-          ) : activeTab === "Draft" ? (
+          ) : queueTab === "Draft" ? (
             draftRows.length === 0 ? (
               <div className="text-center text-sm text-gray-500 p-4">No drafts.</div>
             ) : (
@@ -358,51 +487,120 @@ export default function DoctorConsultationPage() {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="col-span-1 rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 lg:col-span-9 xl:col-span-9">
-        <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-800">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Consultation Form</h3>
+      <div className="col-span-1 flex flex-col h-[calc(100vh-8rem)] rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 lg:col-span-9 xl:col-span-9 overflow-hidden">
+        <div className="border-b border-gray-100 px-6 pt-4 dark:border-gray-800 flex gap-6 shrink-0">
+          {DETAIL_TABS.map(tab => (
+            <button
+              key={tab}
+              onClick={() => setDetailTab(tab)}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${detailTab === tab
+                ? "border-brand-500 text-brand-500 dark:border-brand-400 dark:text-brand-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
 
-        <div className="p-6">
-          {successMessage && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
-          {errorMessage && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
-
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Token Number</label>
-                <input type="text" value={formValues.tokenNumber} onChange={e => updateFormValue("tokenNumber", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Details</label>
-                <input type="text" value={formValues.patientDetails} onChange={e => updateFormValue("patientDetails", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
-                <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
-                <input type="text" value={formValues.symptoms} onChange={e => updateFormValue("symptoms", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
-                <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
-                <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Consultation Amount</label>
-                <input type="number" min="0" value={formValues.consultationAmount} onChange={e => updateFormValue("consultationAmount", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-              </div>
+        <div className="p-6 flex-1 overflow-y-auto">
+          {/* Tabs Content */}
+          {detailTab !== "Consultation Form" && (
+            <div className="mb-8 rounded-xl border border-gray-100 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-800/20">
+              {detailTab === "Patient Details" && (
+                selectedPatientRow ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {patientDetailFields.map(([label, val]) => (
+                      <div key={label as string}>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">{label as string}</label>
+                        <div className="flex min-h-[2.5rem] w-full items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
+                          {display(val as string)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Please select a patient from the queue to view details.</div>
+                )
+              )}
+              {detailTab === "Vitals" && (
+                selectedPatientRow ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {vitalsDetailFields.map(([label, val]) => (
+                      <div key={label as string}>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">{label as string}</label>
+                        <div className="flex min-h-[2.5rem] w-full items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
+                          {display(val as string)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Please select a patient from the queue to view vitals.</div>
+                )
+              )}
+              {detailTab === "History" && (
+                selectedPatientRow ? (
+                  isHistoryLoading ? (
+                    <div className="text-sm text-gray-500">Loading history...</div>
+                  ) : previousHistoryRows.length > 0 ? (
+                    <div className="space-y-3">
+                      {previousHistoryRows.map((row) => (
+                        <div key={row.id || Math.random()} className="flex gap-4 items-center text-sm border border-gray-100 bg-white p-3 rounded-lg shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                          <div className="font-medium whitespace-nowrap text-gray-900 dark:text-gray-100">{formatDisplayDate(text(row, ["appointment_date"]))} {text(row, ["appointment_time"]) ? formatDisplayTime(text(row, ["appointment_time"])) : ""}</div>
+                          <div className="flex-1 text-gray-700 dark:text-gray-300">{text(row, ["doctor"]) || "Unknown Doctor"}</div>
+                          <div className="text-gray-500 whitespace-nowrap flex-1">{text(row, ["department"])}</div>
+                          <div className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 font-medium dark:bg-gray-800 dark:text-gray-300">{text(row, ["status"]) || "Completed"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">New patient - no previous visits found in this hospital.</div>
+                  )
+                ) : (
+                  <div className="text-sm text-gray-500">Please select a patient from the queue to view history.</div>
+                )
+              )}
             </div>
+          )}
 
-            <PrescriptionTable
-              value={formValues.prescriptionData}
-              onChange={(val) => updateFormValue("prescriptionData", val)}
-            />
+          <form className="mt-6 flex flex-col gap-6" onSubmit={(e) => e.preventDefault()}>
+            {detailTab === "Consultation Form" && (
+              <div className="space-y-4">
+                {successMessage && <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
+                {errorMessage && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
+
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
+                    <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
+                    <input type="text" value={formValues.symptoms} onChange={e => updateFormValue("symptoms", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
+                    <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
+                    <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Consultation Amount</label>
+                    <input type="number" min="0" value={formValues.consultationAmount} onChange={e => updateFormValue("consultationAmount", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <PrescriptionTable
+                value={formValues.prescriptionData}
+                onChange={(val) => updateFormValue("prescriptionData", val)}
+              />
+            </div>
 
             <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-end">
               <button
