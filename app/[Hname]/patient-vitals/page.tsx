@@ -77,13 +77,17 @@ function isCompleted(row: VitalsRow) {
 export default function PatientVitalsPage() {
   const params = useParams();
   const hname = params?.Hname as string;
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    const offset = today.getTimezoneOffset() * 60000;
+    return new Date(today.getTime() - offset).toISOString().split("T")[0];
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<VitalsRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [departments, setDepartments] = useState<string[]>([]);
-  const [doctorsList, setDoctorsList] = useState<{name: string, department: string}[]>([]);
+  const [doctorsList, setDoctorsList] = useState<{ name: string, department: string }[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [loading, setLoading] = useState(false);
@@ -131,10 +135,10 @@ export default function PatientVitalsPage() {
         ]);
         const depData = await depRes.json();
         const docData = await docRes.json();
-        
+
         const deps = (depData.rows || []).map((r: any) => String(r.department_type || r.departmentType || r.department_name || r.name || r.code || "")).filter(Boolean);
         setDepartments(Array.from(new Set(deps)) as string[]);
-        
+
         const docs = (docData.rows || []).map((r: any) => ({
           name: String(r.doctor_consultant_name || r.doctorConsultantName || r.consultant_doctor_name || r.name || ""),
           department: String(r.clinic || r.department || r.department_type || r.departmentType || "")
@@ -148,7 +152,7 @@ export default function PatientVitalsPage() {
   }, [hname]);
 
   const filteredRows = useMemo(() => {
-    let result = rows;
+    let result = rows.filter(row => !!row.appointment_check_in_time);
     if (selectedDepartment) {
       result = result.filter((row) => text(row, ["department"]) === selectedDepartment);
     }
@@ -213,242 +217,244 @@ export default function PatientVitalsPage() {
   }
 
   return (
-      <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Patient Vitals</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Today&apos;s doctors, patients, and vitals entry.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => dateInputRef.current?.showPicker?.()}
-              className="flex h-11 min-w-[160px] items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-800"
-            >
-              <span>{dateLabel}</span>
-              <span className="text-xs text-gray-400">{date ? "Change" : "Choose"}</span>
-            </button>
-            <input
-              ref={dateInputRef}
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="sr-only"
-              aria-label="Select appointment date"
-            />
-          </div>
+    <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Patient Vitals</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Today&apos;s doctors, patients, and vitals entry.</p>
         </div>
-        <div className="p-4 sm:p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between gap-4">
-              <input
-                type="text"
-                placeholder="Search by patient or doctor name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-11 w-full max-w-md rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
-              />
-              <div className="flex flex-1 items-center gap-3 justify-end">
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => { setSelectedDepartment(e.target.value); setSelectedDoctor(""); }}
-                  className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
-                >
-                  <option value="">All Departments</option>
-                  {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <select
-                  value={selectedDoctor}
-                  onChange={(e) => setSelectedDoctor(e.target.value)}
-                  className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
-                >
-                  <option value="">All Doctors</option>
-                  {doctorsList
-                    .filter(d => !selectedDepartment || d.department === selectedDepartment)
-                    .map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                </select>
-              </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => dateInputRef.current?.showPicker?.()}
+            className="flex h-11 min-w-[160px] items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-800"
+          >
+            <span>{dateLabel}</span>
+            <span className="text-xs text-gray-400">{date ? "Change" : "Choose"}</span>
+          </button>
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="sr-only"
+            aria-label="Select appointment date"
+          />
+        </div>
+      </div>
+      <div className="p-4 sm:p-6">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <input
+              type="text"
+              placeholder="Search by patient or doctor name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-11 w-full max-w-md rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
+            />
+            <div className="flex flex-1 items-center gap-3 justify-end">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => { setSelectedDepartment(e.target.value); setSelectedDoctor(""); }}
+                className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
+              >
+                <option value="">All Departments</option>
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select
+                value={selectedDoctor}
+                onChange={(e) => setSelectedDoctor(e.target.value)}
+                className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
+              >
+                <option value="">All Doctors</option>
+                {doctorsList
+                  .filter(d => !selectedDepartment || d.department === selectedDepartment)
+                  .map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
             </div>
+          </div>
 
-            {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
-            {error ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{error}</div> : null}
+          {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
+          {error ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{error}</div> : null}
 
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Patient</th>
-                    <th className="px-4 py-3 text-left">Doctor</th>
-                    <th className="px-4 py-3 text-left">Type</th>
-                    <th className="px-4 py-3 text-left">Time</th>
-                    <th className="px-4 py-3 text-left">Slot</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loading ? (
-                    <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>Loading...</td></tr>
-                  ) : filteredRows.length === 0 ? (
-                    <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>No patients found.</td></tr>
-                  ) : filteredRows.map((row) => {
-                    const done = isCompleted(row);
-                    const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
-                    return (
-                      <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-800">{name}</div>
-                          <div className="text-xs text-gray-500">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
-                        <td className="px-4 py-3 text-gray-600">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {text(row, ["appointment_time"])
-                            ? formatTimeRange(text(row, ["appointment_time"]), text(row, ["appointment_end_time"]) || null)
-                            : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
-                        <td className="px-4 py-3">
-                          {done ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
-                              <CheckCircleIcon className="h-4 w-4" />
-                              Vitals completed
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-500">Pending</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedRow(row);
-                                setForm({
-                                  patientId: text(row, ["registration_id", "appointment_patient_id", "patient_id"]),
-                                  patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-                                  mobile: text(row, ["mobile", "patient_phone"]),
-                                  dob: text(row, ["registration_dob", "dob"]).slice(0, 10),
-                                  age: text(row, ["age"]),
-                                  gender: text(row, ["gender"]),
-                                  heightCm: text(row, ["height_cm"]),
-                                  weightKg: text(row, ["weight_kg"]),
-                                  temperature: text(row, ["temperature"]),
-                                  pulseRate: text(row, ["pulse_rate"]),
-                                  respiratoryRate: text(row, ["respiratory_rate"]),
-                                  systolicBp: text(row, ["systolic_bp"]),
-                                  diastolicBp: text(row, ["diastolic_bp"]),
-                                  spo2: text(row, ["spo2"]),
-                                  bloodSugar: text(row, ["blood_sugar"]),
-                                  remarks: text(row, ["remarks"]),
-                                  status: text(row, ["vitals_status"]) || "Active",
-                                });
-                              }}
-                              className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                            >
-                              {done ? "View / Update" : "Enter Vitals"}
-                            </button>
-                            {done ? <CheckCircleIcon className="h-5 w-5 text-success-500" /> : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left">Patient</th>
+                  <th className="px-4 py-3 text-left">Doctor</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-left">Time</th>
+                  <th className="px-4 py-3 text-left">Slot</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>Loading...</td></tr>
+                ) : filteredRows.length === 0 ? (
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>No patients found.</td></tr>
+                ) : filteredRows.map((row) => {
+                  const done = isCompleted(row);
+                  const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+                  return (
+                    <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-800">{name}</div>
+                        <div className="text-xs text-gray-500">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
+                      <td className="px-4 py-3 text-gray-600">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</td>
+                      <td className="px-4 py-3 text-gray-600">{text(row, ["appointment_date"])}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {text(row, ["appointment_time"])
+                          ? formatTimeRange(text(row, ["appointment_time"]), text(row, ["appointment_end_time"]) || null)
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
+                      <td className="px-4 py-3">
+                        {done ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
+                            <CheckCircleIcon className="h-4 w-4" />
+                            Vitals completed
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRow(row);
+                              setForm({
+                                patientId: text(row, ["registration_id", "appointment_patient_id", "patient_id"]),
+                                patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
+                                mobile: text(row, ["mobile", "patient_phone"]),
+                                dob: text(row, ["registration_dob", "dob"]).slice(0, 10),
+                                age: text(row, ["age"]),
+                                gender: text(row, ["gender"]),
+                                heightCm: text(row, ["height_cm"]),
+                                weightKg: text(row, ["weight_kg"]),
+                                temperature: text(row, ["temperature"]),
+                                pulseRate: text(row, ["pulse_rate"]),
+                                respiratoryRate: text(row, ["respiratory_rate"]),
+                                systolicBp: text(row, ["systolic_bp"]),
+                                diastolicBp: text(row, ["diastolic_bp"]),
+                                spo2: text(row, ["spo2"]),
+                                bloodSugar: text(row, ["blood_sugar"]),
+                                remarks: text(row, ["remarks"]),
+                                status: text(row, ["vitals_status"]) || "Active",
+                              });
+                            }}
+                            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+                          >
+                            {done ? "View / Update" : "Enter Vitals"}
+                          </button>
+                          {done ? <CheckCircleIcon className="h-5 w-5 text-success-500" /> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-            {selectedRow ? (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-                  <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
-                    <div>
-                      <div className="text-lg font-semibold text-gray-800 dark:text-white/90">{selectedSummary?.name}</div>
-                      <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {selectedSummary?.type}
-                        {selectedSummary?.time ? ` • ${selectedSummary.time}` : ""}
-                        {selectedSummary?.slot ? ` • ${selectedSummary.slot} min` : ""}
-                      </div>
+          {selectedRow ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+                <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
+                  <div>
+                    <div className="text-lg font-semibold text-gray-800 dark:text-white/90">{selectedSummary?.name}</div>
+                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      {selectedSummary?.type}
+                      {selectedSummary?.time ? ` • ${selectedSummary.time}` : ""}
+                      {selectedSummary?.slot ? ` • ${selectedSummary.slot} min` : ""}
                     </div>
-                    <button type="button" onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-700">
-                      <span className="sr-only">Close</span>
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                  </div>
+                  <button type="button" onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-700">
+                    <span className="sr-only">Close</span>
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  {[
+                    ["patientName", "Patient Name", "text"],
+                    ["mobile", "Mobile Number", "text"],
+                    ["dob", "DOB", "date"],
+                    ["age", "Age", "text"],
+                    ["gender", "Gender", "select"],
+                    ["heightCm", "Height (cm)", "text"],
+                    ["weightKg", "Weight (kg)", "text"],
+                    ["temperature", "Temperature (°C/F)", "text"],
+                    ["pulseRate", "Pulse Rate (BPM)", "text"],
+                    ["respiratoryRate", "Respiratory Rate", "text"],
+                    ["systolicBp", "Systolic BP", "text"],
+                    ["diastolicBp", "Diastolic BP", "text"],
+                    ["spo2", "SpO2 (%)", "text"],
+                    ["bloodSugar", "Blood Sugar (Optional)", "text"],
+                    ["remarks", "Remarks", "textarea"],
+                    ["status", "Status", "select"],
+                  ].map(([key, label, type]) => (
+                    <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                      {type === "select" ? (
+                        <select
+                          value={form[key as keyof FormState]}
+                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                          className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
+                        >
+                          {key === "gender"
+                            ? ["", "Male", "Female", "Other"].map((option) => (
+                              <option key={option} value={option}>
+                                {option || "Select Gender"}
+                              </option>
+                            ))
+                            : ["Active", "Inactive"].map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                        </select>
+                      ) : type === "textarea" ? (
+                        <textarea
+                          value={form[key as keyof FormState]}
+                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                          rows={4}
+                          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800"
+                        />
+                      ) : (
+                        <input
+                          type={type}
+                          value={form[key as keyof FormState]}
+                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                          className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4">
+                    <button type="submit" disabled={saving} className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition">
+                      {saving ? "Saving..." : "Save Vitals"}
+                    </button>
+                    <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                      Cancel
                     </button>
                   </div>
-
-                  <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                    {[
-                      ["patientName", "Patient Name", "text"],
-                      ["mobile", "Mobile Number", "text"],
-                      ["dob", "DOB", "date"],
-                      ["age", "Age", "text"],
-                      ["gender", "Gender", "select"],
-                      ["heightCm", "Height (cm)", "text"],
-                      ["weightKg", "Weight (kg)", "text"],
-                      ["temperature", "Temperature (°C/F)", "text"],
-                      ["pulseRate", "Pulse Rate (BPM)", "text"],
-                      ["respiratoryRate", "Respiratory Rate", "text"],
-                      ["systolicBp", "Systolic BP", "text"],
-                      ["diastolicBp", "Diastolic BP", "text"],
-                      ["spo2", "SpO2 (%)", "text"],
-                      ["bloodSugar", "Blood Sugar (Optional)", "text"],
-                      ["remarks", "Remarks", "textarea"],
-                      ["status", "Status", "select"],
-                    ].map(([key, label, type]) => (
-                      <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-                        {type === "select" ? (
-                          <select
-                            value={form[key as keyof FormState]}
-                            onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                            className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                          >
-                            {key === "gender"
-                              ? ["", "Male", "Female", "Other"].map((option) => (
-                                  <option key={option} value={option}>
-                                    {option || "Select Gender"}
-                                  </option>
-                                ))
-                              : ["Active", "Inactive"].map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                          </select>
-                        ) : type === "textarea" ? (
-                          <textarea
-                            value={form[key as keyof FormState]}
-                            onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                            rows={4}
-                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800"
-                          />
-                        ) : (
-                          <input
-                            type={type}
-                            value={form[key as keyof FormState]}
-                            onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                            className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                          />
-                        )}
-                      </div>
-                    ))}
-
-                    <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4">
-                      <button type="submit" disabled={saving} className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition">
-                        {saving ? "Saving..." : "Save Vitals"}
-                      </button>
-                      <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                </form>
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
-      </section>
+      </div>
+    </section>
   );
 }

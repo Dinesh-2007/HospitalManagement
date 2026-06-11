@@ -195,6 +195,8 @@ export default function PatientRegistrationPage() {
       cardTitle="Patient Registration"
       description=""
       fields={patientRegistrationFields}
+      backButtonText="Back to Check-in"
+      backHref={`/${hname}/checkin`}
     />
   );
 }
