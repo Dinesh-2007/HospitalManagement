@@ -144,6 +144,7 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENTS_TABLE)} ADD COLUMN IF NOT EXISTS dob DATE`);
 }
 
 function calculateBmi(heightCm: number | null, weightKg: number | null) {
@@ -215,6 +216,7 @@ export async function GET(
                 p.patient_id AS registration_patient_id,
                 p.patient_name AS registration_patient_name,
                 p.mobile,
+                p.dob AS registration_dob,
                 a.patient_type,
                 p.address,
                 p.country,
@@ -271,7 +273,7 @@ export async function GET(
                   NULLIF(p.id::text, '')
                 )
               WHERE a.appointment_date = $1
-                AND a.doctor = $2
+                AND ($2 = 'all' OR a.doctor = $2)
                 AND a.status IN ('Scheduled', 'Rescheduled')
               ORDER BY a.appointment_time NULLS LAST, a.created_at DESC
             )
@@ -301,6 +303,7 @@ export async function GET(
             p.patient_id AS registration_patient_id,
             p.patient_name AS registration_patient_name,
             p.mobile,
+            p.dob AS registration_dob,
             a.patient_type,
             p.address,
             p.country,
@@ -356,7 +359,7 @@ export async function GET(
               NULLIF(p.patient_id, ''),
               NULLIF(p.id::text, '')
             )
-          WHERE a.doctor = $1
+          WHERE ($1 = 'all' OR a.doctor = $1)
             AND a.status IN ('Scheduled', 'Rescheduled')
           ORDER BY a.appointment_date DESC, a.appointment_time NULLS LAST, a.created_at DESC
         )
