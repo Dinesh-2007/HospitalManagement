@@ -1,56 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { PrescriptionTable } from "./prescription-table";
 
-import { CheckCircleIcon } from "../../../components/icons";
+type TabType = "Vitals" | "Draft" | "Completed";
 
-type DoctorRow = { doctor?: string; first_time?: string | null; total?: number };
-type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null };
-
-type FormState = {
-  patientId: string;
-  patientName: string;
-  dob: string;
-  age: string;
-  gender: string;
-  heightCm: string;
-  weightKg: string;
-  temperature: string;
-  pulseRate: string;
-  respiratoryRate: string;
-  systolicBp: string;
-  diastolicBp: string;
-  spo2: string;
-  bloodSugar: string;
-  remarks: string;
-  status: string;
-  mobile: string;
+type VitalsRow = Record<string, unknown> & {
+  vitals_id?: number | null;
+  vitals_status?: string | null;
+  registration_patient_name?: string | null;
+  appointment_patient_name?: string | null;
+  patient_name?: string | null;
+  appointment_time?: string | null;
 };
 
-function emptyForm(): FormState {
-  return {
-    patientId: "",
-    patientName: "",
-    dob: "",
-    age: "",
-    gender: "",
-    heightCm: "",
-    weightKg: "",
-    temperature: "",
-    pulseRate: "",
-    respiratoryRate: "",
-    systolicBp: "",
-    diastolicBp: "",
-    spo2: "",
-    bloodSugar: "",
-    remarks: "",
-    status: "Active",
-    mobile: "",
-  };
-}
+type ConsultationRow = Record<string, unknown> & {
+  id: number;
+  status?: string;
+  tokenNumber?: string;
+  patientDetails?: string;
+  diagnosisName?: string;
+  symptoms?: string;
+  remarks?: string;
+  followUpDays?: string;
+  consultationAmount?: string;
+  prescriptionData?: string;
+};
 
-function text(row: VitalsRow, keys: string[]) {
+function text(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
     if (value !== null && value !== undefined && String(value).trim()) return String(value).trim();
@@ -58,116 +36,103 @@ function text(row: VitalsRow, keys: string[]) {
   return "";
 }
 
-function formatDisplayTime(value: string) {
-  const [hoursText, minutesText = "00"] = value.split(":");
-  const date = new Date();
-  date.setHours(Number(hoursText), Number(minutesText), 0, 0);
-  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
-}
-
-function formatTimeRange(start: string, end?: string | null) {
-  const endText = end ? formatDisplayTime(end) : "";
-  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
-}
-
-function isCompleted(row: VitalsRow) {
+function isVitalsCompleted(row: VitalsRow) {
   return Boolean(row.vitals_id || row.vitals_status);
 }
 
-export default function PatientVitalsPage() {
+export default function DoctorConsultationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
-  const [date, setDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    return new Date(today.getTime() - offset).toISOString().split("T")[0];
-  });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [rows, setRows] = useState<VitalsRow[]>([]);
-  const [selectedRow, setSelectedRow] = useState<VitalsRow | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [departments, setDepartments] = useState<string[]>([]);
-  const [doctorsList, setDoctorsList] = useState<{ name: string, department: string }[]>([]);
-  const [selectedDepartment, setSelectedDepartment] = useState("");
+
+  const [activeTab, setActiveTab] = useState<TabType>("Vitals");
+  const [doctorsList, setDoctorsList] = useState<{ name: string }[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const dateInputRef = useRef<HTMLInputElement | null>(null);
 
-  const dateLabel = useMemo(() => {
-    if (!date) return "Select date";
-    const [year, month, day] = date.split("-");
-    return `${day}-${month}-${year}`;
-  }, [date]);
+  const [vitalsRows, setVitalsRows] = useState<VitalsRow[]>([]);
+  const [consultationRows, setConsultationRows] = useState<ConsultationRow[]>([]);
 
-  const buildVitalsUrl = useCallback((selectedDate: string, selectedDoctorName: string) => {
-    const url = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
-    if (selectedDate) url.searchParams.set("date", selectedDate);
-    if (selectedDoctorName) url.searchParams.set("doctor", selectedDoctorName);
-    return url.toString();
-  }, [hname]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({
+    tokenNumber: "",
+    patientDetails: "",
+    diagnosisName: "",
+    symptoms: "",
+    remarks: "",
+    followUpDays: "",
+    consultationAmount: "",
+    prescriptionData: "",
+  });
+
+  // Fetch doctors on mount
   useEffect(() => {
-    async function loadPatients() {
-      if (!hname) return;
-      setLoading(true);
-      try {
-        const response = await fetch(buildVitalsUrl(date, "all"), { cache: "no-store" });
-        const data = (await response.json()) as { rows?: VitalsRow[]; error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Failed to load patients.");
-        setRows(data.rows ?? []);
-      } finally {
-        setLoading(false);
-      }
-    }
-    void loadPatients().catch((err) => setError(err instanceof Error ? err.message : "Failed to load patients."));
-  }, [buildVitalsUrl, date, hname]);
-
-  useEffect(() => {
-    async function loadOptions() {
+    async function fetchDoctors() {
       if (!hname) return;
       try {
-        const [depRes, docRes] = await Promise.all([
-          fetch(`/api/${encodeURIComponent(hname)}/forms/department_master`, { cache: "no-store" }),
-          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" })
-        ]);
-        const depData = await depRes.json();
-        const docData = await docRes.json();
-
-        const deps = (depData.rows || []).map((r: any) => String(r.department_type || r.departmentType || r.department_name || r.name || r.code || "")).filter(Boolean);
-        setDepartments(Array.from(new Set(deps)) as string[]);
-
-        const docs = (docData.rows || []).map((r: any) => ({
+        const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" });
+        const data = await response.json();
+        const docs = (data.rows || []).map((r: any) => ({
           name: String(r.doctor_consultant_name || r.doctorConsultantName || r.consultant_doctor_name || r.name || ""),
-          department: String(r.clinic || r.department || r.department_type || r.departmentType || "")
         })).filter((r: any) => r.name);
         setDoctorsList(docs);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load doctors", err);
       }
     }
-    void loadOptions();
+    void fetchDoctors();
   }, [hname]);
 
-  const filteredRows = useMemo(() => {
-    let result = rows.filter(row => !!row.appointment_check_in_time);
-    if (selectedDepartment) {
-      result = result.filter((row) => text(row, ["department"]) === selectedDepartment);
+  // Load Data
+  const loadData = async () => {
+    if (!hname) return;
+    setIsLoading(true);
+    setErrorMessage("");
+    try {
+      // Fetch Vitals (we'll fetch for the selected doctor if set, or all, but the API handles "all" if doctor is "")
+      const vUrl = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
+      if (selectedDoctor) {
+        vUrl.searchParams.set("doctor", selectedDoctor);
+      } else {
+        vUrl.searchParams.set("doctor", "all");
+      }
+
+      const cUrl = new URL(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation`, window.location.origin);
+
+      const [vRes, cRes] = await Promise.all([
+        fetch(vUrl.toString(), { cache: "no-store" }),
+        fetch(cUrl.toString(), { cache: "no-store" })
+      ]);
+
+      const vData = await vRes.json();
+      const cData = await cRes.json();
+
+      setVitalsRows(vData.rows || []);
+      setConsultationRows(cData.rows || []);
+    } catch (err) {
+      setErrorMessage("Failed to load records.");
+    } finally {
+      setIsLoading(false);
     }
-    if (selectedDoctor) {
-      result = result.filter((row) => text(row, ["doctor"]) === selectedDoctor);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((row) => {
-        const pName = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]).toLowerCase();
-        const dName = text(row, ["doctor"]).toLowerCase();
-        return pName.includes(q) || dName.includes(q);
-      });
-    }
-    result = [...result].sort((a, b) => {
+  };
+
+  useEffect(() => {
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hname, selectedDoctor]);
+
+  const displayedVitals = useMemo(() => {
+    const sorted = [...vitalsRows].sort((a, b) => {
+      // Completed first, then pending
+      const aDone = isVitalsCompleted(a) ? 1 : 0;
+      const bDone = isVitalsCompleted(b) ? 1 : 0;
+      if (aDone !== bDone) {
+        return bDone - aDone; // 1 goes first
+      }
+      // Then by time
       const timeA = text(a, ["appointment_time"]);
       const timeB = text(b, ["appointment_time"]);
       if (!timeA && !timeB) return 0;
@@ -175,268 +140,308 @@ export default function PatientVitalsPage() {
       if (!timeB) return -1;
       return timeA.localeCompare(timeB);
     });
-    return result;
-  }, [rows, searchQuery, selectedDepartment, selectedDoctor]);
+    return sorted;
+  }, [vitalsRows]);
 
-  const selectedSummary = useMemo(() => {
-    if (!selectedRow) return null;
-    return {
-      name: text(selectedRow, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-      type: text(selectedRow, ["patient_type"]) || (selectedRow.appointment_id ? "Appointment" : "Walk in"),
-      time: text(selectedRow, ["appointment_time"]),
-      endTime: text(selectedRow, ["appointment_end_time"]),
-      slot: text(selectedRow, ["time_slot_minutes"]),
-      completed: isCompleted(selectedRow),
-    };
-  }, [selectedRow]);
-
-  async function saveVitals(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setMessage("");
-    setError("");
-    try {
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/vitals`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Failed to save vitals.");
-      setMessage("Vitals saved.");
-      setSelectedRow(null);
-      setForm(emptyForm());
-      const refreshed = await fetch(buildVitalsUrl(date, "all"), { cache: "no-store" });
-      const refreshedData = (await refreshed.json()) as { rows?: VitalsRow[] };
-      setRows(refreshedData.rows ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save vitals.");
-    } finally {
-      setSaving(false);
+  const draftRows = useMemo(() => {
+    let rows = consultationRows.filter(r => r.status === "Draft");
+    if (selectedDoctor) {
+      rows = rows.filter(r => r.doctor === selectedDoctor);
     }
-  }
+    return rows;
+  }, [consultationRows, selectedDoctor]);
+
+  const completedRows = useMemo(() => {
+    let rows = consultationRows.filter(r => r.status === "Completed");
+    if (selectedDoctor) {
+      rows = rows.filter(r => r.doctor === selectedDoctor);
+    }
+    return rows;
+  }, [consultationRows, selectedDoctor]);
+
+  const handleVitalsClick = (row: VitalsRow) => {
+    const patientName = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+    setEditingRecordId(null);
+    setFormValues({
+      tokenNumber: "",
+      patientDetails: patientName,
+      diagnosisName: "",
+      symptoms: "",
+      remarks: "",
+      followUpDays: "",
+      consultationAmount: "",
+      prescriptionData: "",
+    });
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
+
+  const handleConsultationClick = (row: ConsultationRow) => {
+    setEditingRecordId(row.id);
+    setFormValues({
+      tokenNumber: row.tokenNumber || "",
+      patientDetails: row.patientDetails || "",
+      diagnosisName: row.diagnosisName || "",
+      symptoms: row.symptoms || "",
+      remarks: row.remarks || "",
+      followUpDays: row.followUpDays || "",
+      consultationAmount: row.consultationAmount || "",
+      prescriptionData: row.prescriptionData || "",
+    });
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
+
+  const saveForm = async (status: "Draft" | "Completed") => {
+    setIsSubmitting(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const payload = {
+        id: editingRecordId,
+        cardTitle: "Doctor Consultation Entry",
+        fields: [
+          { id: "status", type: "text" },
+          { id: "doctor", type: "text" },
+          { id: "tokenNumber", type: "text" },
+          { id: "patientDetails", type: "text" },
+          { id: "diagnosisName", type: "text" },
+          { id: "symptoms", type: "text" },
+          { id: "remarks", type: "textarea" },
+          { id: "followUpDays", type: "number" },
+          { id: "consultationAmount", type: "number" },
+          { id: "prescriptionData", type: "textarea" }
+        ],
+        values: {
+          ...formValues,
+          status,
+          doctor: selectedDoctor,
+        }
+      };
+
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation`, {
+        method: editingRecordId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to save.");
+
+      setSuccessMessage(`Consultation saved as ${status}.`);
+      setFormValues({
+        tokenNumber: "",
+        patientDetails: "",
+        diagnosisName: "",
+        symptoms: "",
+        remarks: "",
+        followUpDays: "",
+        consultationAmount: "",
+        prescriptionData: "",
+      });
+      setEditingRecordId(null);
+      void loadData();
+
+      // Switch tab automatically based on save action
+      if (status === "Draft") {
+        setActiveTab("Draft");
+      } else {
+        setActiveTab("Completed");
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const updateFormValue = (key: string, value: string) => {
+    setFormValues(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-      <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* Left Panel */}
+      <div className="col-span-1 flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900/50 lg:col-span-3 xl:col-span-3 h-[calc(100vh-8rem)] overflow-hidden">
+
         <div>
-          <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Doctor Consultation</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Today&apos;s doctors, patients, and vitals entry.</p>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Doctor</label>
+          <select
+            value={selectedDoctor}
+            onChange={(e) => setSelectedDoctor(e.target.value)}
+            className="mt-1 block h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:text-white"
+          >
+            <option value="">All Doctors</option>
+            {doctorsList.map((d) => (
+              <option key={d.name} value={d.name}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex shrink-0 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+          {(["Vitals", "Draft", "Completed"] as TabType[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition ${activeTab === tab
+                ? "bg-white text-gray-900 shadow-xs dark:bg-gray-700 dark:text-white"
+                : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          {isLoading ? (
+            <div className="text-center text-sm text-gray-500 p-4">Loading...</div>
+          ) : activeTab === "Vitals" ? (
+            displayedVitals.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 p-4">No vitals found.</div>
+            ) : (
+              displayedVitals.map((row, i) => (
+                <button
+                  key={String(row.vitals_id || row.appointment_id || i)}
+                  type="button"
+                  onClick={() => handleVitalsClick(row)}
+                  className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                      {text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"])}
+                    </span>
+                    {isVitalsCompleted(row) ? (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Completed</span>
+                    ) : (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pending</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500">{text(row, ["appointment_time"]) || "Walk-in"}</div>
+                </button>
+              ))
+            )
+          ) : activeTab === "Draft" ? (
+            draftRows.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 p-4">No drafts.</div>
+            ) : (
+              draftRows.map(row => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => handleConsultationClick(row)}
+                  className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
+                >
+                  <span className="text-sm font-semibold text-gray-800 dark:text-white/90">{row.patientDetails || "Unknown Patient"}</span>
+                  <div className="text-xs text-gray-500">Token: {row.tokenNumber || "N/A"}</div>
+                </button>
+              ))
+            )
+          ) : (
+            completedRows.length === 0 ? (
+              <div className="text-center text-sm text-gray-500 p-4">No completed consultations.</div>
+            ) : (
+              completedRows.map(row => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => handleConsultationClick(row)}
+                  className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
+                >
+                  <span className="text-sm font-semibold text-gray-800 dark:text-white/90">{row.patientDetails || "Unknown Patient"}</span>
+                  <div className="text-xs text-gray-500">Diagnosis: {row.diagnosisName || "N/A"}</div>
+                </button>
+              ))
+            )
+          )}
         </div>
       </div>
-      <div className="p-4 sm:p-6">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between gap-4">
-            <input
-              type="text"
-              placeholder="Search by patient or doctor name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-11 w-full max-w-md rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
-            />
-            <div className="flex flex-1 items-center gap-3 justify-end">
-              <select
-                value={selectedDepartment}
-                onChange={(e) => { setSelectedDepartment(e.target.value); setSelectedDoctor(""); }}
-                className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
-              >
-                <option value="">All Departments</option>
-                {departments.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <select
-                value={selectedDoctor}
-                onChange={(e) => setSelectedDoctor(e.target.value)}
-                className="h-11 w-full max-w-[200px] rounded-lg border border-gray-300 bg-white px-4 text-sm"
-              >
-                <option value="">All Doctors</option>
-                {doctorsList
-                  .filter(d => !selectedDepartment || d.department === selectedDepartment)
-                  .map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-              </select>
-            </div>
-          </div>
 
-          {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
-          {error ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{error}</div> : null}
+      {/* Right Panel - Form */}
+      <div className="col-span-1 rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 lg:col-span-9 xl:col-span-9">
+        <div className="border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Consultation Form</h3>
+        </div>
 
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left">Patient</th>
-                  <th className="px-4 py-3 text-left">Doctor</th>
-                  <th className="px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-left">Time</th>
-                  <th className="px-4 py-3 text-left">Slot</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>Loading...</td></tr>
-                ) : filteredRows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>No patients found.</td></tr>
-                ) : filteredRows.map((row) => {
-                  const done = isCompleted(row);
-                  const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
-                  return (
-                    <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">{name}</div>
-                        <div className="text-xs text-gray-500">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
-                      <td className="px-4 py-3 text-gray-600">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</td>
-                      <td className="px-4 py-3 text-gray-600">{text(row, ["appointment_date"])}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {text(row, ["appointment_time"])
-                          ? formatTimeRange(text(row, ["appointment_time"]), text(row, ["appointment_end_time"]) || null)
-                          : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
-                      <td className="px-4 py-3">
-                        {done ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
-                            <CheckCircleIcon className="h-4 w-4" />
-                            Vitals completed
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-500">Pending</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRow(row);
-                              setForm({
-                                patientId: text(row, ["registration_id", "appointment_patient_id", "patient_id"]),
-                                patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-                                mobile: text(row, ["mobile", "patient_phone"]),
-                                dob: text(row, ["registration_dob", "dob"]).slice(0, 10),
-                                age: text(row, ["age"]),
-                                gender: text(row, ["gender"]),
-                                heightCm: text(row, ["height_cm"]),
-                                weightKg: text(row, ["weight_kg"]),
-                                temperature: text(row, ["temperature"]),
-                                pulseRate: text(row, ["pulse_rate"]),
-                                respiratoryRate: text(row, ["respiratory_rate"]),
-                                systolicBp: text(row, ["systolic_bp"]),
-                                diastolicBp: text(row, ["diastolic_bp"]),
-                                spo2: text(row, ["spo2"]),
-                                bloodSugar: text(row, ["blood_sugar"]),
-                                remarks: text(row, ["remarks"]),
-                                status: text(row, ["vitals_status"]) || "Active",
-                              });
-                            }}
-                            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            {done ? "View / Update" : "Enter Vitals"}
-                          </button>
-                          {done ? <CheckCircleIcon className="h-5 w-5 text-success-500" /> : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="p-6">
+          {successMessage && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
+          {errorMessage && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
 
-          {selectedRow ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-              <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-                <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
-                  <div>
-                    <div className="text-lg font-semibold text-gray-800 dark:text-white/90">{selectedSummary?.name}</div>
-                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {selectedSummary?.type}
-                      {selectedSummary?.time ? ` • ${selectedSummary.time}` : ""}
-                      {selectedSummary?.slot ? ` • ${selectedSummary.slot} min` : ""}
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-700">
-                    <span className="sr-only">Close</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  {[
-                    ["patientName", "Patient Name", "text"],
-                    ["mobile", "Mobile Number", "text"],
-                    ["dob", "DOB", "date"],
-                    ["age", "Age", "text"],
-                    ["gender", "Gender", "select"],
-                    ["heightCm", "Height (cm)", "text"],
-                    ["weightKg", "Weight (kg)", "text"],
-                    ["temperature", "Temperature (°C/F)", "text"],
-                    ["pulseRate", "Pulse Rate (BPM)", "text"],
-                    ["respiratoryRate", "Respiratory Rate", "text"],
-                    ["systolicBp", "Systolic BP", "text"],
-                    ["diastolicBp", "Diastolic BP", "text"],
-                    ["spo2", "SpO2 (%)", "text"],
-                    ["bloodSugar", "Blood Sugar (Optional)", "text"],
-                    ["remarks", "Remarks", "textarea"],
-                    ["status", "Status", "select"],
-                  ].map(([key, label, type]) => (
-                    <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-                      {type === "select" ? (
-                        <select
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        >
-                          {key === "gender"
-                            ? ["", "Male", "Female", "Other"].map((option) => (
-                              <option key={option} value={option}>
-                                {option || "Select Gender"}
-                              </option>
-                            ))
-                            : ["Active", "Inactive"].map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                        </select>
-                      ) : type === "textarea" ? (
-                        <textarea
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          rows={4}
-                          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        />
-                      ) : (
-                        <input
-                          type={type}
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        />
-                      )}
-                    </div>
-                  ))}
-
-                  <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4">
-                    <button type="submit" disabled={saving} className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition">
-                      {saving ? "Saving..." : "Save Vitals"}
-                    </button>
-                    <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                      Cancel
-                    </button>
-                  </div>
-                </form>
+          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Token Number</label>
+                <input type="text" value={formValues.tokenNumber} onChange={e => updateFormValue("tokenNumber", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Details</label>
+                <input type="text" value={formValues.patientDetails} onChange={e => updateFormValue("patientDetails", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
+                <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
+                <input type="text" value={formValues.symptoms} onChange={e => updateFormValue("symptoms", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
+                <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
+                <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Consultation Amount</label>
+                <input type="number" min="0" value={formValues.consultationAmount} onChange={e => updateFormValue("consultationAmount", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
               </div>
             </div>
-          ) : null}
+
+            <PrescriptionTable
+              value={formValues.prescriptionData}
+              onChange={(val) => updateFormValue("prescriptionData", val)}
+            />
+
+            <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormValues({
+                    tokenNumber: "", patientDetails: "", diagnosisName: "",
+                    symptoms: "", remarks: "", followUpDays: "",
+                    consultationAmount: "", prescriptionData: "",
+                  });
+                  setEditingRecordId(null);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting || !selectedDoctor}
+                onClick={() => saveForm("Draft")}
+                className="rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50"
+                title={!selectedDoctor ? "Please select a doctor first" : "Save as draft"}
+              >
+                {isSubmitting ? "Saving..." : "Save as Draft"}
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting || !selectedDoctor}
+                onClick={() => saveForm("Completed")}
+                className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                title={!selectedDoctor ? "Please select a doctor first" : "Save and mark completed"}
+              >
+                {isSubmitting ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </form>
+
         </div>
       </div>
-    </section>
+    </div>
   );
 }
