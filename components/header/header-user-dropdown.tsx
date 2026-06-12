@@ -684,20 +684,22 @@ export function HeaderUserDropdown() {
       ) : null}
 
       {isProfileModalOpen && isDoctor ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded bg-white p-6 shadow-xl dark:bg-gray-900">
+        <div className="fixed inset-0 z-[999999] flex items-start justify-center bg-black/50 p-0">
+          <div className="h-screen w-full max-w-none overflow-auto bg-white p-6 dark:bg-gray-900">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold">Doctor Profile</h2>
                 <p className="text-sm text-gray-500">Only doctor accounts can access this form.</p>
               </div>
-              <Button type="button" variant="outline" onClick={() => setProfileModalOpen(false)}>
-                Close
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setProfileModalOpen(false)}>
+                  Close
+                </Button>
+              </div>
             </div>
             {profileError ? <div className="mb-4 text-sm text-red-500">{profileError}</div> : null}
             {profileMessage ? <div className="mb-4 text-sm text-green-600">{profileMessage}</div> : null}
-            <form onSubmit={handleProfileSubmit} className="mx-auto w-full max-w-5xl space-y-6">
+            <form onSubmit={handleProfileSubmit} className="mx-auto w-full max-w-[1200px] space-y-6">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
                 <div className="md:col-span-3 space-y-4">
                   <section className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/40">

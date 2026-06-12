@@ -16,9 +16,16 @@ export function DashboardShell({
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
   const isLoginPage = segments.length === 1 && segments[0] !== 'create-account';
+  const isPatientLoginPage = pathname.endsWith("/patient-login");
   const isBookAppointment = pathname.endsWith("/book-appointment");
   const isCalendarPage = pathname.endsWith("/calendar");
-  const hideNavAndSidebar = pathname === "/" || pathname === "/create-account" || isLoginPage || isBookAppointment || isCalendarPage;
+  const hideNavAndSidebar =
+    pathname === "/" ||
+    pathname === "/create-account" ||
+    isLoginPage ||
+    isPatientLoginPage ||
+    isBookAppointment ||
+    isCalendarPage;
 
   const mainContentMargin = isMobileOpen
     ? "ml-0"
