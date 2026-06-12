@@ -39,7 +39,7 @@ function formatDate(value: string) {
 
 type StatusFilter = "All" | "Draft" | "Completed";
 
-export default function OutPatientPage() {
+export default function OutPatientQueuePage() {
   const params = useParams();
   const hname = params?.Hname as string;
 
@@ -62,7 +62,7 @@ export default function OutPatientPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load.");
         const allRows: ConsultationRow[] = data.rows || [];
-        // Filter to OP only
+        // Filter to OP only (also include records with no patient_type set — treated as OP by default)
         const opRows = allRows.filter(
           (r) => {
             const pt = text(r as Record<string, unknown>, ["patientType", "patient_type"]);
@@ -221,10 +221,7 @@ export default function OutPatientPage() {
                   const status = text(row as Record<string, unknown>, ["status"]);
                   const isCompleted = status === "Completed";
                   return (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors"
-                    >
+                    <tr key={row.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors">
                       <td className="px-5 py-4 text-gray-400 dark:text-gray-500 tabular-nums">{idx + 1}</td>
                       <td className="px-5 py-4 font-mono font-medium text-gray-700 dark:text-gray-300">
                         {text(row as Record<string, unknown>, ["tokenNumber", "token_number"]) || "—"}

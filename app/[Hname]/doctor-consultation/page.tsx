@@ -6,6 +6,7 @@ import { PrescriptionTable } from "./prescription-table";
 
 type QueueTab = "Vitals" | "Draft" | "Completed";
 type DetailTab = "Patient Details" | "Vitals" | "History" | "Consultation Form";
+type PatientType = "OP" | "IP";
 
 type VitalsRow = Record<string, unknown> & {
   vitals_id?: number | null;
@@ -33,6 +34,8 @@ type ConsultationRow = Record<string, unknown> & {
   consultation_amount?: string;
   prescriptionData?: string;
   prescription_data?: string;
+  patientType?: string;
+  patient_type?: string;
 };
 
 type AppointmentHistoryRow = Record<string, unknown> & {
@@ -107,6 +110,7 @@ export default function DoctorConsultationPage() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [patientType, setPatientType] = useState<PatientType>("OP");
   const [formValues, setFormValues] = useState<Record<string, string>>({
     tokenNumber: "",
     patientDetails: "",
@@ -142,7 +146,6 @@ export default function DoctorConsultationPage() {
     setIsLoading(true);
     setErrorMessage("");
     try {
-      // Fetch Vitals (we'll fetch for the selected doctor if set, or all, but the API handles "all" if doctor is "")
       const vUrl = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
       if (selectedDoctor) {
         vUrl.searchParams.set("doctor", selectedDoctor);
@@ -206,13 +209,11 @@ export default function DoctorConsultationPage() {
 
   const displayedVitals = useMemo(() => {
     const sorted = [...vitalsRows].sort((a, b) => {
-      // Completed first, then pending
       const aDone = isVitalsCompleted(a) ? 1 : 0;
       const bDone = isVitalsCompleted(b) ? 1 : 0;
       if (aDone !== bDone) {
-        return bDone - aDone; // 1 goes first
+        return bDone - aDone;
       }
-      // Then by time
       const timeA = text(a, ["appointment_time"]);
       const timeB = text(b, ["appointment_time"]);
       if (!timeA && !timeB) return 0;
@@ -282,6 +283,7 @@ export default function DoctorConsultationPage() {
     setSelectedPatientRow(row);
     setDetailTab("Patient Details");
     setEditingRecordId(null);
+    setPatientType("OP");
     setFormValues({
       tokenNumber: text(row, ["appointment_id"]),
       patientDetails: selectedName,
@@ -303,6 +305,9 @@ export default function DoctorConsultationPage() {
       (tokenNumber && text(vitalsRow, ["appointment_id"]) === tokenNumber) ||
       (selectedName && patientName(vitalsRow) === selectedName)
     );
+
+    const rowPatientType = text(row, ["patientType", "patient_type"]);
+    setPatientType(rowPatientType === "IP" ? "IP" : "OP");
 
     setSelectedPatientRow(matchedPatient ?? { appointment_id: tokenNumber, appointment_patient_name: selectedName });
     setDetailTab("Consultation Form");
@@ -339,12 +344,14 @@ export default function DoctorConsultationPage() {
           { id: "remarks", type: "textarea" },
           { id: "followUpDays", type: "number" },
           { id: "consultationAmount", type: "number" },
-          { id: "prescriptionData", type: "textarea" }
+          { id: "prescriptionData", type: "textarea" },
+          { id: "patientType", type: "text" },
         ],
         values: {
           ...formValues,
           status,
           doctor: selectedDoctor,
+          patientType,
         }
       };
 
@@ -367,10 +374,10 @@ export default function DoctorConsultationPage() {
         consultationAmount: "",
         prescriptionData: "",
       });
+      setPatientType("OP");
       setEditingRecordId(null);
       void loadData();
 
-      // Switch tab automatically based on save action
       if (status === "Draft") {
         setQueueTab("Draft");
       } else {
@@ -386,6 +393,21 @@ export default function DoctorConsultationPage() {
   const updateFormValue = (key: string, value: string) => {
     setFormValues(prev => ({ ...prev, [key]: value }));
   };
+
+  function PatientTypeBadge({ type }: { type: string }) {
+    const isOP = type !== "IP";
+    return (
+      <span
+        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+          isOP
+            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+            : "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+        }`}
+      >
+        {isOP ? "OP" : "IP"}
+      </span>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -461,8 +483,11 @@ export default function DoctorConsultationPage() {
                   onClick={() => handleConsultationClick(row)}
                   className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
                 >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-white/90">{row.patientDetails || "Unknown Patient"}</span>
-                  <div className="text-xs text-gray-500">Token: {row.tokenNumber || "N/A"}</div>
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-white/90 truncate">{text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}</span>
+                    <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
+                  </div>
+                  <div className="text-xs text-gray-500">Token: {text(row, ["tokenNumber", "token_number"]) || "N/A"}</div>
                 </button>
               ))
             )
@@ -477,8 +502,11 @@ export default function DoctorConsultationPage() {
                   onClick={() => handleConsultationClick(row)}
                   className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
                 >
-                  <span className="text-sm font-semibold text-gray-800 dark:text-white/90">{row.patientDetails || "Unknown Patient"}</span>
-                  <div className="text-xs text-gray-500">Diagnosis: {row.diagnosisName || "N/A"}</div>
+                  <div className="flex items-center gap-2 justify-between">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-white/90 truncate">{text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}</span>
+                    <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
+                  </div>
+                  <div className="text-xs text-gray-500">Diagnosis: {text(row, ["diagnosisName", "diagnosis_name"]) || "N/A"}</div>
                 </button>
               ))
             )
@@ -509,15 +537,76 @@ export default function DoctorConsultationPage() {
             <div className="mb-8 rounded-xl border border-gray-100 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-800/20">
               {detailTab === "Patient Details" && (
                 selectedPatientRow ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {patientDetailFields.map(([label, val]) => (
-                      <div key={label as string}>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">{label as string}</label>
-                        <div className="flex min-h-[2.5rem] w-full items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
-                          {display(val as string)}
-                        </div>
+                  <div className="space-y-6">
+                    {/* OP / IP Radio Selector */}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
+                        Patient Category
+                      </label>
+                      <div className="flex gap-4">
+                        {(["OP", "IP"] as PatientType[]).map((type) => (
+                          <label
+                            key={type}
+                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border-2 px-5 py-3 transition-all select-none ${
+                              patientType === type
+                                ? type === "OP"
+                                  ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20"
+                                  : "border-purple-500 bg-purple-50 dark:border-purple-400 dark:bg-purple-900/20"
+                                : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="patientType"
+                              value={type}
+                              checked={patientType === type}
+                              onChange={() => setPatientType(type)}
+                              className="sr-only"
+                            />
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                                patientType === type
+                                  ? type === "OP"
+                                    ? "border-blue-500"
+                                    : "border-purple-500"
+                                  : "border-gray-400 dark:border-gray-500"
+                              }`}
+                            >
+                              {patientType === type && (
+                                <span
+                                  className={`h-2 w-2 rounded-full ${
+                                    type === "OP" ? "bg-blue-500" : "bg-purple-500"
+                                  }`}
+                                />
+                              )}
+                            </span>
+                            <span
+                              className={`text-sm font-semibold ${
+                                patientType === type
+                                  ? type === "OP"
+                                    ? "text-blue-700 dark:text-blue-300"
+                                    : "text-purple-700 dark:text-purple-300"
+                                  : "text-gray-600 dark:text-gray-400"
+                              }`}
+                            >
+                              {type === "OP" ? "OP — Outpatient" : "IP — Inpatient"}
+                            </span>
+                          </label>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Patient Detail Fields */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {patientDetailFields.map(([label, val]) => (
+                        <div key={label as string}>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">{label as string}</label>
+                          <div className="flex min-h-[2.5rem] w-full items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
+                            {display(val as string)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <div className="text-sm text-gray-500">Please select a patient from the queue to view details.</div>
@@ -611,6 +700,7 @@ export default function DoctorConsultationPage() {
                     symptoms: "", remarks: "", followUpDays: "",
                     consultationAmount: "", prescriptionData: "",
                   });
+                  setPatientType("OP");
                   setEditingRecordId(null);
                 }}
                 className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"

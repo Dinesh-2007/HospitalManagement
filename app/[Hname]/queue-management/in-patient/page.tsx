@@ -39,7 +39,7 @@ function formatDate(value: string) {
 
 type StatusFilter = "All" | "Draft" | "Completed";
 
-export default function OutPatientPage() {
+export default function InPatientQueuePage() {
   const params = useParams();
   const hname = params?.Hname as string;
 
@@ -62,14 +62,11 @@ export default function OutPatientPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load.");
         const allRows: ConsultationRow[] = data.rows || [];
-        // Filter to OP only
-        const opRows = allRows.filter(
-          (r) => {
-            const pt = text(r as Record<string, unknown>, ["patientType", "patient_type"]);
-            return pt === "" || pt === "OP";
-          }
+        // Filter to IP only
+        const ipRows = allRows.filter(
+          (r) => text(r as Record<string, unknown>, ["patientType", "patient_type"]) === "IP"
         );
-        setRows(opRows);
+        setRows(ipRows);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load patients.");
       } finally {
@@ -97,9 +94,9 @@ export default function OutPatientPage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Outpatient Queue</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Inpatient Queue</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Track all outpatient (OP) consultations — in progress and completed.
+          Track all inpatient (IP) consultations — admitted and discharged.
         </p>
       </div>
 
@@ -107,19 +104,19 @@ export default function OutPatientPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           {
-            label: "Total Outpatients",
+            label: "Total Inpatients",
             value: totalCount,
-            color: "from-blue-500 to-blue-600",
+            color: "from-purple-500 to-purple-700",
             icon: (
               <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2h5M12 12a4 4 0 100-8 4 4 0 000 8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M3 12h18M3 17h18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
               </svg>
             ),
           },
           {
-            label: "In Progress",
+            label: "Admitted / In Ward",
             value: draftCount,
-            color: "from-amber-400 to-amber-500",
+            color: "from-violet-400 to-violet-600",
             icon: (
               <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m9-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -127,7 +124,7 @@ export default function OutPatientPage() {
             ),
           },
           {
-            label: "Exited Hospital",
+            label: "Discharged",
             value: completedCount,
             color: "from-emerald-500 to-emerald-600",
             icon: (
@@ -156,12 +153,12 @@ export default function OutPatientPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z" />
           </svg>
           <input
-            id="op-search"
+            id="ip-search"
             type="text"
             placeholder="Search by patient, token or doctor…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
           />
         </div>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
@@ -176,7 +173,7 @@ export default function OutPatientPage() {
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
               }`}
             >
-              {f}
+              {f === "Draft" ? "Admitted" : f === "Completed" ? "Discharged" : f}
             </button>
           ))}
         </div>
@@ -186,7 +183,7 @@ export default function OutPatientPage() {
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50">
         {isLoading ? (
           <div className="flex items-center justify-center py-20 text-sm text-gray-500">
-            <svg className="mr-2 h-5 w-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+            <svg className="mr-2 h-5 w-5 animate-spin text-purple-500" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
@@ -199,7 +196,7 @@ export default function OutPatientPage() {
             <svg className="h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>No outpatients found{search ? " matching your search" : ""}.</span>
+            <span>No inpatients found{search ? " matching your search" : ""}.</span>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -211,8 +208,8 @@ export default function OutPatientPage() {
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Patient Name</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Doctor</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Diagnosis</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">OP</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status / Exit</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">IP</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status / Discharge</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Last Updated</th>
                 </tr>
               </thead>
@@ -221,10 +218,7 @@ export default function OutPatientPage() {
                   const status = text(row as Record<string, unknown>, ["status"]);
                   const isCompleted = status === "Completed";
                   return (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors"
-                    >
+                    <tr key={row.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-colors">
                       <td className="px-5 py-4 text-gray-400 dark:text-gray-500 tabular-nums">{idx + 1}</td>
                       <td className="px-5 py-4 font-mono font-medium text-gray-700 dark:text-gray-300">
                         {text(row as Record<string, unknown>, ["tokenNumber", "token_number"]) || "—"}
@@ -239,8 +233,8 @@ export default function OutPatientPage() {
                         {text(row as Record<string, unknown>, ["diagnosisName", "diagnosis_name"]) || "—"}
                       </td>
                       <td className="px-5 py-4">
-                        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                          OP
+                        <span className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                          IP
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -249,12 +243,12 @@ export default function OutPatientPage() {
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
-                            Exited Hospital
+                            Discharged
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            In Progress
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
+                            Admitted
                           </span>
                         )}
                       </td>
