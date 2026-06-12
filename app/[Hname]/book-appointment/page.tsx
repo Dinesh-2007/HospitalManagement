@@ -35,6 +35,31 @@ type DoctorOption = {
   roomNo: string;
   registrationNumber: string;
 };
+type WorkExperience = {
+  hospitalName: string;
+  designation: string;
+  department: string;
+  fromDate: string;
+  toDate: string;
+  location: string;
+};
+
+type Certification = {
+  name: string;
+  issuingOrganization: string;
+  issueDate: string;
+  expiryDate: string;
+};
+
+type EducationInfo = {
+  mbbsCollegeName: string;
+  mbbsUniversity: string;
+  mbbsGraduationYear: string;
+  higherQualification: string;
+  higherQualificationInstitution: string;
+  higherQualificationCompletionYear: string;
+};
+
 type DoctorProfile = {
   doctorId: string;
   doctorCode: string;
@@ -63,6 +88,9 @@ type DoctorProfile = {
   licenseNumber: string;
   employeeType: string;
   shift: string;
+  education: EducationInfo;
+  workExperiences: WorkExperience[];
+  certifications: Certification[];
 };
 
 type PatientSignupState = {
@@ -206,13 +234,54 @@ function normalizeSchedule(row: MasterRow): ScheduleSummary {
 
 function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
   if (!row) return null;
+
+  const education: EducationInfo = {
+    mbbsCollegeName: readText(row, ["mbbs_college_name", "mbbsCollegeName", "education.mbbsCollegeName"]),
+    mbbsUniversity: readText(row, ["mbbs_university", "mbbsUniversity", "education.mbbsUniversity"]),
+    mbbsGraduationYear: readText(row, ["mbbs_graduation_year", "mbbsGraduationYear", "education.mbbsGraduationYear"]),
+    higherQualification: readText(row, ["higher_qualification", "higherQualification", "education.higherQualification"]),
+    higherQualificationInstitution: readText(row, ["higher_qualification_institution", "higherQualificationInstitution", "education.higherQualificationInstitution"]),
+    higherQualificationCompletionYear: readText(row, ["higher_qualification_completion_year", "higherQualificationCompletionYear", "education.higherQualificationCompletionYear"]),
+  };
+
+  const workExperiences: WorkExperience[] = [];
+  const certifications: Certification[] = [];
+
+  if (Array.isArray(row.workExperiences)) {
+    for (const item of row.workExperiences) {
+      if (item && typeof item === "object") {
+        workExperiences.push({
+          hospitalName: readText(item as MasterRow, ["hospitalName", "hospital_name", "institution"]),
+          designation: readText(item as MasterRow, ["designation", "role"]),
+          department: readText(item as MasterRow, ["department", "unit"]),
+          fromDate: readText(item as MasterRow, ["fromDate", "from_date", "startDate"]),
+          toDate: readText(item as MasterRow, ["toDate", "to_date", "endDate"]),
+          location: readText(item as MasterRow, ["location", "city"]),
+        });
+      }
+    }
+  }
+
+  if (Array.isArray(row.certifications)) {
+    for (const item of row.certifications) {
+      if (item && typeof item === "object") {
+        certifications.push({
+          name: readText(item as MasterRow, ["name", "title"]),
+          issuingOrganization: readText(item as MasterRow, ["issuingOrganization", "issuing_organization", "issuer"]),
+          issueDate: readText(item as MasterRow, ["issueDate", "issue_date", "issuedOn"]),
+          expiryDate: readText(item as MasterRow, ["expiryDate", "expiry_date", "expiresOn"]),
+        });
+      }
+    }
+  }
+
   return {
     doctorId: readText(row, ["doctor_id", "doctorId"]),
     doctorCode: readText(row, ["doctor_code", "doctorCode"]),
     firstName: readText(row, ["first_name", "firstName"]),
     lastName: readText(row, ["last_name", "lastName"]),
     gender: readText(row, ["gender"]),
-    dateOfBirth: readText(row, ["date_of_birth", "dateOfBirth"]),
+    dateOfBirth: readText(row, ["date_of_birth", "dateOfBirth", "dob"]),
     bloodGroup: readText(row, ["blood_group", "bloodGroup"]),
     maritalStatus: readText(row, ["marital_status", "maritalStatus"]),
     profilePhoto: readText(row, ["profile_photo", "profilePhoto"]),
@@ -234,7 +303,23 @@ function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
     licenseNumber: readText(row, ["license_number", "licenseNumber"]),
     employeeType: readText(row, ["employee_type", "employeeType"]),
     shift: readText(row, ["shift"]),
+    education,
+    workExperiences,
+    certifications,
   };
+}
+
+function calculateAge(dateOfBirth: string) {
+  if (!dateOfBirth) return "-";
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return "-";
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+  return `${age} yrs`;
 }
 
 export default function BookAppointmentPage() {
@@ -605,7 +690,7 @@ export default function BookAppointmentPage() {
       </section>
       {isDoctorPopupOpen ? (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 shadow-xl dark:bg-gray-900 max-h-[80vh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setIsDoctorPopupOpen(false)}
@@ -613,11 +698,11 @@ export default function BookAppointmentPage() {
             >
               Close
             </button>
-            <div className="grid gap-6 md:grid-cols-[180px_minmax(0,1fr)]">
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 p-4 dark:border-gray-800">
-                <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800">
+            <div className="grid gap-6 md:grid-cols-[140px_minmax(0,1fr)]">
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 p-3 dark:border-gray-800">
+                <div className="relative flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800">
                   {doctorDetails?.profilePhoto ? (
-                    <Image src={doctorDetails.profilePhoto} alt={selectedDoctor} fill className="object-cover" unoptimized />
+                    <img src={doctorDetails.profilePhoto} alt={selectedDoctor} className="h-full w-full object-cover" />
                   ) : (
                     <div className="text-sm text-gray-400">No photo</div>
                   )}
@@ -652,24 +737,77 @@ export default function BookAppointmentPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
+                    ["Doctor ID", doctorDetails?.doctorId],
+                    ["Name", doctorDetails ? `${doctorDetails.firstName} ${doctorDetails.lastName}`.trim() : ""],
                     ["Gender", doctorDetails?.gender],
+                    ["Age", doctorDetails ? calculateAge(doctorDetails.dateOfBirth) : "-"],
                     ["Phone", doctorDetails?.mobileNumber],
-                    ["Alternate Phone", doctorDetails?.alternateMobileNumber],
                     ["Email", doctorDetails?.emailId],
                     ["Qualification", doctorDetails?.qualification],
-                    ["Experience", doctorDetails?.experienceYears ? `${doctorDetails.experienceYears} years` : ""],
+                    ["Experience", doctorDetails?.experienceYears ? `${doctorDetails.experienceYears} years` : "-"],
                     ["Specialization", doctorDetails?.specialization],
                     ["Department", doctorDetails?.department],
-                    ["Registration No.", doctorDetails?.registrationNumber],
-                    ["License No.", doctorDetails?.licenseNumber],
                     ["Employee Type", doctorDetails?.employeeType],
-                    ["Shift", doctorDetails?.shift],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/40">
                       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
                       <div className="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{value || "-"}</div>
                     </div>
                   ))}
+                </div>
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/40">
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">Education Details</h4>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {[
+                      ["MBBS College", doctorDetails?.education.mbbsCollegeName],
+                      ["MBBS University", doctorDetails?.education.mbbsUniversity],
+                      ["MBBS Year", doctorDetails?.education.mbbsGraduationYear],
+                      ["Higher Qualification", doctorDetails?.education.higherQualification],
+                      ["Qualification Institution", doctorDetails?.education.higherQualificationInstitution],
+                      ["Completion Year", doctorDetails?.education.higherQualificationCompletionYear],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+                        <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+                        <div className="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{value || "-"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">Work Experience</h4>
+                    {doctorDetails?.workExperiences.length ? (
+                      <div className="mt-3 space-y-3">
+                        {doctorDetails.workExperiences.map((experience, index) => (
+                          <div key={`${experience.hospitalName}-${index}`} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/50">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{experience.designation || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">{experience.hospitalName || "-"} • {experience.location || "-"}</p>
+                            <p className="mt-2 text-sm text-gray-500">{experience.department || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">{experience.fromDate || "-"} — {experience.toDate || "Present"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-gray-500">No work experience details available.</p>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">Certifications</h4>
+                    {doctorDetails?.certifications.length ? (
+                      <div className="mt-3 space-y-3">
+                        {doctorDetails.certifications.map((certification, index) => (
+                          <div key={`${certification.name}-${index}`} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/50">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{certification.name || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">{certification.issuingOrganization || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">Issued: {certification.issueDate || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">Expires: {certification.expiryDate || "-"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-gray-500">No certifications available.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
