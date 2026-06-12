@@ -487,7 +487,11 @@ export default function DoctorSchedulePage() {
             </div>
             <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor Availability</p>
-              <p className="mt-3 text-sm font-medium text-gray-700">{selectedDaySchedules.length > 0 ? `${selectedDaySchedules.length} schedule block(s)` : "No schedule for this day"}</p>
+              <p className="mt-3 text-sm font-medium text-gray-700">
+                {selectedDaySchedules.length > 0
+                  ? selectedDaySchedules.map((s) => `${formatDisplayTime(s.availableTimeFrom)} - ${formatDisplayTime(s.availableTimeTo)}`).join(", ")
+                  : "No schedule for this day"}
+              </p>
             </div>
           </div>
 
@@ -539,81 +543,76 @@ export default function DoctorSchedulePage() {
             })}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <section className="rounded-2xl border border-gray-200 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Availability</p>
-              <h3 className="mt-2 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
-              <div className="mt-4 space-y-3">
-                {selectedDaySchedules.length > 0 ? (
-                  selectedDaySchedules.map((row, index) => (
-                    <div key={`${row.consultantDoctorName}-${row.availableTimeFrom}-${index}`} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <p className="font-medium text-gray-800">{row.availableTimeFrom} - {row.availableTimeTo}</p>
-                      <p className="mt-1 text-sm text-gray-500">{row.timeSlotMinutes} minute slots</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No schedule configured for this date.</div>
-                )}
+          <section className="rounded-2xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Booked Patients</p>
+                <h3 className="mt-1 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
               </div>
-            </section>
+              {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
+            </div>
 
-            <section className="rounded-2xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Booked Patients</p>
-                  <h3 className="mt-1 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
-                </div>
-                {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {selectedDayAppointments.length > 0 ? (
-                  selectedDayAppointments.map((appointment) => (
-                    <div key={appointment.id ?? `${appointment.patient_id}-${appointment.appointment_time}`} className="rounded-2xl border border-gray-200 p-4">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
-                              disabled={!appointment.patient_id}
-                              className="text-left text-lg font-semibold text-gray-800 transition hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {appointment.patient_name ?? "Patient"}
-                            </button>
-                            <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
-                              {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm text-gray-500">Department: {appointment.department ?? "-"}</p>
-                          <p className="mt-1 text-sm text-gray-500">Mobile: {appointment.patient_phone ?? "-"}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
+            {selectedDayAppointments.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className="px-4 py-3 text-left">Time</th>
+                      <th className="px-4 py-3 text-left">Patient</th>
+                      <th className="px-4 py-3 text-left">Patient Type</th>
+                      <th className="px-4 py-3 text-left">Gender</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
+                      <th className="px-4 py-3 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedDayAppointments.map((appointment) => (
+                      <tr key={appointment.id ?? `${appointment.patient_id}-${appointment.appointment_time}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
+                          {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
+                        </td>
+                        <td className="px-4 py-3">
                           <button
                             type="button"
                             onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
                             disabled={!appointment.patient_id}
-                            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            View Profile
+                            {appointment.patient_name ?? "-"}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setCancelTarget(appointment)}
-                            className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600"
-                          >
-                            Cancel Appointment
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">No booked patients for this day.</div>
-                )}
+                          <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{appointment.department ?? "-"}</td>
+                        <td className="px-4 py-3 text-gray-600">-</td>
+                        <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
+                              disabled={!appointment.patient_id}
+                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              View Profile
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelTarget(appointment)}
+                              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </section>
-          </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">No booked patients for this day.</div>
+            )}
+          </section>
 
           {message ? <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
           {errorMessage ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
