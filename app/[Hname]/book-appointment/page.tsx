@@ -26,6 +26,9 @@ type DoctorOption = {
   name: string;
   department: string;
   specialization: string;
+  qualification: string;
+  experienceYears: string;
+  profilePhoto: string;
   clinic: string;
   phone: string;
   email: string;
@@ -167,6 +170,9 @@ function normalizeDoctor(row: MasterRow): DoctorOption {
     name,
     department: readText(row, ["clinic", "department", "department_type", "departmentType"]),
     specialization: readText(row, ["specialization"]),
+    qualification: readText(row, ["qualification"]),
+    experienceYears: readText(row, ["experience_years", "experienceYears"]),
+    profilePhoto: readText(row, ["profile_photo", "profilePhoto", "doctor_image", "photo"]),
     clinic: readText(row, ["clinic"]),
     phone: readText(row, ["mobile", "phoneOffice", "phoneResi"]),
     email: readText(row, ["email"]),
@@ -355,6 +361,19 @@ export default function BookAppointmentPage() {
     }
   }
 
+  function directBookDoctor(doctor: DoctorOption) {
+    const department = selectedDepartment || doctor.department || "";
+    const doctorName = doctor.name;
+    const query = new URLSearchParams({
+      department,
+      doctor: doctorName,
+      patientId: String(authenticatedPatient?.id ?? ""),
+      patientName: authenticatedPatient?.name ?? "",
+      patientPhone: authenticatedPatient?.phone ?? "",
+    });
+    router.push(`/${encodeURIComponent(hname)}/book-appointment/calendar?${query.toString()}`);
+  }
+
   async function handleSignin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -536,10 +555,47 @@ export default function BookAppointmentPage() {
                 {doctorOptions.map((doctor) => {
                   const isActive = doctor.name === selectedDoctor;
                   return (
-                    <button key={doctor.name} type="button" onClick={() => void openDoctorPopup(doctor)} className={`rounded-2xl border px-5 py-5 text-left transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
-                      <p className="text-base font-semibold text-gray-800">{doctor.name}</p>
-                      <p className="mt-2 text-sm text-gray-500">{doctor.specialization || doctor.department || "Doctor"}</p>
-                    </button>
+                    <div key={doctor.name} className={`rounded-2xl border p-5 transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
+                      <div className="flex items-start gap-4">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-50">
+                          {doctor.profilePhoto ? (
+                            <img src={doctor.profilePhoto} alt={doctor.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-base font-semibold text-gray-800 truncate">{doctor.name}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                            {doctor.specialization ? (
+                              <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-600">{doctor.specialization}</span>
+                            ) : null}
+                            {doctor.experienceYears ? (
+                              <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">{doctor.experienceYears} yrs</span>
+                            ) : null}
+                          </div>
+                          {doctor.qualification ? (
+                            <p className="mt-2 text-sm text-gray-500 truncate">{doctor.qualification}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => directBookDoctor(doctor)}
+                          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white"
+                        >
+                          Book Appointment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void openDoctorPopup(doctor)}
+                          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
+                        >
+                          More Details
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

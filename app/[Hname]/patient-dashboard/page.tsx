@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "../../../components/ui/button";
 import PatientProfileMenu from "../../../components/patient-profile-menu";
+import BookAppointmentPage from "../book-appointment/page";
 
 export default function HospitalPatientDashboardPage() {
   const params = useParams();
@@ -27,12 +28,12 @@ export default function HospitalPatientDashboardPage() {
         <div className="flex items-center gap-3 relative">
           <div className="text-sm text-gray-700">WELCOME {patientName}</div>
           <Button variant="outline" onClick={() => setIsOpen(true)}>Profile</Button>
-          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} />
+          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} hname={hname} />
         </div>
       </div>
 
       <div className="mt-6">
-        <div className="rounded-lg border border-gray-200 bg-white p-6">This is a simple patient dashboard placeholder.</div>
+        <BookAppointmentPage />
       </div>
     </div>
   );

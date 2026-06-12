@@ -19,11 +19,12 @@ export function middleware(request: NextRequest) {
   // Everything beyond /Hname requires auth
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length > 1) {
-      // Let book-appointment, patient-login, and book-appointment/calendar pass without auth
+      // Let book-appointment, patient-login, patient-dashboard, and patient-book-appointment pass without auth
       if (
         parts[1] === 'book-appointment' ||
         parts[1] === 'patient-login' ||
         parts[1] === 'patient-dashboard' ||
+        parts[1] === 'patient-book-appointment' ||
         (parts[1] === 'book-appointment' && parts[2] === 'calendar')
       ) {
         return NextResponse.next();

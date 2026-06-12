@@ -127,10 +127,6 @@ export const navigation: NavigationSection[] = [
     href: "/doctor-consultation",
   },
   {
-    title: "Book Appointment",
-    href: "/book-appointment",
-  },
-  {
     title: "Patient Login",
     href: "/patient-login",
   },
