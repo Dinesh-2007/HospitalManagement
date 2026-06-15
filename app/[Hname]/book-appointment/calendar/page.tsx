@@ -705,39 +705,45 @@ export default function AppointmentCalendarPage() {
                 </div>
               ) : null}
 
-              <div id="booking-panel" className="rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm text-gray-600">
-                  Selected: {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "-"}
+              <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50">
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm font-semibold text-brand-700 shadow-sm">
+                  <span>Selected Slot Details</span>
+                  <span className="rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white">{selectedSlot ? "Selected" : "None"}</span>
+                </div>
+                <div className="text-sm text-gray-700">
+                  <span className="font-medium">Slot:</span> {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}
                 </div>
                 {patientAppointment ? (
-                  <div className="mt-2 text-sm text-gray-500">
-                    Current slot: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"} | Reschedules: {patientAppointment.reschedule_count ?? 0}/3
+                  <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+                    <div className="font-medium text-gray-800">Current booking</div>
+                    <div>Time: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
+                    <div>Reschedules: {patientAppointment.reschedule_count ?? 0}/3</div>
                   </div>
                 ) : null}
                 {!patientAppointment ? (
                   <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
                       Book Appointment
                     </button>
-                    <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+                    <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
                       Cancel
                     </button>
                   </div>
                 ) : isRescheduling ? (
                   <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
                       Confirm Reschedule
                     </button>
-                    <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+                    <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
                       Cancel Reschedule
                     </button>
                   </div>
                 ) : (
                   <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
+                    <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
                       Reschedule Appointment
                     </button>
-                    <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600">
+                    <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition">
                       Cancel Appointment
                     </button>
                   </div>

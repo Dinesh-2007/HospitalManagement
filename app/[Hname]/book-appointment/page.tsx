@@ -161,19 +161,53 @@ function emptySignupState(): PatientSignupState {
   };
 }
 
+function normalizeTextValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return normalizeTextValue(JSON.parse(trimmed));
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value).trim();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeTextValue(item);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const priorityKeys = ["url", "src", "photo", "image", "profilePhoto", "path", "publicUrl", "secure_url", "data"];
+    for (const key of priorityKeys) {
+      if (key in record) {
+        const normalized = normalizeTextValue(record[key]);
+        if (normalized) return normalized;
+      }
+    }
+    return "";
+  }
+  return "";
+}
+
 function readText(row: MasterRow, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
-    if (value !== null && value !== undefined) {
-      const text = String(value).trim();
-      if (text) return text;
-    }
+    const text = normalizeTextValue(value);
+    if (text) return text;
   }
   return "";
 }
 
 function normalizePhone(value: unknown) {
-  return String(value ?? "").replace(/\D/g, "").trim();
+  return normalizeTextValue(value).replace(/\D/g, "").trim();
 }
 
 async function fetchMasterRows(hname: string, tableName: string) {
@@ -328,6 +362,7 @@ export default function BookAppointmentPage() {
   const hname = params?.Hname as string;
   const [departments, setDepartments] = useState<string[]>([]);
   const [doctorRows, setDoctorRows] = useState<MasterRow[]>([]);
+  const [doctorPhotos, setDoctorPhotos] = useState<Record<string, string>>({});
   const [patientRows, setPatientRows] = useState<MasterRow[]>([]);
   const [scheduleRows, setScheduleRows] = useState<ScheduleSummary[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
@@ -403,8 +438,56 @@ export default function BookAppointmentPage() {
       .map(normalizeDoctor)
       .filter((doctor) => !selectedDepartment || !doctor.department || doctor.department === selectedDepartment)
       .filter((doctor) => scheduledDoctors.has(doctor.name.trim().toLowerCase()))
-      .filter((doctor) => doctor.name);
-  }, [doctorRows, scheduleRows, selectedDepartment]);
+      .filter((doctor) => doctor.name)
+      .map((doctor) => ({
+        ...doctor,
+        profilePhoto: doctor.profilePhoto || doctorPhotos[doctor.name.toLowerCase()] || "",
+      }));
+  }, [doctorRows, doctorPhotos, scheduleRows, selectedDepartment]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadDoctorPhotos() {
+      const names = Array.from(
+        new Set(
+          doctorRows
+            .map(normalizeDoctor)
+            .map((doctor) => doctor.name)
+            .filter(Boolean),
+        ),
+      );
+
+      const entries = await Promise.all(
+        names.map(async (name) => {
+          try {
+            const params = new URLSearchParams();
+            params.set("doctorName", name);
+            const response = await fetch(
+              `/api/${encodeURIComponent(hname)}/doctor-profile?${params.toString()}`,
+              { cache: "no-store" },
+            );
+            const data = (await response.json().catch(() => ({}))) as { row?: Record<string, unknown> | null };
+            return [name.toLowerCase(), String(data.row?.profile_photo ?? data.row?.profilePhoto ?? "")] as const;
+          } catch {
+            return [name.toLowerCase(), ""] as const;
+          }
+        }),
+      );
+
+      if (active) {
+        setDoctorPhotos(Object.fromEntries(entries));
+      }
+    }
+
+    if (doctorRows.length > 0) {
+      void loadDoctorPhotos();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [doctorRows, hname]);
 
   const patientOptions = useMemo(() => {
     return patientRows
@@ -439,7 +522,15 @@ export default function BookAppointmentPage() {
       );
       const data = (await response.json().catch(() => ({}))) as { row?: MasterRow | null; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Failed to load doctor profile.");
-      setDoctorDetails(normalizeDoctorProfile(data.row ?? null));
+      const normalizedDetails = normalizeDoctorProfile(data.row ?? null);
+      setDoctorDetails(
+        normalizedDetails
+          ? {
+              ...normalizedDetails,
+              profilePhoto: normalizedDetails.profilePhoto || doctor.profilePhoto,
+            }
+          : null,
+      );
     } catch (error) {
       setDoctorDetails(null);
       setErrorMessage(error instanceof Error ? error.message : "Failed to load doctor profile.");
@@ -487,6 +578,19 @@ export default function BookAppointmentPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
+      const phone = normalizePhone(signupForm.mobile);
+      
+      // Check if phone number already exists
+      const selectedPatient = patientOptions.find((row) => normalizePhone(row.phone) === phone);
+      if (selectedPatient) {
+        // Phone number exists, proceed with existing patient data
+        const payload = { id: selectedPatient.id, name: selectedPatient.name, phone: selectedPatient.phone };
+        window.localStorage.setItem(storageKey(hname), JSON.stringify(payload));
+        setAuthenticatedPatient(payload);
+        return;
+      }
+
+      // Phone doesn't exist, create new patient
       const response = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -701,8 +805,12 @@ export default function BookAppointmentPage() {
             <div className="grid gap-6 md:grid-cols-[140px_minmax(0,1fr)]">
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-200 p-3 dark:border-gray-800">
                 <div className="relative flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800">
-                  {doctorDetails?.profilePhoto ? (
-                    <img src={doctorDetails.profilePhoto} alt={selectedDoctor} className="h-full w-full object-cover" />
+                  {doctorDetails?.profilePhoto || selectedDoctorOption?.profilePhoto ? (
+                    <img
+                      src={doctorDetails?.profilePhoto || selectedDoctorOption?.profilePhoto || ""}
+                      alt={selectedDoctor}
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div className="text-sm text-gray-400">No photo</div>
                   )}
@@ -726,10 +834,16 @@ export default function BookAppointmentPage() {
                     {doctorDetails?.designation || doctorDetails?.qualification || doctorDetails?.specialization || "Doctor"}
                   </p>
                   {selectedDoctorSchedule.length > 0 ? (
-                    <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-800/40">
+                    <div className="mt-3 rounded-2xl border border-brand-200 bg-brand-50/80 px-4 py-3 text-sm font-medium text-brand-700 shadow-sm dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300">
                       {selectedDoctorSchedule.map((schedule, index) => (
-                        <p key={`${schedule.doctorName}-${index}`}>
-                          {schedule.daysAvailable.join(", ") || "All Days"} | {schedule.availableTimeFrom} - {schedule.availableTimeTo} | {schedule.timeSlotMinutes || "10"} min
+                        <p key={`${schedule.doctorName}-${index}`} className="leading-6">
+                          <span className="font-semibold">
+                            {schedule.daysAvailable.join(", ") || "All Days"}
+                          </span>
+                          <span className="mx-2 inline-block h-1.5 w-1.5 rounded-full bg-brand-400 align-middle" />
+                          <span>{schedule.availableTimeFrom} - {schedule.availableTimeTo}</span>
+                          <span className="mx-2 inline-block h-1.5 w-1.5 rounded-full bg-brand-400 align-middle" />
+                          <span>{schedule.timeSlotMinutes || "10"} min</span>
                         </p>
                       ))}
                     </div>

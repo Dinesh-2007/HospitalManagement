@@ -28,14 +28,15 @@ export default function PatientLoginPage() {
 
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    if (phone === MOCK_PHONE && otp === MOCK_OTP) {
-      try {
-        localStorage.setItem("patientName", "John Doe");
-      } catch (e) {
-        // ignore
-      }
-      router.push(redirectPath);
-      return;
+      if (phone === MOCK_PHONE && otp === MOCK_OTP) {
+        try {
+          localStorage.setItem("patientName", "John Doe");
+          localStorage.setItem("patientPhone", MOCK_PHONE);
+        } catch (e) {
+          // ignore
+        }
+        router.push(redirectPath);
+        return;
     }
 
     setError("Invalid phone number or OTP. Use the mock credentials below.");
