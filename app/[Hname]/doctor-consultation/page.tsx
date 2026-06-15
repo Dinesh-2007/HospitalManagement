@@ -368,7 +368,7 @@ export default function DoctorConsultationPage() {
   const isLastTab = detailTab === "Consultation Form";
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="h-full w-full grid grid-cols-1 gap-6 lg:grid-cols-12">
 
       {/* Left Panel */}
       <div className={`col-span-1 flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 h-[calc(100vh-8rem)] overflow-hidden transition-all duration-300 ${leftPanelCollapsed ? "lg:col-span-1 p-3" : "lg:col-span-2 xl:col-span-3 p-4"}`}>
@@ -593,7 +593,7 @@ export default function DoctorConsultationPage() {
                   ) : previousHistoryRows.length > 0 ? (
                     <div className="space-y-3">
                       {previousHistoryRows.map(row => (
-                        <div key={row.id ?? Math.random()} className="flex gap-4 items-center text-sm border border-gray-100 bg-white p-3 rounded-lg shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                        <div key={row.id ?? `${text(row, ["appointment_date"])}-${text(row, ["appointment_time"])}-${text(row, ["doctor"])}`} className="flex gap-4 items-center text-sm border border-gray-100 bg-white p-3 rounded-lg shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
                           <div className="font-medium whitespace-nowrap text-gray-900 dark:text-gray-100">
                             {formatDisplayDate(text(row, ["appointment_date"]))} {text(row, ["appointment_time"]) ? formatDisplayTime(text(row, ["appointment_time"])) : ""}
                           </div>

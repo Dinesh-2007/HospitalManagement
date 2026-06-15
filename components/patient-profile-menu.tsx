@@ -11,6 +11,7 @@ export default function PatientProfileMenu({ isOpen, onClose, hname }: { isOpen:
   const handleLogout = () => {
     try {
       localStorage.removeItem("patientName");
+      localStorage.removeItem("patientPhone");
     } catch (e) {}
     onClose();
     router.push("/");
@@ -24,11 +25,6 @@ export default function PatientProfileMenu({ isOpen, onClose, hname }: { isOpen:
     <div className="fixed right-4 top-16 z-50 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
       <ul className="flex flex-col gap-2">
         <li>
-          <Link href={getHref("/patient-book-appointment")} onClick={onClose} className="block rounded px-3 py-2 hover:bg-gray-50">
-            Book Appointment
-          </Link>
-        </li>
-        <li>
           <Link href={getHref("/patient-appointments")} onClick={onClose} className="block rounded px-3 py-2 hover:bg-gray-50">
             My appointments
           </Link>
@@ -40,7 +36,7 @@ export default function PatientProfileMenu({ isOpen, onClose, hname }: { isOpen:
         </li>
         <li>
           <Link href={getHref("/patient-registration?mode=edit")} onClick={onClose} className="block rounded px-3 py-2 hover:bg-gray-50">
-            EDIT PROFILE
+            Edit Profile
           </Link>
         </li>
         <li>

@@ -20,6 +20,8 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
       id BIGSERIAL PRIMARY KEY,
       patient_id TEXT,
       patient_name TEXT,
+      dob DATE,
+      gender TEXT,
       address TEXT,
       country TEXT,
       state TEXT,
@@ -47,6 +49,9 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS dob DATE`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS gender TEXT`);
 }
 
 export async function POST(
@@ -62,20 +67,27 @@ export async function POST(
     const body = (await request.json()) as {
       action?: "signin" | "signup";
       phone?: string;
+      name?: string;
       patient?: Record<string, unknown>;
     };
 
     const phone = normalizePhone(body.phone);
+    const name = normalizeText(body.name);
 
-    if (!phone) {
+    if (!phone && !name) {
       return NextResponse.json({ error: "Phone number is required." }, { status: 400 });
     }
 
     if (body.action === "signin") {
-      const result = await pool.query(
-        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
-        [phone],
-      );
+      const result = phone
+        ? await pool.query(
+            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
+            [phone],
+          )
+        : await pool.query(
+            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+            [name],
+          );
 
       return NextResponse.json({
         exists: (result.rowCount ?? 0) > 0,
@@ -99,6 +111,8 @@ export async function POST(
         INSERT INTO ${quoteIdentifier(TABLE_NAME)} (
           patient_id,
           patient_name,
+          dob,
+          gender,
           address,
           country,
           state,
@@ -124,13 +138,15 @@ export async function POST(
           inactive_reason
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
         )
         RETURNING *
       `,
       [
         normalizeText(patient.patientId),
         normalizeText(patient.patientName),
+        normalizeText(patient.dob) || null,
+        normalizeText(patient.gender),
         normalizeText(patient.address),
         normalizeText(patient.country),
         normalizeText(patient.state),
@@ -168,6 +184,41 @@ export async function POST(
   }
 }
 
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ Hname: string }> },
+) {
+  try {
+    const { Hname } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    await ensurePatientTable(pool);
+
+    const url = new URL(request.url);
+    const parentPhone = normalizePhone(url.searchParams.get("parentPhone"));
+    const parentName = normalizeText(url.searchParams.get("parentName"));
+
+    if (!parentPhone && !parentName) {
+      return NextResponse.json({ rows: [] });
+    }
+
+    const result = parentPhone
+      ? await pool.query(
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE linked_patient_id = $1 ORDER BY created_at DESC`,
+          [parentPhone],
+        )
+      : await pool.query(
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(linked_patient_id) = LOWER($1) ORDER BY created_at DESC`,
+          [parentName],
+        );
+
+    return NextResponse.json({ rows: result.rows ?? [] });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load family members.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ Hname: string }> },
@@ -178,22 +229,36 @@ export async function PUT(
     const pool = await getTenantDB(decodedHname);
     await ensurePatientTable(pool);
 
-    const body = (await request.json()) as {
-      phone?: string;
-      patient?: Record<string, unknown>;
-    };
+  const body = (await request.json()) as {
+    phone?: string;
+    name?: string;
+    id?: number;
+    patient?: Record<string, unknown>;
+  };
 
-    const phone = normalizePhone(body.phone);
-    const patient = body.patient ?? {};
+  const phone = normalizePhone(body.phone);
+  const name = normalizeText(body.name);
+  const id = Number(body.id);
+  const patient = body.patient ?? {};
 
-    if (!phone) {
+    if (!phone && !name && !Number.isInteger(id)) {
       return NextResponse.json({ error: "Phone number is required." }, { status: 400 });
     }
 
-    const existing = await pool.query(
-      `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
-      [phone],
-    );
+    const existing = Number.isInteger(id)
+      ? await pool.query(
+          `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
+          [id],
+        )
+      : phone
+        ? await pool.query(
+            `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
+            [phone],
+          )
+        : await pool.query(
+            `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+            [name],
+          );
 
     if ((existing.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: "Patient not found." }, { status: 404 });
@@ -205,35 +270,39 @@ export async function PUT(
         SET
           patient_id = $1,
           patient_name = $2,
-          address = $3,
-          country = $4,
-          state = $5,
-          city = $6,
-          zip_code = $7,
-          email = $8,
-          phone_office = $9,
-          phone_resi = $10,
-          hn_number = $11,
-          number_of_visits = $12,
-          last_visit_date_time = $13,
-          last_visit_doctor_name = $14,
-          profession = $15,
-          patient_type = $16,
-          preferred_payment_type = $17,
-          mediclaim_policy_available = $18,
-          policy_details = $19,
-          linked_patient_id = $20,
-          relationship_ship_linked_patient = $21,
-          active_from = $22,
-          inactive_from = $23,
-          inactive_reason = $24,
+          dob = $3,
+          gender = $4,
+          address = $5,
+          country = $6,
+          state = $7,
+          city = $8,
+          zip_code = $9,
+          email = $10,
+          phone_office = $11,
+          phone_resi = $12,
+          hn_number = $13,
+          number_of_visits = $14,
+          last_visit_date_time = $15,
+          last_visit_doctor_name = $16,
+          profession = $17,
+          patient_type = $18,
+          preferred_payment_type = $19,
+          mediclaim_policy_available = $20,
+          policy_details = $21,
+          linked_patient_id = $22,
+          relationship_ship_linked_patient = $23,
+          active_from = $24,
+          inactive_from = $25,
+          inactive_reason = $26,
           updated_at = NOW()
-        WHERE mobile = $25
+        WHERE ${Number.isInteger(id) ? "id = $27" : phone ? "mobile = $27" : "LOWER(patient_name) = LOWER($27)"}
         RETURNING *
       `,
       [
         normalizeText(patient.patientId),
         normalizeText(patient.patientName),
+        normalizeText(patient.dob) || null,
+        normalizeText(patient.gender),
         normalizeText(patient.address),
         normalizeText(patient.country),
         normalizeText(patient.state),
@@ -256,7 +325,7 @@ export async function PUT(
         normalizeText(patient.activeFrom) || null,
         normalizeText(patient.inactiveFrom) || null,
         normalizeText(patient.inactiveReason),
-        phone,
+        Number.isInteger(id) ? id : phone || name,
       ],
     );
 
@@ -267,6 +336,38 @@ export async function PUT(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to process patient.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ Hname: string }> },
+) {
+  try {
+    const { Hname } = await params;
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    await ensurePatientTable(pool);
+
+    const body = (await request.json()) as { id?: number };
+    const id = Number(body.id);
+    if (!Number.isInteger(id)) {
+      return NextResponse.json({ error: "Record id is required." }, { status: 400 });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 RETURNING id`,
+      [id],
+    );
+
+    if ((result.rowCount ?? 0) === 0) {
+      return NextResponse.json({ error: "Patient not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete patient.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
