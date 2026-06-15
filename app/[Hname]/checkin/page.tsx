@@ -44,6 +44,7 @@ export default function CheckInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkingIn, setCheckingIn] = useState<string | number | null>(null);
+  const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; patientName: string } | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
 
   const dateLabel = useMemo(() => {
@@ -147,6 +148,7 @@ export default function CheckInPage() {
 
     setCheckingIn(id);
     setError("");
+    setCheckInResult(null);
 
     try {
       const res = await fetch(`/api/${encodeURIComponent(hname)}/check-in`, {
@@ -157,12 +159,22 @@ export default function CheckInPage() {
           patientPhone,
           department,
           doctor,
+          appointmentId: id,
         }),
       });
 
+      const data = await res.json() as { error?: string; patientId?: string; appointmentNumber?: string; patientName?: string };
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error ?? "Failed to check-in.");
+      }
+
+      if (data.patientId) {
+        setCheckInResult({
+          patientId: data.patientId,
+          appointmentNumber: data.appointmentNumber ?? "",
+          patientName: data.patientName ?? patientName,
+        });
       }
 
       await loadPatients();
@@ -226,11 +238,25 @@ export default function CheckInPage() {
 
           {error ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{error}</div> : null}
 
+          {checkInResult ? (
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">
+              <div>
+                <span className="font-semibold">Check-in successful!</span>
+                {" "}{checkInResult.patientName && <span>Patient: <span className="font-medium">{checkInResult.patientName}</span> — </span>}
+                Patient ID: <span className="font-mono font-semibold">{checkInResult.patientId}</span>
+                {checkInResult.appointmentNumber && <> &nbsp;·&nbsp; Appt. No.: <span className="font-mono font-semibold">{checkInResult.appointmentNumber}</span></>}
+              </div>
+              <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left">Patient</th>
+                  <th className="px-4 py-3 text-left">Patient ID</th>
+                  <th className="px-4 py-3 text-left">Appt. No.</th>
                   <th className="px-4 py-3 text-left">Doctor</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Date</th>
@@ -241,19 +267,29 @@ export default function CheckInPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>Loading...</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={9}>Loading...</td></tr>
                 ) : filteredRows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>No scheduled patients found.</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={9}>No scheduled patients found.</td></tr>
                 ) : filteredRows.map((row) => {
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
                   const isCheckedIn = !!row.appointment_check_in_time;
                   const rowId = row.appointment_id as string | number;
                   const isRowCheckingIn = checkingIn === rowId;
+                  const displayPatientId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                  const appointmentNum = row.appointment_id ? `APT-${String(row.appointment_id).padStart(4, "0")}` : "-";
 
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800">{name}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {displayPatientId
+                          ? <span className="font-mono text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{displayPatientId}</span>
+                          : <span className="text-xs text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-gray-600">{appointmentNum}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
                       <td className="px-4 py-3 text-gray-600">Scheduled</td>

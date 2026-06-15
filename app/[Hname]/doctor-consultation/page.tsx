@@ -218,7 +218,8 @@ export default function DoctorConsultationPage() {
   const patientDetailFields = useMemo(() => {
     if (!selectedPatientRow) return [];
     return [
-      ["Appointment Number", text(selectedPatientRow, ["appointment_id"])],
+      ["Patient ID", text(selectedPatientRow, ["registration_patient_id", "appointment_patient_id", "patient_id"])],
+      ["Appointment Number", text(selectedPatientRow, ["appointment_id"]) ? `APT-${String(text(selectedPatientRow, ["appointment_id"])).padStart(4, "0")}` : ""],
       ["Patient Name", patientName(selectedPatientRow)],
       ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
       ["Gender", text(selectedPatientRow, ["gender"])],
@@ -437,6 +438,11 @@ export default function DoctorConsultationPage() {
                       <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
                         {text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"])}
                       </span>
+                      {text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]) ? (
+                        <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start">
+                          {text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"])}
+                        </span>
+                      ) : null}
                       <div className="text-xs text-gray-500">{text(row, ["appointment_time"]) || "Walk-in"}</div>
                     </button>
                   ))

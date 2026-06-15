@@ -84,7 +84,7 @@ export default function PatientRegistrationPage() {
 
   const patientRegistrationFields: MastersFormField[] = useMemo(
     () => [
-      { id: "patientId", label: "Patient ID", type: "text", maxLength: 50, pattern: "[a-zA-Z0-9]*", size: "small" },
+      { id: "patientId", label: "Patient ID", type: "display", size: "small", placeholder: "Auto-generated on check-in", hint: "Auto-generated when the patient checks in for the first time." },
       { id: "patientName", label: "Patient Name", type: "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium" },
       { id: "dob", label: "Date of Birth", type: "date", size: "small" },
       {

@@ -282,6 +282,8 @@ export default function PatientVitalsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left">Patient</th>
+                  <th className="px-4 py-3 text-left">Patient ID</th>
+                  <th className="px-4 py-3 text-left">Appt. No.</th>
                   <th className="px-4 py-3 text-left">Doctor</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Date</th>
@@ -293,17 +295,27 @@ export default function PatientVitalsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>Loading...</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>Loading...</td></tr>
                 ) : filteredRows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={7}>No patients found.</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>No patients found.</td></tr>
                 ) : filteredRows.map((row) => {
                   const done = isCompleted(row);
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+                  const displayPatientId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                  const appointmentNum = row.appointment_id ? `APT-${String(row.appointment_id).padStart(4, "0")}` : "-";
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800">{name}</div>
                         <div className="text-xs text-gray-500">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {displayPatientId
+                          ? <span className="font-mono text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{displayPatientId}</span>
+                          : <span className="text-xs text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-gray-600">{appointmentNum}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
                       <td className="px-4 py-3 text-gray-600">{text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in")}</td>
@@ -370,10 +382,20 @@ export default function PatientVitalsPage() {
                 <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
                   <div>
                     <div className="text-lg font-semibold text-gray-800 dark:text-white/90">{selectedSummary?.name}</div>
-                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {selectedSummary?.type}
-                      {selectedSummary?.time ? ` • ${selectedSummary.time}` : ""}
-                      {selectedSummary?.slot ? ` • ${selectedSummary.slot} min` : ""}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                      <span>{selectedSummary?.type}</span>
+                      {selectedSummary?.time ? <span>• {selectedSummary.time}</span> : null}
+                      {selectedSummary?.slot ? <span>• {selectedSummary.slot} min</span> : null}
+                      {form.patientId ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-xs font-mono font-semibold text-brand-700">
+                          ID: {form.patientId}
+                        </span>
+                      ) : null}
+                      {selectedRow?.appointment_id ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-600">
+                          {`APT-${String(selectedRow.appointment_id).padStart(4, "0")}`}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button type="button" onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-700">
@@ -385,6 +407,20 @@ export default function PatientVitalsPage() {
                 </div>
 
                 <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  {/* Read-only Patient ID display */}
+                  {form.patientId ? (
+                    <div className="md:col-span-2 xl:col-span-3 flex items-center gap-3 rounded-lg border border-brand-100 bg-brand-50 px-4 py-2">
+                      <span className="text-xs font-medium text-brand-600">Patient ID</span>
+                      <span className="font-mono text-sm font-semibold text-brand-800">{form.patientId}</span>
+                      {selectedRow?.appointment_id ? (
+                        <>
+                          <span className="text-brand-300">|</span>
+                          <span className="text-xs font-medium text-gray-500">Appt. No.</span>
+                          <span className="font-mono text-sm text-gray-700">{`APT-${String(selectedRow.appointment_id).padStart(4, "0")}`}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {[
                     ["patientName", "Patient Name", "text"],
                     ["mobile", "Mobile Number", "text"],
