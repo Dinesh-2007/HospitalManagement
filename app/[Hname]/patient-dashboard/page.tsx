@@ -28,7 +28,7 @@ export default function HospitalPatientDashboardPage() {
         <div className="flex items-center gap-3 relative">
           <div className="text-sm text-gray-700">WELCOME {patientName}</div>
           <Button variant="outline" onClick={() => setIsOpen(true)}>Profile</Button>
-          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} hname={hname} />
+          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} hname={hname ?? undefined} />
         </div>
       </div>
 

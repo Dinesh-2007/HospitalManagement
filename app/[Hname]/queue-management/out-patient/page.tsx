@@ -116,26 +116,6 @@ export default function OutPatientQueuePage() {
               </svg>
             ),
           },
-          {
-            label: "In Progress",
-            value: draftCount,
-            color: "from-amber-400 to-amber-500",
-            icon: (
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m9-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ),
-          },
-          {
-            label: "Exited Hospital",
-            value: completedCount,
-            color: "from-emerald-500 to-emerald-600",
-            icon: (
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ),
-          },
         ].map((card) => (
           <div key={card.label} className="relative overflow-hidden rounded-2xl bg-white shadow-sm border border-gray-100 dark:border-gray-800 dark:bg-gray-900/50 p-5 flex items-center gap-4">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${card.color} shadow-md`}>
@@ -163,22 +143,6 @@ export default function OutPatientQueuePage() {
             onChange={(e) => setSearch(e.target.value)}
             className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
           />
-        </div>
-        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-          {(["All", "Draft", "Completed"] as StatusFilter[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setStatusFilter(f)}
-              className={`rounded-md px-4 py-1.5 text-xs font-medium transition ${
-                statusFilter === f
-                  ? "bg-white text-gray-900 shadow-xs dark:bg-gray-700 dark:text-white"
-                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
         </div>
       </div>
 
