@@ -177,8 +177,9 @@ export async function POST(
 
     const today = new Date().toISOString().split("T")[0];
 
+    type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null };
     // If we have the direct appointment ID, use it
-    let apptRecord: { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null } | null = null;
+    let apptRecord: ApptRecordType | null = null;
 
     if (bodyAppointmentId) {
       const directResult = await pool.query(
@@ -186,7 +187,7 @@ export async function POST(
         [bodyAppointmentId]
       );
       if ((directResult.rowCount ?? 0) > 0) {
-        apptRecord = directResult.rows[0] as typeof apptRecord;
+        apptRecord = directResult.rows[0] as ApptRecordType;
       }
     }
 
@@ -211,7 +212,7 @@ export async function POST(
 
       const result = await pool.query(query, queryParams);
       if ((result.rowCount ?? 0) > 0) {
-        apptRecord = result.rows[0] as typeof apptRecord;
+        apptRecord = result.rows[0] as ApptRecordType;
       }
     }
 

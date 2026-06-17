@@ -97,12 +97,12 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     status: readText(row, ["status"]) || null,
     reschedule_history: Array.isArray(history)
       ? history.map((entry) => ({
-          fromDate: String((entry as Record<string, unknown>).fromDate ?? ""),
-          fromTime: String((entry as Record<string, unknown>).fromTime ?? ""),
-          toDate: String((entry as Record<string, unknown>).toDate ?? ""),
-          toTime: String((entry as Record<string, unknown>).toTime ?? ""),
-          updatedAt: String((entry as Record<string, unknown>).updatedAt ?? ""),
-        }))
+        fromDate: String((entry as Record<string, unknown>).fromDate ?? ""),
+        fromTime: String((entry as Record<string, unknown>).fromTime ?? ""),
+        toDate: String((entry as Record<string, unknown>).toDate ?? ""),
+        toTime: String((entry as Record<string, unknown>).toTime ?? ""),
+        updatedAt: String((entry as Record<string, unknown>).updatedAt ?? ""),
+      }))
       : null,
   };
 }
@@ -436,7 +436,7 @@ export default function AppointmentCalendarPage() {
   const availableSubSlots = useMemo(() => {
     if (!selectedHour || !effectiveSelectedDate) return [];
     const [start, end] = selectedHour.value.split("|");
-    return buildSubSlots(start, end, activeStep);
+    return buildSubSlots(start, end, activeStep as 10 | 20);
   }, [activeStep, effectiveSelectedDate, selectedHour]);
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
@@ -559,7 +559,7 @@ export default function AppointmentCalendarPage() {
   }
 
   const [show, setShow] = useState(false);
-  if(show){
+  if (show) {
     return <div className="justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
   }
   return (
@@ -593,167 +593,164 @@ export default function AppointmentCalendarPage() {
             </div>
           </div>
           <div className="space-y-5 p-4 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handlePreviousWeek}
-              disabled={selectedWeekStart <= todayWeekStart}
-              className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Prev
-            </button>
-            <div className="text-sm text-gray-600">{formatDay(weekDaysList[0])} - {formatDay(weekDaysList[6])}</div>
-            <button type="button" onClick={handleNextWeek} className="rounded-lg border px-3 py-2 text-sm">
-              Next
-            </button>
-          </div>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handlePreviousWeek}
+                disabled={selectedWeekStart <= todayWeekStart}
+                className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Prev
+              </button>
+              <div className="text-sm text-gray-600">{formatDay(weekDaysList[0])} - {formatDay(weekDaysList[6])}</div>
+              <button type="button" onClick={handleNextWeek} className="rounded-lg border px-3 py-2 text-sm">
+                Next
+              </button>
+            </div>
 
-          <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
-            {weekDays.map((day, index) => {
-              const current = weekDaysList[index];
-              const isPast = current <= todayDate;
-              const isAvailable = isDateAvailable(current);
-              const isSelected = effectiveSelectedDate?.toDateString() === current.toDateString();
-              const dayColorClass = isAvailable ? "text-emerald-700" : "text-red-600";
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => {
-                    if (!isPast && isAvailable) {
-                      setSelectedDate(current);
-                      setSelectedHour(null);
-                      setSelectedSlot("");
-                    }
-                  }}
-                  className={`min-h-24 border-r border-b p-3 text-left last:border-r-0 transition ${
-                    isSelected
-                      ? "bg-emerald-50 ring-1 ring-emerald-200"
-                      : isAvailable
-                        ? "bg-white hover:bg-emerald-50/60"
-                        : "bg-red-50 hover:bg-red-100/60"
-                  } ${isPast ? "opacity-70" : ""}`}
-                >
-                  <div className={`text-xs font-semibold uppercase ${dayColorClass}`}>{day}</div>
-                  <div className={`mt-3 text-sm font-medium ${dayColorClass}`}>{current.getDate()}</div>
-                </button>
-              );
-            })}
-          </div>
+            <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
+              {weekDays.map((day, index) => {
+                const current = weekDaysList[index];
+                const isPast = current <= todayDate;
+                const isAvailable = isDateAvailable(current);
+                const isSelected = effectiveSelectedDate?.toDateString() === current.toDateString();
+                const dayColorClass = isAvailable ? "text-emerald-700" : "text-red-600";
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => {
+                      if (!isPast && isAvailable) {
+                        setSelectedDate(current);
+                        setSelectedHour(null);
+                        setSelectedSlot("");
+                      }
+                    }}
+                    className={`min-h-24 border-r border-b p-3 text-left last:border-r-0 transition ${isSelected
+                        ? "bg-emerald-50 ring-1 ring-emerald-200"
+                        : isAvailable
+                          ? "bg-white hover:bg-emerald-50/60"
+                          : "bg-red-50 hover:bg-red-100/60"
+                      } ${isPast ? "opacity-70" : ""}`}
+                  >
+                    <div className={`text-xs font-semibold uppercase ${dayColorClass}`}>{day}</div>
+                    <div className={`mt-3 text-sm font-medium ${dayColorClass}`}>{current.getDate()}</div>
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-gray-700">Slot size</span>
-            <select value={activeStep} onChange={(event) => setSelectedStep(Number(event.target.value) as 10 | 20)} className="h-11 rounded-lg border border-gray-300 px-4 text-sm">
-              <option value={10}>10 minutes</option>
-              <option value={20}>20 minutes</option>
-            </select>
-            <span className="text-xs text-gray-500">From doctor schedule</span>
-          </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">Slot size</span>
+              <select value={activeStep} onChange={(event) => setSelectedStep(Number(event.target.value) as 10 | 20)} className="h-11 rounded-lg border border-gray-300 px-4 text-sm">
+                <option value={10}>10 minutes</option>
+                <option value={20}>20 minutes</option>
+              </select>
+              <span className="text-xs text-gray-500">From doctor schedule</span>
+            </div>
 
-          {effectiveSelectedDate ? (
-            <div className="space-y-5">
-              <div className="rounded-2xl border border-gray-200 p-4">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Hour Slots</div>
-                <div className="flex flex-wrap gap-3">
-                  {availableHours.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
-                  ) : (
-                      availableHours.map((hour) => (
-                      <button
-                        key={hour.value}
-                        type="button"
-                        onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
-                        className={`rounded-full border px-4 py-2 text-sm ${
-                          selectedHour?.value === hour.value
-                            ? "bg-brand-500 text-white"
-                            : "bg-white text-gray-700"
-                        }`}
-                      >
-                        {hour.label}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {selectedHour ? (
+            {effectiveSelectedDate ? (
+              <div className="space-y-5">
                 <div className="rounded-2xl border border-gray-200 p-4">
-                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Available Time Slots</div>
+                  <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Hour Slots</div>
                   <div className="flex flex-wrap gap-3">
-                    {availableSubSlots.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
+                    {availableHours.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                     ) : (
-                      availableSubSlots.map((slot) => (
+                      availableHours.map((hour) => (
                         <button
-                          key={slot.value}
+                          key={hour.value}
                           type="button"
-                          disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
-                          onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.start)}
-                          className={`rounded-full border px-4 py-2 text-sm transition ${
-                            selectedSlot === slot.start
+                          onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
+                          className={`rounded-full border px-4 py-2 text-sm ${selectedHour?.value === hour.value
                               ? "bg-brand-500 text-white"
-                              : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
-                                ? "cursor-not-allowed border-red-300 bg-red-100 text-red-700"
-                                : "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          }`}
+                              : "bg-white text-gray-700"
+                            }`}
                         >
-                          {slot.label}
+                          {hour.label}
                         </button>
                       ))
                     )}
                   </div>
                 </div>
-              ) : null}
 
-              <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50">
-                <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm font-semibold text-brand-700 shadow-sm">
-                  <span>Selected Slot Details</span>
-                  <span className="rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white">{selectedSlot ? "Selected" : "None"}</span>
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-medium">Slot:</span> {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}
-                </div>
-                {patientAppointment ? (
-                  <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-                    <div className="font-medium text-gray-800">Current booking</div>
-                    <div>Time: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
-                    <div>Reschedules: {patientAppointment.reschedule_count ?? 0}/3</div>
+                {selectedHour ? (
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Available Time Slots</div>
+                    <div className="flex flex-wrap gap-3">
+                      {availableSubSlots.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
+                      ) : (
+                        availableSubSlots.map((slot) => (
+                          <button
+                            key={slot.value}
+                            type="button"
+                            disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
+                            onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.start)}
+                            className={`rounded-full border px-4 py-2 text-sm transition ${selectedSlot === slot.start
+                                ? "bg-brand-500 text-white"
+                                : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
+                                  ? "cursor-not-allowed border-red-300 bg-red-100 text-red-700"
+                                  : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                              }`}
+                          >
+                            {slot.label}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
                 ) : null}
-                {!patientAppointment ? (
-                  <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
-                      Book Appointment
-                    </button>
-                    <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                      Cancel
-                    </button>
-                  </div>
-                ) : isRescheduling ? (
-                  <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
-                      Confirm Reschedule
-                    </button>
-                    <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                      Cancel Reschedule
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-4 flex gap-3">
-                    <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
-                      Reschedule Appointment
-                    </button>
-                    <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition">
-                      Cancel Appointment
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
 
-              {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
-              {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
+                <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50">
+                  <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm font-semibold text-brand-700 shadow-sm">
+                    <span>Selected Slot Details</span>
+                    <span className="rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white">{selectedSlot ? "Selected" : "None"}</span>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    <span className="font-medium">Slot:</span> {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}
+                  </div>
+                  {patientAppointment ? (
+                    <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+                      <div className="font-medium text-gray-800">Current booking</div>
+                      <div>Time: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
+                      <div>Reschedules: {patientAppointment.reschedule_count ?? 0}/3</div>
+                    </div>
+                  ) : null}
+                  {!patientAppointment ? (
+                    <div className="mt-4 flex gap-3">
+                      <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                        Book Appointment
+                      </button>
+                      <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : isRescheduling ? (
+                    <div className="mt-4 flex gap-3">
+                      <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                        Confirm Reschedule
+                      </button>
+                      <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                        Cancel Reschedule
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex gap-3">
+                      <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                        Reschedule Appointment
+                      </button>
+                      <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition">
+                        Cancel Appointment
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {message ? <div className="rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">{message}</div> : null}
+            {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
           </div>
         </section>
 
@@ -801,9 +798,8 @@ export default function AppointmentCalendarPage() {
                       ? handleConfirmReschedule
                       : handleConfirmCancel
                 }
-                className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white ${
-                  confirmDialog.type === "cancel" ? "bg-red-500" : "bg-brand-500"
-                }`}
+                className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white ${confirmDialog.type === "cancel" ? "bg-red-500" : "bg-brand-500"
+                  }`}
               >
                 Yes
               </button>

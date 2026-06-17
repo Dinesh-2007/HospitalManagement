@@ -227,10 +227,14 @@ export default function PatientRegistrationPage() {
   };
 
   const handleStateChange = (stateName: string) => {
-    setSelectedStateCode(stateNameToCode[stateName] ?? "");
+    const state = states.find((item) => item.name === stateName);
+    setSelectedStateCode(state?.isoCode ?? "");
+    updateField("state", stateName);
+    updateField("city", "");
   };
 
-  const patientRegistrationFields: MastersFormField[] = useMemo(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const patientRegistrationFields = useMemo(
     () => [
       { id: "patientId", label: "Patient ID", type: "display", size: "small", placeholder: "Auto-generated on check-in", hint: "Auto-generated when the patient checks in for the first time." },
       { id: "patientName", label: "Patient Name", type: "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium" },
@@ -336,6 +340,28 @@ export default function PatientRegistrationPage() {
     ],
     [cities, countries, patientTypeOptions, states],
   );
+
+
+  async function handleSave() {
+    if (!hname) return;
+    setIsSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/${hname}/patient-auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "register", ...formValues }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to save patient.");
+      setMessage("Patient details saved successfully.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save patient.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <BlankPage title="Patient Registration">
