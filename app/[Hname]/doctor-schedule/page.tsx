@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
-import { BlankPage } from "../../../components/blank-page";
-import { CalenderIcon } from "../../../components/icons";
+import { DatePicker } from "../../../components/date-picker";
+import { CalenderIcon, ChevronLeftIcon, ArrowRightIcon } from "../../../components/icons";
 import PatientProfilePage from "../../../components/profile/page";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
 
@@ -50,7 +50,12 @@ type TransferDoctorRow = {
   availableSlots: Array<{ start: string; end: string }>;
   nextSlot: { start: string; end: string } | null;
 };
+type DoctorMasterRow = {
+  name: string;
+  department: string;
+};
 
+const DOCTOR_TABLE = tableNameFromCardTitle("Consultant / Doctor Master");
 const SCHEDULE_TABLE = tableNameFromCardTitle("Consultant / Doctor Schedule");
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekDayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -259,6 +264,14 @@ export default function DoctorSchedulePage() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
 
+  // Admin View State
+  const [allDoctors, setAllDoctors] = useState<DoctorMasterRow[]>([]);
+  const [adminSelectedDept, setAdminSelectedDept] = useState("");
+  const [adminSelectedDoctor, setAdminSelectedDoctor] = useState("");
+  const [adminSelectedDate, setAdminSelectedDate] = useState(() => toKey(new Date()));
+  const [adminAppointments, setAdminAppointments] = useState<AppointmentRow[]>([]);
+  const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -276,6 +289,22 @@ export default function DoctorSchedulePage() {
         } else {
           setDoctorProfile(null);
         }
+
+        if (role && role.toLowerCase() === "admin") {
+          try {
+            const drRows = await loadRows(hname, `/forms/${DOCTOR_TABLE}`);
+            if (!cancelled) {
+              const doctors = drRows.map(row => ({
+                name: readText(row, ["doctor_consultant_name", "doctorConsultantName", "consultant_doctor_name", "name"]),
+                department: readText(row, ["clinic", "department", "department_type", "departmentType"]),
+              })).filter(doc => doc.name && doc.department);
+              setAllDoctors(doctors);
+            }
+          } catch (error) {
+            console.error("Failed to load doctor master forms", error);
+          }
+        }
+
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(error instanceof Error ? error.message : "Failed to load doctor session.");
@@ -403,6 +432,51 @@ export default function DoctorSchedulePage() {
       cancelled = true;
     };
   }, [hname, matchedDoctorNames, weekDaysList]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAdminAppointments() {
+      if (currentRole?.toLowerCase() !== "admin") return;
+      if (!hname) return;
+
+      const adminDoctorsInDept = adminSelectedDept
+        ? allDoctors.filter((doc) => doc.department === adminSelectedDept).map((doc) => doc.name)
+        : allDoctors.map((doc) => doc.name);
+
+      const targetDoctors = adminSelectedDoctor
+        ? [adminSelectedDoctor]
+        : adminDoctorsInDept;
+
+      if (targetDoctors.length === 0) {
+        setAdminAppointments([]);
+        return;
+      }
+
+      setIsLoadingAdmin(true);
+      try {
+        console.log("Fetching admin appointments for date:", adminSelectedDate, "doctors:", targetDoctors);
+        const rows = await loadRows(
+          hname,
+          `/appointments?date=${encodeURIComponent(adminSelectedDate)}&doctorNames=${encodeURIComponent(targetDoctors.join(","))}`
+        );
+        if (!cancelled) {
+          setAdminAppointments(rows.map(normalizeAppointmentRow));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : "Failed to load admin appointments.");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingAdmin(false);
+      }
+    }
+
+    void loadAdminAppointments();
+    return () => {
+      cancelled = true;
+    };
+  }, [hname, currentRole, adminSelectedDept, adminSelectedDoctor, adminSelectedDate, allDoctors]);
 
   const defaultSelectedDate = useMemo(() => {
     const today = new Date();
@@ -598,30 +672,246 @@ export default function DoctorSchedulePage() {
 
   if (isLoading) {
     return (
-      <BlankPage title="Doctor Schedule">
+      <div>
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">Loading doctor schedule...</div>
-      </BlankPage>
+      </div>
     );
   }
 
   if (!currentUser) {
     return (
-      <BlankPage title="Doctor Schedule">
+      <div>
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-600">Please sign in to view the doctor schedule.</div>
-      </BlankPage>
+      </div>
     );
   }
 
-  if (currentRole && currentRole.toLowerCase() !== "doctor") {
+  if (currentRole && currentRole.toLowerCase() === "admin") {
+    const adminDepts = Array.from(new Set(allDoctors.map((doc) => doc.department).filter(Boolean))).sort();
+    const adminDoctorsInDept = adminSelectedDept
+      ? Array.from(new Set(allDoctors.filter((doc) => doc.department === adminSelectedDept).map((doc) => doc.name))).sort()
+      : Array.from(new Set(allDoctors.map((doc) => doc.name))).sort();
+
     return (
-      <BlankPage title="Doctor Schedule">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-600">Only doctor accounts can access this schedule view.</div>
-      </BlankPage>
+      <div>
+        <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Upcoming Appointments</p>
+              <h2 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">Hospital Schedule</h2>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <DatePicker
+                value={adminSelectedDate}
+                onChange={(val) => setAdminSelectedDate(val)}
+                className="z-[100]"
+              />
+              <select
+                value={adminSelectedDept}
+                onChange={(e) => {
+                  setAdminSelectedDept(e.target.value);
+                  setAdminSelectedDoctor("");
+                }}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">All Departments</option>
+                {adminDepts.map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+              <select
+                value={adminSelectedDoctor}
+                onChange={(e) => setAdminSelectedDoctor(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <option value="">All Doctors</option>
+                {adminDoctorsInDept.map((doc) => (
+                  <option key={doc} value={doc}>{doc}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6">
+            {isLoadingAdmin ? (
+              <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500 text-center">Loading appointments...</div>
+            ) : adminAppointments.length > 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className="px-4 py-3 text-left">Time</th>
+                      <th className="px-4 py-3 text-left">Department</th>
+                      <th className="px-4 py-3 text-left">Doctor</th>
+                      <th className="px-4 py-3 text-left">Patient</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {adminAppointments.map((appointment) => (
+                      <tr key={appointment.id ?? `${appointment.patient_id}-${appointment.appointment_time}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
+                          {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{appointment.department ?? "-"}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{appointment.doctor ?? "-"}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
+                            disabled={!appointment.patient_id}
+                            className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {appointment.patient_name ?? "-"}
+                          </button>
+                          <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
+                              disabled={!appointment.patient_id}
+                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              View Profile
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void openTransferModal(appointment)}
+                              className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-600"
+                            >
+                              Transfer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelTarget(appointment)}
+                              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+                No upcoming appointments for {formatDisplayDate(adminSelectedDate)}.
+              </div>
+            )}
+
+            {message ? <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
+            {errorMessage ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
+          </div>
+        </section>
+
+        {transferTarget ? (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Transfer appointment</h3>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    Same department only. The appointment date stays {transferTarget.appointment_date ? formatDisplayDate(transferTarget.appointment_date) : ""}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferTarget(null);
+                    setTransferDoctors([]);
+                  }}
+                  disabled={isTransferring}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p><span className="font-medium">Patient:</span> {transferTarget.patient_name || "-"}</p>
+                <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
+                <p className="mt-1">
+                  <span className="font-medium">Current time:</span>{" "}
+                  {transferTarget.appointment_time ? formatTimeRange(transferTarget.appointment_time, transferTarget.appointment_end_time) : "-"}
+                </p>
+              </div>
+
+              <div className="mt-5 max-h-[45vh] overflow-y-auto">
+                {isLoadingTransferDoctors ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">Loading available doctors...</div>
+                ) : transferDoctors.length > 0 ? (
+                  <div className="grid gap-3">
+                    {transferDoctors.map((doctor) => (
+                      <button
+                        key={doctor.doctor}
+                        type="button"
+                        onClick={() => void transferAppointment(doctor.doctor)}
+                        disabled={isTransferring || !doctor.nextSlot}
+                        className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-900">{doctor.doctor}</p>
+                            <p className="mt-1 text-sm text-gray-500">{doctor.department || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">Available timing: {doctor.availableTiming || "-"}</p>
+                          </div>
+                          <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                            Next: {doctor.nextSlot ? formatTimeRange(doctor.nextSlot.start, doctor.nextSlot.end) : "-"}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                    No available slots found for transfer on the selected date.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {cancelTarget ? (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                Cancel the appointment for {cancelTarget.patient_name ?? "this patient"}
+                {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancelTarget(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cancelAppointment()}
+                  disabled={isCancelling}
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
     );
   }
 
   return (
-    <BlankPage title="Doctor Schedule">
+    <div>
       <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -1000,6 +1290,6 @@ export default function DoctorSchedulePage() {
           </div>
         </div>
       ) : null}
-    </BlankPage>
+    </div>
   );
 }
