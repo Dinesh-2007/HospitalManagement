@@ -704,23 +704,37 @@ export default function BookAppointmentPage() {
           </div>
 
           <div className="text-sm text-gray-500">Welcome, {authenticatedPatient.name || authenticatedPatient.phone}</div>
-          <div>
-            <div className="mb-4 flex items-center justify-between">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Select Department</h4>
-              <span className="text-xs text-gray-500">{isLoading ? "Loading..." : `${departments.length} departments`}</span>
+          {!selectedDepartment ? (
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Select Department</h4>
+                <span className="text-xs text-gray-500">{isLoading ? "Loading..." : `${departments.length} departments`}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {departments.map((department) => {
+                  const isActive = department === selectedDepartment;
+                  return (
+                    <button key={department} type="button" onClick={() => { setSelectedDepartment(department); setSelectedDoctor(""); }} className={`rounded-2xl border px-5 py-5 text-left transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
+                      <p className="text-base font-semibold text-gray-800">{department}</p>
+                      <p className="mt-2 text-sm text-gray-500">Tap to view doctors in this department</p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {departments.map((department) => {
-                const isActive = department === selectedDepartment;
-                return (
-                  <button key={department} type="button" onClick={() => { setSelectedDepartment(department); setSelectedDoctor(""); }} className={`rounded-2xl border px-5 py-5 text-left transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
-                    <p className="text-base font-semibold text-gray-800">{department}</p>
-                    <p className="mt-2 text-sm text-gray-500">Tap to view doctors in this department</p>
-                  </button>
-                );
-              })}
+          ) : (
+            <div className="mb-6 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Department</span>
+                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                <span className="text-base font-bold text-brand-700 dark:text-brand-300">{selectedDepartment}</span>
+              </div>
+              <button type="button" onClick={() => { setSelectedDepartment(""); setSelectedDoctor(""); }} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm border border-gray-200 hover:bg-gray-50 transition dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                Back
+              </button>
             </div>
-          </div>
+          )}
           {selectedDepartment ? (
             <div>
               <div className="mb-4 flex items-center justify-between">
