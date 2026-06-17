@@ -121,6 +121,7 @@ export default function DoctorConsultationPage() {
     followUpDays: "",
     consultationAmount: "",
     prescriptionData: "",
+    sended: "",
   });
 
   // Fetch doctors on mount
@@ -284,6 +285,7 @@ export default function DoctorConsultationPage() {
       followUpDays: "",
       consultationAmount: "",
       prescriptionData: "",
+      sended: "",
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -309,16 +311,18 @@ export default function DoctorConsultationPage() {
       followUpDays: text(row, ["followUpDays", "follow_up_days"]),
       consultationAmount: text(row, ["consultationAmount", "consultation_amount"]),
       prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
+      sended: text(row, ["sended"]),
     });
     setErrorMessage("");
     setSuccessMessage("");
   };
 
-  const saveForm = async (status: "Draft" | "Completed") => {
+  const saveForm = async (status: "Draft" | "Completed", isSended?: boolean) => {
     setIsSubmitting(true);
     setErrorMessage("");
     setSuccessMessage("");
     try {
+      const finalSended = isSended ? "Yes" : formValues.sended;
       const payload = {
         id: editingRecordId,
         cardTitle: "Doctor Consultation Entry",
@@ -334,8 +338,9 @@ export default function DoctorConsultationPage() {
           { id: "consultationAmount", type: "number" },
           { id: "prescriptionData", type: "textarea" },
           { id: "patientType", type: "text" },
+          { id: "sended", type: "text" },
         ],
-        values: { ...formValues, status, doctor: selectedDoctor, patientType },
+        values: { ...formValues, status, doctor: selectedDoctor, patientType, sended: finalSended },
       };
 
       const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/doctor_consultation_entry`, {
@@ -347,7 +352,7 @@ export default function DoctorConsultationPage() {
       if (!response.ok) throw new Error(data.error || "Failed to save.");
 
       setSuccessMessage(`Consultation saved as ${status}.`);
-      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", followUpDays: "", consultationAmount: "", prescriptionData: "" });
+      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", followUpDays: "", consultationAmount: "", prescriptionData: "", sended: "" });
       setPatientType("OP");
       setEditingRecordId(null);
       void loadData();
@@ -357,6 +362,10 @@ export default function DoctorConsultationPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSendToPharmacy = () => {
+    saveForm("Draft", true);
   };
 
   const updateFormValue = (key: keyof ConsultationRow, value: any) => {
@@ -754,6 +763,9 @@ export default function DoctorConsultationPage() {
                   <PrescriptionTable
                     value={formValues.prescriptionData}
                     onChange={val => updateFormValue("prescriptionData", val)}
+                    isSended={formValues.sended === "Yes"}
+                    onSendToPharmacy={handleSendToPharmacy}
+                    isSubmitting={isSubmitting}
                   />
                 </div>
 
