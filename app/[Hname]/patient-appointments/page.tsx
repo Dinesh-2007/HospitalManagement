@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { BlankPage } from "../../../components/blank-page";
+import { withSalutation } from "../../../lib/salutation";
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 type AppointmentRow = {
@@ -119,7 +120,7 @@ export default function HospitalPatientAppointmentsPage() {
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : null;
 
   // Logged-in patient
-  const [self, setSelf] = useState<{ phone: string; name: string } | null>(null);
+  const [self, setSelf] = useState<{ phone: string; name: string; gender: string } | null>(null);
   // Family members linked to this patient
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
 
@@ -139,7 +140,8 @@ export default function HospitalPatientAppointmentsPage() {
     try {
       const phone = window.localStorage.getItem("patientPhone") ?? "";
       const name = window.localStorage.getItem("patientName") ?? "";
-      if (phone || name) setSelf({ phone, name });
+      const gender = window.localStorage.getItem("patientGender") ?? "";
+      if (phone || name) setSelf({ phone, name, gender });
     } catch { /**/ }
   }, []);
 
@@ -472,7 +474,7 @@ export default function HospitalPatientAppointmentsPage() {
                         badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/60 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20";
                         dotColor = "bg-indigo-500";
                       } else if (isRescheduled) {
-                        badgeClass = "bg-amber-50 text-amber-700 border-amber-200/60 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20";
+                        badgeClass = "bg-amber-50 text-amber-700 border-amber-200/60 dark:bg-amber-500/10 dark:amber-400 dark:border-amber-500/20";
                         dotColor = "bg-amber-500";
                       }
 
@@ -488,7 +490,12 @@ export default function HospitalPatientAppointmentsPage() {
                                 {(row.patient_name ?? "?")[0]?.toUpperCase()}
                               </span>
                               <span className="font-medium text-gray-800 dark:text-white whitespace-nowrap">
-                                {row.patient_name || "–"}
+                                {row.patient_name
+                                  ? withSalutation(
+                                      row.patient_name,
+                                      row.patient_name === self?.name ? (self?.gender ?? "") : ""
+                                    )
+                                  : "–"}
                               </span>
                             </span>
                           </td>

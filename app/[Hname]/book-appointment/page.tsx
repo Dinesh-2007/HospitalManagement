@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
+import { withSalutation } from "../../../lib/salutation";
 
 type MasterRow = Record<string, unknown>;
 type FamilyMember = { id: number; name: string; phone: string; relationship: string };
@@ -23,6 +24,7 @@ type DoctorOption = {
   doctorId: string;
   doctorCode: string;
   name: string;
+  gender: string;
   department: string;
   specialization: string;
   qualification: string;
@@ -229,6 +231,7 @@ function normalizeDoctor(row: MasterRow): DoctorOption {
     doctorId: readText(row, ["doctor_id", "doctorId"]),
     doctorCode: readText(row, ["doctor_code", "doctorCode", "code"]),
     name,
+    gender: readText(row, ["gender"]),
     department: readText(row, ["clinic", "department", "department_type", "departmentType"]),
     specialization: readText(row, ["specialization"]),
     qualification: readText(row, ["qualification"]),
@@ -703,7 +706,7 @@ export default function BookAppointmentPage() {
             )}
           </div>
 
-          <div className="text-sm text-gray-500">Welcome, {authenticatedPatient.name || authenticatedPatient.phone}</div>
+          <div className="text-sm text-gray-500">Welcome, {withSalutation(authenticatedPatient.name || authenticatedPatient.phone, window.localStorage.getItem("patientGender") ?? "")}</div>
           {!selectedDepartment ? (
             <div>
               <div className="mb-4 flex items-center justify-between">
@@ -755,7 +758,7 @@ export default function BookAppointmentPage() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-base font-semibold text-gray-800 truncate">{doctor.name}</p>
+                          <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                             {doctor.specialization ? (
                               <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-600">{doctor.specialization}</span>
@@ -828,8 +831,8 @@ export default function BookAppointmentPage() {
                 <div>
                   <h3 className="text-2xl font-semibold text-gray-800 dark:text-white/90">
                     {doctorDetails?.firstName || doctorDetails?.lastName
-                      ? `${doctorDetails.firstName} ${doctorDetails.lastName}`.trim()
-                      : selectedDoctorOption?.name || selectedDoctor}
+                      ? withSalutation(`${doctorDetails.firstName} ${doctorDetails.lastName}`.trim(), doctorDetails.gender)
+                      : withSalutation(selectedDoctorOption?.name || selectedDoctor, selectedDoctorOption?.gender ?? "")}
                   </h3>
                   <p className="mt-1 text-sm text-gray-500">
                     {doctorDetails?.designation || doctorDetails?.qualification || doctorDetails?.specialization || "Doctor"}
