@@ -604,14 +604,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
 
     if (patientId && !department && requestedDoctorNames.length === 0) {
       const result = await pool.query(
-        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE patient_id = $1 ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC`,
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)}
+         WHERE patient_id = $1
+            OR patient_phone = $1
+            OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
+         ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC`,
         [patientId],
       );
       return NextResponse.json({ rows: result.rows });
     }
 
     if (patientId && (department || requestedDoctorNames.length > 0)) {
-      const filters = [`patient_id = $1`, `status IN ('Scheduled', 'Rescheduled')`];
+      const filters = [
+        `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))`,
+        `status IN ('Scheduled', 'Rescheduled')`
+      ];
       const values: unknown[] = [patientId];
       let index = 2;
       if (department) {

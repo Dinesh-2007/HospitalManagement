@@ -7,6 +7,7 @@ import { DatePicker } from "../../../components/date-picker";
 import { CalenderIcon, ChevronLeftIcon, ArrowRightIcon } from "../../../components/icons";
 import PatientProfilePage from "../../../components/profile/page";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
+import { withSalutation } from "../../../lib/salutation";
 
 type RawRow = Record<string, unknown>;
 type ScheduleRow = {
@@ -763,7 +764,7 @@ export default function DoctorSchedulePage() {
                             disabled={!appointment.patient_id}
                             className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {appointment.patient_name ?? "-"}
+                            {withSalutation(appointment.patient_name ?? "-", appointment.patient_gender ?? "")}
                           </button>
                           <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
                         </td>
@@ -834,7 +835,7 @@ export default function DoctorSchedulePage() {
               </div>
 
               <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-                <p><span className="font-medium">Patient:</span> {transferTarget.patient_name || "-"}</p>
+                <p><span className="font-medium">Patient:</span> {withSalutation(transferTarget.patient_name || "-", transferTarget.patient_gender ?? "")}</p>
                 <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
                 <p className="mt-1">
                   <span className="font-medium">Current time:</span>{" "}
@@ -883,7 +884,7 @@ export default function DoctorSchedulePage() {
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
               <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
               <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                Cancel the appointment for {cancelTarget.patient_name ?? "this patient"}
+                Cancel the appointment for {withSalutation(cancelTarget.patient_name ?? "this patient", cancelTarget.patient_gender ?? "")}
                 {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
               </p>
               <div className="mt-5 flex justify-end gap-3">
@@ -1041,7 +1042,7 @@ export default function DoctorSchedulePage() {
                             disabled={!appointment.patient_id}
                             className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {appointment.patient_name ?? "-"}
+                            {withSalutation(appointment.patient_name ?? "-", appointment.patient_gender ?? "")}
                           </button>
                           <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
                         </td>
@@ -1139,7 +1140,7 @@ export default function DoctorSchedulePage() {
                         : record.reason || status;
                       return (
                         <tr key={record.id ?? `${record.patient_name}-${record.appointment_time}`} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-800">{record.patient_name || "-"}</td>
+                          <td className="px-4 py-3 font-medium text-gray-800">{withSalutation(record.patient_name || "-", record.patient_gender ?? "")}</td>
                           <td className="px-4 py-3 text-gray-600">{record.patient_phone || "-"}</td>
                           <td className="px-4 py-3 text-gray-600">{record.patient_gender || "-"}</td>
                           <td className="px-4 py-3 text-gray-600">{calculateAge(record.patient_dob)}</td>
@@ -1214,7 +1215,7 @@ export default function DoctorSchedulePage() {
             </div>
 
             <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-              <p><span className="font-medium">Patient:</span> {transferTarget.patient_name || "-"}</p>
+              <p><span className="font-medium">Patient:</span> {withSalutation(transferTarget.patient_name || "-", transferTarget.patient_gender ?? "")}</p>
               <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
               <p className="mt-1">
                 <span className="font-medium">Current time:</span>{" "}
@@ -1267,7 +1268,7 @@ export default function DoctorSchedulePage() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
             <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              Cancel the appointment for {cancelTarget.patient_name ?? "this patient"}
+              Cancel the appointment for {withSalutation(cancelTarget.patient_name ?? "this patient", cancelTarget.patient_gender ?? "")}
               {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
             </p>
             <div className="mt-5 flex justify-end gap-3">

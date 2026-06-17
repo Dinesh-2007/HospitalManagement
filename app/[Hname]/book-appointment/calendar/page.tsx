@@ -194,13 +194,15 @@ function buildHourBlocks(fromTime: string, toTime: string) {
   return blocks;
 }
 
-function buildSubSlots(fromTime: string, toTime: string, step: 10 | 20) {
+function buildSubSlots(fromTime: string, toTime: string, step: number) {
   const slots: Slot[] = [];
+  // Guard: need a positive integer step
+  const safeStep = Math.max(1, Math.round(step));
   let cursor = normalizeTime(fromTime);
   const endTime = normalizeTime(toTime);
   if (!cursor || !endTime) return slots;
   while (cursor < endTime) {
-    const next = addMinutes(cursor, step);
+    const next = addMinutes(cursor, safeStep);
     if (next > endTime) break;
     slots.push({
       value: slotKey(cursor, next),
@@ -238,7 +240,7 @@ export default function AppointmentCalendarPage() {
     return new Date(todayWeekStart);
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedStep, setSelectedStep] = useState<10 | 20 | null>(null);
+  const [selectedStep, setSelectedStep] = useState<number | null>(null);
   const [selectedHour, setSelectedHour] = useState<Slot | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([]);
@@ -343,9 +345,10 @@ export default function AppointmentCalendarPage() {
 
   const effectiveSelectedDate = selectedDate ?? firstAvailableDate;
   const scheduleSlotMinutes = useMemo(() => {
+    // Accept any positive integer from the schedule — not just 10 or 20
     const values = selectedDaySchedules
       .map((row) => row.timeSlotMinutes)
-      .filter((value) => value === 10 || value === 20);
+      .filter((value) => Number.isFinite(value) && value > 0);
 
     return values[0] ?? 10;
   }, [selectedDaySchedules]);
@@ -640,14 +643,7 @@ export default function AppointmentCalendarPage() {
               })}
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-700">Slot size</span>
-              <select value={activeStep} onChange={(event) => setSelectedStep(Number(event.target.value) as 10 | 20)} className="h-11 rounded-lg border border-gray-300 px-4 text-sm">
-                <option value={10}>10 minutes</option>
-                <option value={20}>20 minutes</option>
-              </select>
-              <span className="text-xs text-gray-500">From doctor schedule</span>
-            </div>
+
 
             {effectiveSelectedDate ? (
               <div className="space-y-5">

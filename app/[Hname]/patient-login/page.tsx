@@ -10,7 +10,7 @@ import { Button } from "../../../components/ui/button";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
 
 /* ── types ── */
-type PatientRow = { id: number; name: string; phone: string };
+type PatientRow = { id: number; name: string; phone: string; gender: string };
 
 type RegForm = {
   patientName: string;
@@ -80,6 +80,7 @@ async function fetchPatientRows(hname: string): Promise<PatientRow[]> {
       id: Number(row.id ?? 0),
       name: String(row.patient_name ?? row.patientName ?? ""),
       phone: String(row.mobile ?? ""),
+      gender: String(row.gender ?? ""),
     }))
     .filter((r) => r.id && r.name);
 }
@@ -140,10 +141,11 @@ export default function PatientLoginPage() {
 
       if (matched) {
         /* phone found → log in */
-        const payload = { id: matched.id, name: matched.name, phone: matched.phone };
+        const payload = { id: matched.id, name: matched.name, phone: matched.phone, gender: matched.gender };
         localStorage.setItem(storageKey(hname ?? ""), JSON.stringify(payload));
         localStorage.setItem("patientName", matched.name);
         localStorage.setItem("patientPhone", matched.phone);
+        localStorage.setItem("patientGender", matched.gender);
         router.push(redirectPath);
       } else {
         /* phone NOT found → go to registration step with phone prefilled */
@@ -180,10 +182,11 @@ export default function PatientLoginPage() {
       if (!res.ok) throw new Error(data.error ?? "Registration failed.");
 
       const rowId = data.patientId ?? Number(data.row?.id ?? 0);
-      const payload = { id: rowId, name: regForm.patientName, phone: regForm.mobile };
+      const payload = { id: rowId, name: regForm.patientName, phone: regForm.mobile, gender: regForm.gender };
       localStorage.setItem(storageKey(hname ?? ""), JSON.stringify(payload));
       localStorage.setItem("patientName", regForm.patientName);
       localStorage.setItem("patientPhone", regForm.mobile);
+      localStorage.setItem("patientGender", regForm.gender);
 
       router.push(redirectPath);
     } catch (err) {

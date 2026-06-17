@@ -193,7 +193,8 @@ export default function PharmacyDispensingPage() {
         }
 
         if (isMounted) {
-          setConsultationRecords(data.rows ?? []);
+          const sentRecords = (data.rows ?? []).filter((r: any) => r.sended === "Yes");
+          setConsultationRecords(sentRecords);
         }
       } catch (error) {
         if (isMounted) {

@@ -57,6 +57,9 @@ type SerializedPrescriptionLine = {
 type PrescriptionTableProps = {
   value?: string;
   onChange?: (value: string) => void;
+  isSended?: boolean;
+  onSendToPharmacy?: () => void;
+  isSubmitting?: boolean;
 };
 
 const DEFAULT_FOOD_TIMING = "After Food";
@@ -190,7 +193,7 @@ function parseRows(value?: string): PrescriptionRow[] {
   }
 }
 
-export function PrescriptionTable({ value = "", onChange }: PrescriptionTableProps) {
+export function PrescriptionTable({ value = "", onChange, isSended = false, onSendToPharmacy, isSubmitting = false }: PrescriptionTableProps) {
   const params = useParams();
   const hname = params?.Hname as string;
   const [rows, setRows] = useState<PrescriptionRow[]>(() => parseRows(value));
@@ -338,6 +341,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   };
 
   const addEmptyRow = () => {
+    if (isSended) return;
     const rowId = crypto.randomUUID();
     const emptyRow: PrescriptionRow = {
       id: rowId,
@@ -354,6 +358,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   };
 
   const deleteRow = (rowId: string) => {
+    if (isSended) return;
     setRows((currentRows) => {
       const updatedRows = currentRows.filter((row) => row.id !== rowId);
       onChange?.(serializeRows(updatedRows));
@@ -365,6 +370,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   };
 
   const editRow = (rowId: string) => {
+    if (isSended) return;
     setEditingRowId((currentEditingId) =>
       currentEditingId === rowId ? null : rowId
     );
@@ -375,6 +381,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
     field: keyof Pick<PrescriptionRow, "foodTiming" | "days">,
     value: string
   ) => {
+    if (isSended) return;
     const nextValue =
       field === "days" && value !== ""
         ? String(Math.max(0, Number(value)))
@@ -396,6 +403,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
   };
 
   const updateScheduleField = (rowId: string, field: keyof PrescriptionRow["schedule"], checked: boolean) => {
+    if (isSended) return;
     setRows((currentRows) => {
       const updatedRows = currentRows.map((row) =>
         row.id === rowId
@@ -425,6 +433,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
     field: keyof Pick<Medicine, "type" | "genericName" | "uom" | "strength">,
     value: string
   ) => {
+    if (isSended) return;
     setRows((currentRows) => {
       const updatedRows = currentRows.map((row) =>
         row.id === rowId
@@ -438,7 +447,7 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
 
   const editableInputClass = (minWidth: string, isEditing: boolean) =>
     `w-full ${minWidth} rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
-      isEditing
+      isEditing && !isSended
         ? "border-gray-300 bg-transparent focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:bg-gray-900"
         : "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300"
     }`;
@@ -457,16 +466,41 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
         <h4 className="text-sm font-medium text-gray-800 dark:text-white/90">
           Prescription Table
         </h4>
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-600"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Medicine
-        </button>
+        <div className="flex gap-2">
+          {!isSended && (
+            <button
+              type="button"
+              onClick={onSendToPharmacy}
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500 bg-white px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 transition disabled:opacity-50 dark:bg-gray-900 dark:hover:bg-gray-800"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              Send to Pharmacy
+            </button>
+          )}
+          {isSended ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/40">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Sent to Pharmacy
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Medicine
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
@@ -610,26 +644,28 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
                       />
                     </td>
                     <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => editRow(row.id)}
-                          className={`${actionButtonClass} ${isEditing ? "border-brand-200 text-brand-600 dark:border-brand-500/40 dark:text-brand-400" : ""}`}
-                          aria-label={`${isEditing ? "Finish editing" : "Edit"} prescription row ${index + 1}`}
-                          title={isEditing ? "Finish editing" : "Edit"}
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteRow(row.id)}
-                          className={deleteButtonClass}
-                          aria-label={`Delete prescription row ${index + 1}`}
-                          title="Delete"
-                        >
-                          <TrashBinIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                      {!isSended && (
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => editRow(row.id)}
+                            className={`${actionButtonClass} ${isEditing ? "border-brand-200 text-brand-600 dark:border-brand-500/40 dark:text-brand-400" : ""}`}
+                            aria-label={`${isEditing ? "Finish editing" : "Edit"} prescription row ${index + 1}`}
+                            title={isEditing ? "Finish editing" : "Edit"}
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteRow(row.id)}
+                            className={deleteButtonClass}
+                            aria-label={`Delete prescription row ${index + 1}`}
+                            title="Delete"
+                          >
+                            <TrashBinIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -640,18 +676,20 @@ export function PrescriptionTable({ value = "", onChange }: PrescriptionTablePro
       </div>
 
       {/* Add Row Button Below Table */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={addEmptyRow}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Row
-        </button>
-      </div>
+      {!isSended && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={addEmptyRow}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Row
+          </button>
+        </div>
+      )}
 
       {/* Modal Overlay */}
       {isModalOpen && (
