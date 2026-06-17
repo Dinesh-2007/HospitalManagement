@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { BlankPage } from "../../../components/blank-page";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
 
 type MasterRow = Record<string, unknown>;
@@ -387,9 +386,6 @@ export default function BookAppointmentPage() {
     }
     setIsHydrated(true);
   }, [hname]);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [authForm, setAuthForm] = useState<PatientAuthState>({ name: "", phone: "" });
-  const [signupForm, setSignupForm] = useState<PatientSignupState>(emptySignupState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showBookConfirmation, setShowBookConfirmation] = useState(false);
   const [showFamilyDropdown, setShowFamilyDropdown] = useState(false);
@@ -504,30 +500,30 @@ export default function BookAppointmentPage() {
 
   const familyMembers = useMemo<FamilyMember[]>(() => {
     if (!authenticatedPatient) return [];
-    
+
     // Get all possible identifiers for the authenticated user
     const myId = String(authenticatedPatient.id);
     const myPhone = authenticatedPatient.phone ? authenticatedPatient.phone.replace(/\D/g, "") : "";
     const myName = authenticatedPatient.name.trim().toLowerCase();
-    
+
     // Also include global patientPhone / patientName from localStorage (used by manage-family page)
     const globalPhone = typeof window !== "undefined" ? (window.localStorage.getItem("patientPhone") || "").replace(/\D/g, "") : "";
     const globalName = typeof window !== "undefined" ? (window.localStorage.getItem("patientName") || "").trim().toLowerCase() : "";
-    
+
     return patientRows
       .filter(row => {
         const linked = readText(row, ["linked_patient_id", "linkedPatientId"]);
         if (!linked) return false;
-        
+
         const linkedLower = linked.toLowerCase();
-        
+
         if (myPhone && linked === myPhone) return true;
         if (myName && linkedLower === myName) return true;
         if (myId && linked === myId) return true;
-        
+
         if (globalPhone && linked === globalPhone) return true;
         if (globalName && linkedLower === globalName) return true;
-        
+
         return false;
       })
       .map(row => ({
@@ -565,9 +561,9 @@ export default function BookAppointmentPage() {
       setDoctorDetails(
         normalizedDetails
           ? {
-              ...normalizedDetails,
-              profilePhoto: normalizedDetails.profilePhoto || doctor.profilePhoto,
-            }
+            ...normalizedDetails,
+            profilePhoto: normalizedDetails.profilePhoto || doctor.profilePhoto,
+          }
           : null,
       );
     } catch (error) {
@@ -590,68 +586,6 @@ export default function BookAppointmentPage() {
     router.push(`/${encodeURIComponent(hname)}/book-appointment/calendar?${query.toString()}`);
   }
 
-  async function handleSignin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    try {
-      const phone = normalizePhone(authForm.phone);
-      const selectedPatient = patientOptions.find((row) => normalizePhone(row.phone) === phone);
-
-      if (selectedPatient) {
-        const payload = { id: selectedPatient.id, name: selectedPatient.name, phone: selectedPatient.phone };
-        window.localStorage.setItem(storageKey(hname), JSON.stringify(payload));
-        setAuthenticatedPatient(payload);
-        return;
-      }
-      setMode("signup");
-      setSignupForm((current) => ({ ...current, patientName: authForm.name, mobile: authForm.phone }));
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Signin failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleSignup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    try {
-      const phone = normalizePhone(signupForm.mobile);
-      
-      // Check if phone number already exists
-      const selectedPatient = patientOptions.find((row) => normalizePhone(row.phone) === phone);
-      if (selectedPatient) {
-        // Phone number exists, proceed with existing patient data
-        const payload = { id: selectedPatient.id, name: selectedPatient.name, phone: selectedPatient.phone };
-        window.localStorage.setItem(storageKey(hname), JSON.stringify(payload));
-        setAuthenticatedPatient(payload);
-        return;
-      }
-
-      // Phone doesn't exist, create new patient
-      const response = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "signup",
-          phone: signupForm.mobile,
-          patient: signupForm,
-        }),
-      });
-      const data = (await response.json()) as { row?: MasterRow; patientId?: number; error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Signup failed.");
-      const payload = { id: data.patientId ?? Number(data.row?.id ?? 0), name: signupForm.patientName, phone: signupForm.mobile };
-      window.localStorage.setItem(storageKey(hname), JSON.stringify(payload));
-      setAuthenticatedPatient(payload);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Signup failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   function handleContinue() {
     setShowBookConfirmation(true);
   }
@@ -670,81 +604,31 @@ export default function BookAppointmentPage() {
     router.push(`/${encodeURIComponent(hname)}/book-appointment/calendar?${query.toString()}`);
   }
 
+  if (!isHydrated) return null;
+
   if (!authenticatedPatient) {
     return (
-      <BlankPage title="Book Appointment">
+      <div>
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">{hname}</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Sign in to book an appointment.</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Please log in to book an appointment.</p>
           </div>
           <div className="p-6">
-            {errorMessage ? <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
-            {mode === "signin" ? (
-              <form onSubmit={(event) => void handleSignin(event)} className="space-y-4 max-w-xl">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
-                  <input value={authForm.name} onChange={(event) => setAuthForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number</label>
-                  <input value={authForm.phone} onChange={(event) => setAuthForm((current) => ({ ...current, phone: event.target.value }))} inputMode="tel" maxLength={10} pattern="[0-9]{10}" className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" required />
-                </div>
-                <div className="flex gap-3">
-                  <button type="submit" disabled={isSubmitting} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">{isSubmitting ? "Checking..." : "Signin"}</button>
-                  <button type="button" onClick={() => setMode("signup")} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">Signup</button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={(event) => void handleSignup(event)} className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {[
-                    ["patientId", "Patient ID"],
-                    ["patientName", "Patient Name"],
-                    ["address", "Address"],
-                    ["country", "Country"],
-                    ["state", "State"],
-                    ["city", "City"],
-                    ["zipCode", "ZIP Code"],
-                    ["email", "eMail"],
-                    ["phoneOffice", "Phone - Office"],
-                    ["phoneResi", "Phone - Resi"],
-                    ["mobile", "Mobile"],
-                    ["hnNumber", "HN Number"],
-                    ["numberOfVisits", "Number of Visits till now"],
-                    ["lastVisitDateTime", "Last Visit Date & Time"],
-                    ["lastVisitDoctorName", "Last visit doctor name"],
-                    ["profession", "Profession"],
-                    ["patientType", "Patient Type"],
-                    ["preferredPaymentType", "Preferred Payment Type"],
-                    ["mediclaimPolicyAvailable", "Mediclaim Policy Available"],
-                    ["policyDetails", "Policy Details"],
-                    ["linkedPatientId", "Linked Patient Id"],
-                    ["relationshipShipLinkedPatient", "Relation Ship - Linked Patient"],
-                    ["activeFrom", "Active From"],
-                    ["inactiveFrom", "Inactive From"],
-                    ["inactiveReason", "Inactive Reason"],
-                  ].map(([key, label]) => (
-                    <div key={key}>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">{label}</label>
-                      <input value={(signupForm as Record<string, string>)[key] ?? ""} onChange={(event) => setSignupForm((current) => ({ ...current, [key]: event.target.value } as PatientSignupState))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setMode("signin")} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">Back</button>
-                  <button type="submit" disabled={isSubmitting} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">{isSubmitting ? "Saving..." : "Submit"}</button>
-                </div>
-              </form>
-            )}
+            <a
+              href={`/${encodeURIComponent(hname)}/patient-login`}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition"
+            >
+              Go to Patient Login
+            </a>
           </div>
         </section>
-      </BlankPage>
+      </div>
     );
   }
 
   return (
-    <BlankPage title="Book Appointment">
+    <div>
       <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
 
         <div className="space-y-8 p-4 sm:p-6">
@@ -774,9 +658,8 @@ export default function BookAppointmentPage() {
                 <button
                   type="button"
                   onClick={() => { setBookingFor(null); setShowFamilyDropdown(false); }}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                    bookingFor === null ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
-                  }`}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor === null ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
+                    }`}
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -796,9 +679,8 @@ export default function BookAppointmentPage() {
                         key={member.id}
                         type="button"
                         onClick={() => { setBookingFor(member); setShowFamilyDropdown(false); }}
-                        className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                          bookingFor?.id === member.id ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
-                        }`}
+                        className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor?.id === member.id ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
+                          }`}
                       >
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800">
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1057,6 +939,6 @@ export default function BookAppointmentPage() {
           </div>
         </div>
       ) : null}
-    </BlankPage>
+    </div>
   );
 }

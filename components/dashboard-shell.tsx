@@ -19,12 +19,14 @@ export function DashboardShell({
   const isPatientLoginPage = pathname.endsWith("/patient-login");
   const isBookAppointment = pathname.endsWith("/book-appointment");
   const isCalendarPage = pathname.endsWith("/calendar");
+  const ispatientDash = pathname.endsWith("/patient-dashboard");
   const hideNavAndSidebar =
     pathname === "/" ||
     pathname === "/create-account" ||
     isLoginPage ||
     isPatientLoginPage ||
     isBookAppointment ||
+    ispatientDash ||
     isCalendarPage;
 
   const mainContentMargin = isMobileOpen
