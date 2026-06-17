@@ -29,12 +29,26 @@ type AppointmentRow = {
   doctor?: string | null;
   department?: string | null;
   status?: string | null;
+  reason?: string | null;
+  patient_gender?: string | null;
+  patient_dob?: string | null;
+  record_status?: string | null;
+  transferred_from_doctor?: string | null;
+  transferred_to_doctor?: string | null;
+  updated_at?: string | null;
 };
 type DoctorProfileRow = {
   username?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   department?: string | null;
+};
+type TransferDoctorRow = {
+  doctor: string;
+  department: string;
+  availableTiming: string;
+  availableSlots: Array<{ start: string; end: string }>;
+  nextSlot: { start: string; end: string } | null;
 };
 
 const SCHEDULE_TABLE = tableNameFromCardTitle("Consultant / Doctor Schedule");
@@ -89,6 +103,13 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     doctor: readText(row, ["doctor"]) || null,
     department: readText(row, ["department"]) || null,
     status: readText(row, ["status"]) || null,
+    reason: readText(row, ["reason"]) || null,
+    patient_gender: readText(row, ["patient_gender", "gender"]) || null,
+    patient_dob: readText(row, ["patient_dob", "dob"]) || null,
+    record_status: readText(row, ["record_status", "recordStatus"]) || null,
+    transferred_from_doctor: readText(row, ["transferred_from_doctor", "transferredFromDoctor"]) || null,
+    transferred_to_doctor: readText(row, ["transferred_to_doctor", "transferredToDoctor"]) || null,
+    updated_at: readText(row, ["updated_at", "updatedAt"]) || null,
   };
 }
 
@@ -151,6 +172,30 @@ function formatTimeRange(start: string, end?: string | null) {
   return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
+function calculateAge(value?: string | null) {
+  const normalized = normalizeDateKey(value);
+  const date = normalized ? parseKey(normalized) : null;
+  if (!date) return "-";
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDiff = today.getMonth() - date.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < date.getDate())) age -= 1;
+  return age >= 0 ? String(age) : "-";
+}
+
+function formatDisplayDateTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function normalizeDateKey(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   if (!text) return "";
@@ -194,13 +239,25 @@ export default function DoctorSchedulePage() {
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfileRow | null>(null);
   const [allScheduleRows, setAllScheduleRows] = useState<ScheduleRow[]>([]);
   const [weekAppointments, setWeekAppointments] = useState<AppointmentRow[]>([]);
+  const [records, setRecords] = useState<AppointmentRow[]>([]);
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const [recordsDate, setRecordsDate] = useState(() => toKey(new Date()));
+  const [recordsSearch, setRecordsSearch] = useState("");
+  const [recordsStatus, setRecordsStatus] = useState("All");
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [showRecords, setShowRecords] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<AppointmentRow | null>(null);
+  const [transferTarget, setTransferTarget] = useState<AppointmentRow | null>(null);
+  const [transferDoctors, setTransferDoctors] = useState<TransferDoctorRow[]>([]);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingWeek, setIsLoadingWeek] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isLoadingTransferDoctors, setIsLoadingTransferDoctors] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,8 +431,14 @@ export default function DoctorSchedulePage() {
   }, [defaultSelectedDate, selectedDate, weekDaysList]);
   const selectedDateKey = effectiveSelectedDate ? toKey(effectiveSelectedDate) : "";
   const selectedDayAppointments = useMemo(
-    () => weekAppointments.filter((row) => normalizeDateKey(row.appointment_date) === selectedDateKey),
-    [selectedDateKey, weekAppointments],
+    () =>
+      weekAppointments.filter(
+        (row) =>
+          normalizeDateKey(row.appointment_date) === selectedDateKey &&
+          (row.status ?? "").toLowerCase() !== "cancelled" &&
+          matchedDoctorNames.some((doctorName) => (row.doctor ?? "").trim().toLowerCase() === doctorName.trim().toLowerCase()),
+      ),
+    [matchedDoctorNames, selectedDateKey, weekAppointments],
   );
   const selectedDaySchedules = useMemo(() => {
     if (!effectiveSelectedDate) return [];
@@ -391,16 +454,112 @@ export default function DoctorSchedulePage() {
   const appointmentCountByDate = useMemo(() => {
     const counts = new Map<string, number>();
     for (const row of weekAppointments) {
+      if (!matchedDoctorNames.some((doctorName) => (row.doctor ?? "").trim().toLowerCase() === doctorName.trim().toLowerCase())) continue;
       const key = normalizeDateKey(row.appointment_date);
       if (!key) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
-  }, [weekAppointments]);
+  }, [matchedDoctorNames, weekAppointments]);
   const currentDepartment = useMemo(
     () => doctorProfile?.department || selectedDayAppointments[0]?.department || "-",
     [doctorProfile?.department, selectedDayAppointments],
   );
+  const recordsPageSize = 10;
+  const recordsTotalPages = Math.max(Math.ceil(recordsTotal / recordsPageSize), 1);
+
+  async function openTransferModal(appointment: AppointmentRow) {
+    if (!appointment.id) return;
+    setTransferTarget(appointment);
+    setTransferDoctors([]);
+    setErrorMessage("");
+    setMessage("");
+    setIsLoadingTransferDoctors(true);
+    try {
+      const rows = await loadRows(hname, `/appointments?transferOptionsFor=${encodeURIComponent(String(appointment.id))}`);
+      setTransferDoctors(
+        rows.map((row) => ({
+          doctor: readText(row, ["doctor"]),
+          department: readText(row, ["department"]),
+          availableTiming: readText(row, ["availableTiming", "available_timing"]),
+          availableSlots: Array.isArray(row.availableSlots) ? (row.availableSlots as Array<{ start: string; end: string }>) : [],
+          nextSlot: row.nextSlot && typeof row.nextSlot === "object" ? (row.nextSlot as { start: string; end: string }) : null,
+        })),
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load transfer doctors.");
+    } finally {
+      setIsLoadingTransferDoctors(false);
+    }
+  }
+
+  async function transferAppointment(doctorName: string) {
+    if (!transferTarget?.id) return;
+    setIsTransferring(true);
+    setErrorMessage("");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: transferTarget.id,
+          transferToDoctor: doctorName,
+          transferredByName: doctorLabel,
+          transferredByUsername: currentUser,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { row?: RawRow; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to transfer appointment.");
+      const updated = normalizeAppointmentRow(data.row ?? {});
+      setWeekAppointments((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+      if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
+      setTransferTarget(null);
+      setTransferDoctors([]);
+      setMessage(`Appointment transferred to ${doctorName}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to transfer appointment.");
+    } finally {
+      setIsTransferring(false);
+    }
+  }
+
+  async function loadRecords(date = recordsDate, status = recordsStatus, search = recordsSearch, page = recordsPage) {
+    if (!hname || matchedDoctorNames.length === 0) return;
+    setIsLoadingRecords(true);
+    setErrorMessage("");
+    try {
+      const query = new URLSearchParams({
+        recordsDate: date,
+        doctorNames: matchedDoctorNames.join(","),
+        status,
+        search,
+        page: String(page),
+        pageSize: String(recordsPageSize),
+      });
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments?${query.toString()}`, { cache: "no-store" });
+      const data = (await response.json().catch(() => ({}))) as { rows?: RawRow[]; total?: number; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to load records.");
+      setRecords((data.rows ?? []).map(normalizeAppointmentRow));
+      setRecordsTotal(Number(data.total ?? 0));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load records.");
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  }
+
+  function updateRecords(next: Partial<{ date: string; status: string; search: string; page: number }>) {
+    const date = next.date ?? recordsDate;
+    const status = next.status ?? recordsStatus;
+    const search = next.search ?? recordsSearch;
+    const page = next.page ?? recordsPage;
+    if (next.date !== undefined) setRecordsDate(date);
+    if (next.status !== undefined) setRecordsStatus(status);
+    if (next.search !== undefined) setRecordsSearch(search);
+    if (next.page !== undefined) setRecordsPage(page);
+    void loadRecords(date, status, search, page);
+  }
 
   async function cancelAppointment() {
     if (!cancelTarget?.id) return;
@@ -423,6 +582,7 @@ export default function DoctorSchedulePage() {
       if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
 
       setWeekAppointments((current) => current.filter((row) => row.id !== cancelTarget.id));
+      if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
       setMessage(`Appointment cancelled for ${cancelTarget.patient_name ?? "patient"}.`);
       setCancelTarget(null);
     } catch (error) {
@@ -469,9 +629,22 @@ export default function DoctorSchedulePage() {
             <h2 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{doctorLabel}</h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Department: {currentDepartment}</p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
-            <CalenderIcon className="h-5 w-5" />
-            Weekly calendar
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showRecords;
+                setShowRecords(next);
+                if (next) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
+              }}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+            >
+              Records
+            </button>
+            <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
+              <CalenderIcon className="h-5 w-5" />
+              Weekly calendar
+            </div>
           </div>
         </div>
 
@@ -597,6 +770,13 @@ export default function DoctorSchedulePage() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => void openTransferModal(appointment)}
+                              className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-600"
+                            >
+                              Transfer
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setCancelTarget(appointment)}
                               className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600"
                             >
@@ -614,10 +794,183 @@ export default function DoctorSchedulePage() {
             )}
           </section>
 
+          {showRecords ? (
+            <section className="rounded-2xl border border-gray-200 p-5">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Records</p>
+                  <h3 className="mt-1 text-lg font-semibold text-gray-800">{formatDisplayDate(recordsDate)}</h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={recordsDate}
+                    onChange={(event) => updateRecords({ date: event.target.value, page: 1 })}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="search"
+                    value={recordsSearch}
+                    onChange={(event) => updateRecords({ search: event.target.value, page: 1 })}
+                    placeholder="Search patient or phone"
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <select
+                    value={recordsStatus}
+                    onChange={(event) => updateRecords({ status: event.target.value, page: 1 })}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    {["All", "Scheduled", "Transferred", "Cancelled"].map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className="px-4 py-3 text-left">Patient Name</th>
+                      <th className="px-4 py-3 text-left">Phone Number</th>
+                      <th className="px-4 py-3 text-left">Gender</th>
+                      <th className="px-4 py-3 text-left">Age</th>
+                      <th className="px-4 py-3 text-left">Scheduled Time</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Last Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {records.map((record) => {
+                      const status = record.record_status || record.status || "Scheduled";
+                      const remarks = status === "Transferred"
+                        ? `Transferred from ${record.transferred_from_doctor || "-"} to ${record.doctor || record.transferred_to_doctor || "-"}`
+                        : record.reason || status;
+                      return (
+                        <tr key={record.id ?? `${record.patient_name}-${record.appointment_time}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-800">{record.patient_name || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">{record.patient_phone || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">{record.patient_gender || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">{calculateAge(record.patient_dob)}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {record.appointment_time ? formatTimeRange(record.appointment_time, record.appointment_end_time) : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{status}</td>
+                          <td className="px-4 py-3 text-gray-600">{remarks}</td>
+                          <td className="px-4 py-3 text-gray-600">{record.appointment_date ? formatDisplayDate(record.appointment_date) : "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">{formatDisplayDateTime(record.updated_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {records.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                    {isLoadingRecords ? "Loading records..." : "No records for this filter."}
+                  </div>
+                ) : null}
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3 text-sm text-gray-600">
+                <span>Page {recordsPage} of {recordsTotalPages} · {recordsTotal} records</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={recordsPage <= 1 || isLoadingRecords}
+                    onClick={() => updateRecords({ page: recordsPage - 1 })}
+                    className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={recordsPage >= recordsTotalPages || isLoadingRecords}
+                    onClick={() => updateRecords({ page: recordsPage + 1 })}
+                    className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           {message ? <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
           {errorMessage ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
         </div>
       </section>
+
+      {transferTarget ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Transfer appointment</h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  Same department only. The appointment date stays {transferTarget.appointment_date ? formatDisplayDate(transferTarget.appointment_date) : selectedDateKey}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferTarget(null);
+                  setTransferDoctors([]);
+                }}
+                disabled={isTransferring}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <p><span className="font-medium">Patient:</span> {transferTarget.patient_name || "-"}</p>
+              <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
+              <p className="mt-1">
+                <span className="font-medium">Current time:</span>{" "}
+                {transferTarget.appointment_time ? formatTimeRange(transferTarget.appointment_time, transferTarget.appointment_end_time) : "-"}
+              </p>
+            </div>
+
+            <div className="mt-5 max-h-[45vh] overflow-y-auto">
+              {isLoadingTransferDoctors ? (
+                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">Loading available doctors...</div>
+              ) : transferDoctors.length > 0 ? (
+                <div className="grid gap-3">
+                  {transferDoctors.map((doctor) => (
+                    <button
+                      key={doctor.doctor}
+                      type="button"
+                      onClick={() => void transferAppointment(doctor.doctor)}
+                      disabled={isTransferring || !doctor.nextSlot}
+                      className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">{doctor.doctor}</p>
+                          <p className="mt-1 text-sm text-gray-500">{doctor.department || "-"}</p>
+                          <p className="mt-1 text-sm text-gray-500">Available timing: {doctor.availableTiming || "-"}</p>
+                        </div>
+                        <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                          Next: {doctor.nextSlot ? formatTimeRange(doctor.nextSlot.start, doctor.nextSlot.end) : "-"}
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs text-gray-500">
+                        Available slots: {doctor.availableSlots.slice(0, 6).map((slot) => formatTimeRange(slot.start, slot.end)).join(", ")}
+                        {doctor.availableSlots.length > 6 ? ` +${doctor.availableSlots.length - 6} more` : ""}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                  No available slots found for transfer on the selected date.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cancelTarget ? (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">

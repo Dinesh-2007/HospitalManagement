@@ -36,6 +36,10 @@ type AppointmentRow = {
   cancelled_by_name?: string | null;
   cancelled_reason?: string | null;
   cancelled_at?: string | null;
+  transferred_from_doctor?: string | null;
+  transferred_to_doctor?: string | null;
+  transferred_by_name?: string | null;
+  transferred_at?: string | null;
   reschedule_history?: Array<{
     fromDate?: string;
     fromTime?: string;
@@ -43,6 +47,13 @@ type AppointmentRow = {
     toTime?: string;
     updatedAt?: string;
   }> | null;
+};
+type NotificationRow = {
+  id?: number;
+  title?: string | null;
+  message?: string | null;
+  is_read?: boolean | null;
+  created_at?: string | null;
 };
 
 type HistoryItem = {
@@ -105,6 +116,10 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
     cancelled_by_name: readText(row, ["cancelled_by_name", "cancelledByName"]) || null,
     cancelled_reason: readText(row, ["cancelled_reason", "cancelledReason"]) || null,
     cancelled_at: readText(row, ["cancelled_at", "cancelledAt"]) || null,
+    transferred_from_doctor: readText(row, ["transferred_from_doctor", "transferredFromDoctor"]) || null,
+    transferred_to_doctor: readText(row, ["transferred_to_doctor", "transferredToDoctor"]) || null,
+    transferred_by_name: readText(row, ["transferred_by_name", "transferredByName"]) || null,
+    transferred_at: readText(row, ["transferred_at", "transferredAt"]) || null,
     reschedule_history: Array.isArray(history)
       ? history.map((entry) => ({
           fromDate: String((entry as Record<string, unknown>).fromDate ?? ""),
@@ -114,6 +129,16 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
           updatedAt: String((entry as Record<string, unknown>).updatedAt ?? ""),
         }))
       : null,
+  };
+}
+
+function normalizeNotificationRow(row: RawRow): NotificationRow {
+  return {
+    id: row.id ? Number(row.id) : undefined,
+    title: readText(row, ["title"]) || null,
+    message: readText(row, ["message"]) || null,
+    is_read: Boolean(row.is_read),
+    created_at: readText(row, ["created_at", "createdAt"]) || null,
   };
 }
 
@@ -221,6 +246,22 @@ function buildHistory(appointments: AppointmentRow[]) {
         variant: "red",
       });
     }
+
+    if (entry.transferred_from_doctor || entry.transferred_to_doctor) {
+      items.push({
+        key: `${baseKey}-transferred`,
+        label: "Transferred",
+        status: "Transferred",
+        date: entry.appointment_date ?? "",
+        time: entry.appointment_time ?? undefined,
+        endTime: entry.appointment_end_time ?? undefined,
+        note: `Moved from ${entry.transferred_from_doctor || "previous doctor"} to ${entry.doctor || entry.transferred_to_doctor || "new doctor"}`,
+        variant: "gray",
+        doctor: entry.doctor,
+        department: entry.department,
+        isPreviewable: true,
+      });
+    }
   }
 
   return items.sort((left, right) => `${right.date} ${right.time ?? ""}`.localeCompare(`${left.date} ${left.time ?? ""}`));
@@ -232,18 +273,29 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
   const patientId = props.searchParams?.patientId;
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [previewItem, setPreviewItem] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
       if (!patientId) return;
-      const [patientRows, appointmentRows] = await Promise.all([
+      const [patientRows, appointmentRows, notificationRows] = await Promise.all([
         loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(patientId)}`),
         loadRows(hname, `/appointments?patientId=${encodeURIComponent(patientId)}`),
+        loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(patientId)}`),
       ]);
-      setPatient(patientRows.map(normalizePatientRow)[0] ?? null);
+      const patientRow = patientRows.map(normalizePatientRow)[0] ?? null;
+      const phoneNotifications =
+        patientRow?.mobile && patientRow.mobile !== patientId
+          ? await loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(patientRow.mobile)}`)
+          : [];
+      const notificationMap = new Map(
+        [...notificationRows, ...phoneNotifications].map((row) => [String(row.id ?? `${row.title}-${row.created_at}`), row]),
+      );
+      setPatient(patientRow);
       setAppointments(appointmentRows.map(normalizeAppointmentRow));
+      setNotifications(Array.from(notificationMap.values()).map(normalizeNotificationRow));
     }
 
     void loadProfile().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load profile."));
@@ -260,6 +312,19 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
         )
         .sort((left, right) => String(right.cancelled_at ?? right.updated_at ?? "").localeCompare(String(left.cancelled_at ?? left.updated_at ?? ""))),
     [appointments],
+  );
+  const visibleNotifications = useMemo(
+    () => [
+      ...notifications,
+      ...doctorNotifications.map((entry) => ({
+        id: entry.id,
+        title: `${entry.cancelled_by_name || entry.doctor || "Doctor"} cancelled your appointment`,
+        message: `${entry.appointment_date ? formatDisplayDate(entry.appointment_date) : "-"}${entry.appointment_time ? ` at ${formatTimeRange(entry.appointment_time, entry.appointment_end_time)}` : ""}\n${buildCancellationNote(entry)}`,
+        is_read: false,
+        created_at: entry.cancelled_at ?? entry.updated_at ?? null,
+      })),
+    ].sort((left, right) => String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""))),
+    [doctorNotifications, notifications],
   );
 
   return (
@@ -298,20 +363,17 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
         </section>
 
         <section className="space-y-6">
-          {doctorNotifications.length > 0 ? (
+          {visibleNotifications.length > 0 ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Notifications</p>
               <div className="mt-4 space-y-3">
-                {doctorNotifications.map((entry) => (
-                  <div key={`notification-${entry.id ?? entry.cancelled_at ?? entry.appointment_date}`} className="rounded-xl border border-red-200 bg-white p-4">
-                    <p className="font-medium text-red-700">
-                      {entry.cancelled_by_name || entry.doctor || "Doctor"} cancelled your appointment
-                    </p>
-                    <p className="mt-1 text-sm text-red-600">
-                      {entry.appointment_date ? formatDisplayDate(entry.appointment_date) : "-"}
-                      {entry.appointment_time ? ` at ${formatTimeRange(entry.appointment_time, entry.appointment_end_time)}` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-red-600">{buildCancellationNote(entry)}</p>
+                {visibleNotifications.map((entry) => (
+                  <div key={`notification-${entry.id ?? entry.created_at ?? entry.title}`} className="rounded-xl border border-red-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-red-700">{entry.title || "Notification"}</p>
+                      {!entry.is_read ? <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold uppercase text-red-700">Unread</span> : null}
+                    </div>
+                    <p className="mt-2 whitespace-pre-line text-sm text-red-600">{entry.message || "-"}</p>
                   </div>
                 ))}
               </div>
