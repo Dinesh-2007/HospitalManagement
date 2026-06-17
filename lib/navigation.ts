@@ -141,5 +141,13 @@ export const navigation: NavigationSection[] = [
   {
     title: "Schedule",
     href: "/doctor-schedule",
+  },
+  {
+    title: "Records",
+    href: "/records",
+  },
+  {
+    title: "Check in",
+    href: "/checkin",
   }
 ];
