@@ -254,6 +254,8 @@ export default function DoctorSchedulePage() {
   const [showRecords, setShowRecords] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<AppointmentRow | null>(null);
+  const [showCancelAllConfirm, setShowCancelAllConfirm] = useState(false);
+  const [isCancellingAll, setIsCancellingAll] = useState(false);
   const [transferTarget, setTransferTarget] = useState<AppointmentRow | null>(null);
   const [transferDoctors, setTransferDoctors] = useState<TransferDoctorRow[]>([]);
   const [message, setMessage] = useState("");
@@ -667,6 +669,49 @@ export default function DoctorSchedulePage() {
     }
   }
 
+  async function cancelAllAppointments() {
+    if (!selectedDateKey || matchedDoctorNames.length === 0) return;
+
+    setIsCancellingAll(true);
+    setErrorMessage("");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cancelAllDate: selectedDateKey,
+          doctorNames: matchedDoctorNames.join(","),
+          cancelledByRole: "doctor",
+          cancelledByName: doctorLabel,
+          cancelledByUsername: currentUser,
+          cancellationReason: "Bulk cancel all appointments on date",
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to cancel all appointments.");
+
+      setWeekAppointments((current) =>
+        current.filter(
+          (row) =>
+            !(
+              normalizeDateKey(row.appointment_date) === selectedDateKey &&
+              matchedDoctorNames.some(
+                (doctorName) => (row.doctor ?? "").trim().toLowerCase() === doctorName.trim().toLowerCase()
+              )
+            )
+        )
+      );
+      if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
+      setMessage(`All appointments cancelled for ${formatDisplayDate(selectedDateKey)}.`);
+      setShowCancelAllConfirm(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to cancel all appointments.");
+    } finally {
+      setIsCancellingAll(false);
+    }
+  }
+
   if (selectedPatientId) {
     return <PatientProfilePage searchParams={{ patientId: selectedPatientId }} onClose={() => setSelectedPatientId(null)} />;
   }
@@ -1013,7 +1058,18 @@ export default function DoctorSchedulePage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Booked Patients</p>
                 <h3 className="mt-1 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
               </div>
-              {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
+              <div className="flex items-center gap-3">
+                {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
+                {selectedDayAppointments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelAllConfirm(true)}
+                    className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition"
+                  >
+                    Cancel All Appointments
+                  </button>
+                )}
+              </div>
             </div>
 
             {selectedDayAppointments.length > 0 ? (
@@ -1286,6 +1342,34 @@ export default function DoctorSchedulePage() {
                 className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
               >
                 {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCancelAllConfirm ? (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel All Appointments</h3>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+              Are you sure you want to cancel ALL appointments for {selectedDateKey ? formatDisplayDate(selectedDateKey) : "this day"}? This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCancelAllConfirm(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+              >
+                Keep
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelAllAppointments()}
+                disabled={isCancellingAll}
+                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {isCancellingAll ? "Cancelling all..." : "Confirm Cancel All"}
               </button>
             </div>
           </div>

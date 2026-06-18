@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type FamilyFormValues = {
@@ -264,7 +264,7 @@ export default function HospitalManageFamilyPage() {
   };
 
   return (
-    <BlankPage title="Manage Family member">
+    <PageLayout title="Manage Family member">
       <section className="min-h-[80vh] rounded-2xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-6 py-5">
           <h3 className="text-base font-medium text-gray-800">Manage Family member</h3>
@@ -496,6 +496,6 @@ export default function HospitalManageFamilyPage() {
           </div>
         </div>
       ) : null}
-    </BlankPage>
+    </PageLayout>
   );
 }

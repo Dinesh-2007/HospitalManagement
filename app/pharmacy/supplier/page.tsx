@@ -1,5 +1,5 @@
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 export default function SupplierPage() {
-  return <BlankPage title="Pharmacy - Supplier" />;
+  return <PageLayout title="Pharmacy - Supplier" />;
 }

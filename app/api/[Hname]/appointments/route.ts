@@ -1001,17 +1001,87 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ H
     const { Hname } = await params;
     const pool = await getTenantDB(decodeURIComponent(Hname));
     await ensureAll(pool);
-    const body = (await request.json().catch(() => ({}))) as Partial<AppointmentRecord>;
+    const body = (await request.json().catch(() => ({}))) as any;
     const appointmentId = Number(body.appointmentId ?? 0);
     const patientId = String(body.patientId ?? "").trim();
     const department = String(body.department ?? "").trim();
     const doctor = String(body.doctor ?? "").trim();
+    const cancelAllDate = body.cancelAllDate ? String(body.cancelAllDate).trim() : "";
     const meta: CancellationMeta = {
       cancelledByRole: String(body.cancelledByRole ?? "").trim().toLowerCase() || null,
       cancelledByName: String(body.cancelledByName ?? "").trim() || null,
       cancelledByUsername: String(body.cancelledByUsername ?? "").trim() || null,
       cancellationReason: String(body.cancellationReason ?? "").trim() || null,
     };
+
+    if (cancelAllDate) {
+      if (!isValidDate(cancelAllDate)) {
+        return NextResponse.json({ error: "Invalid date format." }, { status: 400 });
+      }
+
+      const requestedDoctorNames = Array.from(new Set(
+        [
+          body.doctor,
+          ...parseDoctorNames(body.doctorNames ?? "")
+        ].map(val => val?.trim()).filter(Boolean)
+      ));
+
+      if (requestedDoctorNames.length === 0) {
+        return NextResponse.json({ error: "Doctor is required to cancel all appointments." }, { status: 400 });
+      }
+
+      const selectResult = await pool.query(
+        `
+          SELECT id, patient_id, patient_name, patient_phone, doctor, appointment_date, appointment_time, appointment_end_time
+          FROM ${quoteIdentifier(TABLE_NAME)}
+          WHERE appointment_date = $1
+            AND LOWER(doctor) = ANY($2)
+            AND status IN ('Scheduled', 'Rescheduled')
+        `,
+        [cancelAllDate, requestedDoctorNames.map(val => val.toLowerCase())]
+      );
+
+      const appointmentsToCancel = selectResult.rows;
+
+      if (appointmentsToCancel.length > 0) {
+        const ids = appointmentsToCancel.map(r => r.id);
+
+        await pool.query(
+          `
+            UPDATE ${quoteIdentifier(TABLE_NAME)}
+            SET status = 'Cancelled',
+                cancelled_by_role = $1,
+                cancelled_by_name = $2,
+                cancelled_by_username = $3,
+                cancelled_reason = $4,
+                cancelled_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ANY($5)
+          `,
+          [meta.cancelledByRole, meta.cancelledByName, meta.cancelledByUsername, meta.cancellationReason, ids]
+        );
+
+        for (const cancelled of appointmentsToCancel) {
+          await insertAudit(pool, {
+            appointmentId: cancelled.id,
+            patientId: cancelled.patient_id,
+            patientName: cancelled.patient_name,
+            patientPhone: cancelled.patient_phone,
+            action: "Cancelled",
+            oldDoctor: cancelled.doctor,
+            appointmentDate: normalizeDateKey(cancelled.appointment_date),
+            oldStartTime: cancelled.appointment_time,
+            oldEndTime: cancelled.appointment_end_time,
+            performedByRole: meta.cancelledByRole,
+            performedByName: meta.cancelledByName,
+            performedByUsername: meta.cancelledByUsername,
+            remarks: meta.cancellationReason || "Cancel all appointments on date",
+          });
+        }
+      }
+
+      return NextResponse.json({ ok: true, count: appointmentsToCancel.length });
+    }
 
     let targetId = appointmentId;
     if (!Number.isInteger(targetId) || targetId <= 0) {

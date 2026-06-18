@@ -109,6 +109,7 @@ export default function DoctorConsultationPage() {
   const [icdResults, setIcdResults] = useState<any[]>([]);
   const [isIcdSearching, setIsIcdSearching] = useState(false);
   const [showIcdDropdown, setShowIcdDropdown] = useState(false);
+  const [symptomOptions, setSymptomOptions] = useState<string[]>([]);
 
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
   const [patientType, setPatientType] = useState<PatientType>("OP");
@@ -118,6 +119,7 @@ export default function DoctorConsultationPage() {
     diagnosisName: "",
     symptoms: "",
     remarks: "",
+    instructions: "",
     followUpDays: "",
     consultationAmount: "",
     prescriptionData: "",
@@ -140,6 +142,24 @@ export default function DoctorConsultationPage() {
       }
     }
     void fetchDoctors();
+  }, [hname]);
+
+  // Fetch symptoms on mount
+  useEffect(() => {
+    async function fetchSymptoms() {
+      if (!hname) return;
+      try {
+        const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/symptoms_master`, { cache: "no-store" });
+        const data = await response.json();
+        const options = (data.rows || [])
+          .map((r: any) => String(r.description || ""))
+          .filter(Boolean);
+        setSymptomOptions(options);
+      } catch (err) {
+        console.error("Failed to load symptoms", err);
+      }
+    }
+    void fetchSymptoms();
   }, [hname]);
 
   const loadData = async () => {
@@ -178,8 +198,10 @@ export default function DoctorConsultationPage() {
 
   useEffect(() => {
     async function loadHistory() {
-      if (!hname || !selectedPatientRow) { setHistoryRows([]); return; }
-      const patientId = text(selectedPatientRow, ["appointment_patient_id", "registration_id", "registration_patient_id", "patient_id"]);
+      if (!selectedPatientRow) { setHistoryRows([]); return; }
+      const rawPid = text(selectedPatientRow, ["appointment_patient_id", "registration_id", "registration_patient_id", "patient_id"]);
+      const pName = patientName(selectedPatientRow);
+      const patientId = (rawPid.toLowerCase() === pName.toLowerCase() || !/^P\d+$/i.test(rawPid)) ? "" : rawPid;
       if (!patientId) { setHistoryRows([]); return; }
       setIsHistoryLoading(true);
       try {
@@ -225,10 +247,13 @@ export default function DoctorConsultationPage() {
 
   const patientDetailFields = useMemo(() => {
     if (!selectedPatientRow) return [];
+    const rawPid = text(selectedPatientRow, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+    const pName = patientName(selectedPatientRow);
+    const pid = (rawPid.toLowerCase() === pName.toLowerCase() || !/^P\d+$/i.test(rawPid)) ? "" : rawPid;
     return [
-      ["Patient ID", text(selectedPatientRow, ["registration_patient_id", "appointment_patient_id", "patient_id"])],
+      ["Patient ID", pid],
       ["Appointment Number", text(selectedPatientRow, ["appointment_id"]) ? `APT-${String(text(selectedPatientRow, ["appointment_id"])).padStart(4, "0")}` : ""],
-      ["Patient Name", patientName(selectedPatientRow)],
+      ["Patient Name", pName],
       ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
       ["Gender", text(selectedPatientRow, ["gender"])],
       ["Inactive Reason", text(selectedPatientRow, ["inactive_reason"])],
@@ -282,6 +307,7 @@ export default function DoctorConsultationPage() {
       diagnosisName: "",
       symptoms: "",
       remarks: "",
+      instructions: "",
       followUpDays: "",
       consultationAmount: "",
       prescriptionData: "",
@@ -308,6 +334,7 @@ export default function DoctorConsultationPage() {
       diagnosisName: text(row, ["diagnosisName", "diagnosis_name"]),
       symptoms: text(row, ["symptoms"]),
       remarks: text(row, ["remarks"]),
+      instructions: text(row, ["instructions"]),
       followUpDays: text(row, ["followUpDays", "follow_up_days"]),
       consultationAmount: text(row, ["consultationAmount", "consultation_amount"]),
       prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
@@ -334,6 +361,7 @@ export default function DoctorConsultationPage() {
           { id: "diagnosisName", type: "text" },
           { id: "symptoms", type: "text" },
           { id: "remarks", type: "textarea" },
+          { id: "instructions", type: "textarea" },
           { id: "followUpDays", type: "number" },
           { id: "consultationAmount", type: "number" },
           { id: "prescriptionData", type: "textarea" },
@@ -520,11 +548,16 @@ export default function DoctorConsultationPage() {
                         <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
                           {text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"])}
                         </span>
-                        {text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]) ? (
-                          <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start">
-                            {text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"])}
-                          </span>
-                        ) : null}
+                        {(() => {
+                          const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                          const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+                          const isValidPid = rawPid && rawPid.toLowerCase() !== name.toLowerCase() && /^P\d+$/i.test(rawPid);
+                          return isValidPid ? (
+                            <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start">
+                              {rawPid}
+                            </span>
+                          ) : null;
+                        })()}
                         <div className="text-xs text-gray-500">{text(row, ["appointment_time"]) || "Walk-in"}</div>
                       </button>
                     ))
@@ -720,19 +753,28 @@ export default function DoctorConsultationPage() {
                     </div>
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
-                      <input type="text" value={formValues.symptoms} onChange={e => updateFormValue("symptoms", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      <select
+                        value={formValues.symptoms}
+                        onChange={e => updateFormValue("symptoms", e.target.value)}
+                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      >
+                        <option value="">Select Symptoms</option>
+                        {symptomOptions.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
                       <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
-                      <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Instructions</label>
+                      <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Consultation Amount</label>
-                      <input type="number" min="0" value={formValues.consultationAmount} onChange={e => updateFormValue("consultationAmount", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
+                      <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
                   </div>
                 </div>
@@ -763,7 +805,7 @@ export default function DoctorConsultationPage() {
                   <PrescriptionTable
                     value={formValues.prescriptionData}
                     onChange={val => updateFormValue("prescriptionData", val)}
-                    isSended={formValues.sended === "Yes"}
+                    isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
                     onSendToPharmacy={handleSendToPharmacy}
                     isSubmitting={isSubmitting}
                   />
@@ -773,7 +815,7 @@ export default function DoctorConsultationPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", followUpDays: "", consultationAmount: "", prescriptionData: "" });
+                      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", instructions: "", followUpDays: "", consultationAmount: "", prescriptionData: "" });
                       setPatientType("OP");
                       setEditingRecordId(null);
                     }}

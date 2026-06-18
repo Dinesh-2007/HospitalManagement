@@ -1,5 +1,5 @@
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 export default function InventoryPage() {
-  return <BlankPage title="Pharmacy - Inventory" />;
+  return <PageLayout title="Pharmacy - Inventory" />;
 }

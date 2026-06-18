@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { BlankPage } from "./blank-page";
+import { PageLayout } from "./page-layout";
 import { columnNameFromFieldId, tableNameFromCardTitle } from "../lib/master-form-table";
 import { PencilIcon, TrashBinIcon } from "./icons";
 
@@ -392,7 +392,7 @@ export function MastersFormPage({
   const addButtonLabel = getAddButtonLabel(cardTitle);
 
   return (
-    <BlankPage title={title}>
+    <PageLayout title={title}>
       <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -731,6 +731,6 @@ export function MastersFormPage({
           )}
         </div>
       </section>
-    </BlankPage>
+    </PageLayout>
   );
 }

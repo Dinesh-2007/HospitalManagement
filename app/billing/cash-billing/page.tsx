@@ -1,5 +1,5 @@
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 export default function CashBillingPage() {
-  return <BlankPage title="Billing - Cash Billing" />;
+  return <PageLayout title="Billing - Cash Billing" />;
 }

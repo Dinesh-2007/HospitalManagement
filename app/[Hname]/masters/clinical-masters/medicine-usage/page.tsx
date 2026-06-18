@@ -25,7 +25,7 @@ const medicineUsageFields: MastersFormField[] = [
     id: "inactiveFrom",
     label: "Inactive From",
     type: "datetime-local",
-    note: "Initially it's Blank",
+    note: "Initially it's Empty",
   },
   {
     id: "inactiveReason",

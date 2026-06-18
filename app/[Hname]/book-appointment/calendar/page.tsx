@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { BlankPage } from "../../../../components/blank-page";
+import { PageLayout } from "../../../../components/page-layout";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
 import PatientProfilePage from "../../../../components/profile/page";
@@ -566,7 +566,7 @@ export default function AppointmentCalendarPage() {
     return <div className="justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
   }
   return (
-    <BlankPage title="Appointment Calendar">
+    <PageLayout title="Appointment Calendar">
       <div className="grid gap-6 xl:grid-cols-1">
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
@@ -803,6 +803,6 @@ export default function AppointmentCalendarPage() {
           </div>
         </div>
       ) : null}
-    </BlankPage>
+    </PageLayout>
   );
 }

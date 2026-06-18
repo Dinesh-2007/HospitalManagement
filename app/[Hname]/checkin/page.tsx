@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
 
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null, appointment_check_in_time?: string | null };
@@ -46,6 +47,192 @@ export default function CheckInPage() {
   const [checkingIn, setCheckingIn] = useState<string | number | null>(null);
   const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; patientName: string } | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Walk-in modal state variables
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInStep, setWalkInStep] = useState<"phone" | "register" | "consultation">("phone");
+  const [walkInPhone, setWalkInPhone] = useState("");
+  const [walkInRegForm, setWalkInRegForm] = useState<any>({
+    patientName: "",
+    dob: "",
+    gender: "",
+    address: "",
+    country: "",
+    state: "",
+    city: "",
+    zipCode: "",
+    email: "",
+    phoneOffice: "",
+    phoneResi: "",
+    mobile: "",
+    hnNumber: "",
+    profession: "",
+    patientType: "Walk in",
+  });
+  const [walkInDept, setWalkInDept] = useState("");
+  const [walkInDoctor, setWalkInDoctor] = useState("");
+  const [walkInError, setWalkInError] = useState("");
+  const [walkInSubmitting, setWalkInSubmitting] = useState(false);
+
+  const [countries] = useState(() => Country.getAllCountries());
+  const [states, setStates] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+
+  const handleWalkInCountryChange = (countryName: string) => {
+    const found = countries.find((c) => c.name === countryName);
+    setWalkInRegForm((prev: any) => ({ ...prev, country: countryName, state: "", city: "" }));
+    setStates(found ? State.getStatesOfCountry(found.isoCode) : []);
+    setCities([]);
+  };
+
+  const handleWalkInStateChange = (stateName: string) => {
+    const foundCountry = countries.find((c) => c.name === walkInRegForm.country);
+    const foundState = states.find((s) => s.name === stateName);
+    setWalkInRegForm((prev: any) => ({ ...prev, state: stateName, city: "" }));
+    setCities(
+      foundCountry && foundState
+        ? City.getCitiesOfState(foundCountry.isoCode, foundState.isoCode)
+        : [],
+    );
+  };
+
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalkInError("");
+    if (walkInPhone.length < 10) {
+      setWalkInError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    setWalkInSubmitting(true);
+    try {
+      const res = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "signin", phone: walkInPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to check phone number.");
+      
+      if (data.exists && data.row) {
+        // Patient exists!
+        setWalkInRegForm({
+          patientName: data.row.patient_name || data.row.patientName || "",
+          dob: data.row.dob ? String(data.row.dob).slice(0, 10) : "",
+          gender: data.row.gender || "",
+          address: data.row.address || "",
+          country: data.row.country || "",
+          state: data.row.state || "",
+          city: data.row.city || "",
+          zipCode: data.row.zip_code || data.row.zipCode || "",
+          email: data.row.email || "",
+          phoneOffice: data.row.phone_office || data.row.phoneOffice || "",
+          phoneResi: data.row.phone_resi || data.row.phoneResi || "",
+          mobile: data.row.mobile || walkInPhone,
+          hnNumber: data.row.hn_number || data.row.hnNumber || "",
+          profession: data.row.profession || "",
+          patientId: data.row.patient_id || "",
+        });
+        setWalkInStep("consultation");
+      } else {
+        // Patient does not exist, go to registration step
+        setWalkInRegForm({
+          patientName: "",
+          dob: "",
+          gender: "",
+          address: "",
+          country: "",
+          state: "",
+          city: "",
+          zipCode: "",
+          email: "",
+          phoneOffice: "",
+          phoneResi: "",
+          mobile: walkInPhone,
+          hnNumber: "",
+          profession: "",
+          patientType: "Walk in",
+        });
+        setWalkInStep("register");
+      }
+    } catch (err: any) {
+      setWalkInError(err.message);
+    } finally {
+      setWalkInSubmitting(false);
+    }
+  };
+
+  const handleRegisterNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walkInRegForm.patientName) {
+      setWalkInError("Patient Name is required.");
+      return;
+    }
+    setWalkInStep("consultation");
+  };
+
+  const handleWalkInCheckIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalkInError("");
+    if (!walkInDept || !walkInDoctor) {
+      setWalkInError("Please select both department and doctor.");
+      return;
+    }
+    setWalkInSubmitting(true);
+    try {
+      let patientId = walkInRegForm.patientId;
+      
+      // If we are registering a new patient first
+      if (walkInStep === "register" || !patientId) {
+        const regRes = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "signup",
+            phone: walkInRegForm.mobile,
+            patient: walkInRegForm,
+          }),
+        });
+        const regData = await regRes.json();
+        if (!regRes.ok) throw new Error(regData.error ?? "Failed to register patient.");
+        patientId = regData.row?.patient_id || regData.patientId;
+      }
+      
+      // Now perform walk-in check-in
+      const checkInRes = await fetch(`/api/${encodeURIComponent(hname)}/check-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientName: walkInRegForm.patientName,
+          patientPhone: walkInRegForm.mobile,
+          department: walkInDept,
+          doctor: walkInDoctor,
+          isWalkIn: true,
+          patientId: patientId,
+        }),
+      });
+      const checkInData = await checkInRes.json();
+      if (!checkInRes.ok) throw new Error(checkInData.error ?? "Failed to perform check-in.");
+      
+      setCheckInResult({
+        patientId: checkInData.patientId || patientId,
+        appointmentNumber: checkInData.appointmentNumber ?? "",
+        patientName: walkInRegForm.patientName,
+      });
+      
+      setShowWalkInModal(false);
+      // Reset state
+      setWalkInPhone("");
+      setWalkInDept("");
+      setWalkInDoctor("");
+      setWalkInStep("phone");
+      
+      await loadPatients();
+    } catch (err: any) {
+      setWalkInError(err.message);
+    } finally {
+      setWalkInSubmitting(false);
+    }
+  };
 
   const dateLabel = useMemo(() => {
     if (!date) return "Select date";
@@ -104,8 +291,8 @@ export default function CheckInPage() {
   }, [hname]);
 
   const filteredRows = useMemo(() => {
-    // Only show records of type scheduled
-    let result = rows.filter(row => text(row, ["patient_type"]).toLowerCase() !== "walk-in");
+    // Show all records (both scheduled and walk-in)
+    let result = rows;
 
     if (selectedDepartment) {
       result = result.filter((row) => text(row, ["department"]) === selectedDepartment);
@@ -194,7 +381,14 @@ export default function CheckInPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push(`/${hname}/patient-registration?mode=form_only`)}
+            onClick={() => {
+              setWalkInError("");
+              setWalkInPhone("");
+              setWalkInDept("");
+              setWalkInDoctor("");
+              setWalkInStep("phone");
+              setShowWalkInModal(true);
+            }}
             className="h-11 rounded-lg bg-brand-500 px-6 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
           >
             Add Walk-in
@@ -292,7 +486,9 @@ export default function CheckInPage() {
                         <span className="font-mono text-xs text-gray-600">{appointmentNum}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
-                      <td className="px-4 py-3 text-gray-600">Scheduled</td>
+                      <td className="px-4 py-3 text-gray-600 capitalize">
+                        {text(row, ["patient_type"]) || "scheduled"}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">{text(row, ["appointment_date"])}</td>
                       <td className="px-4 py-3 text-gray-600">
                         {text(row, ["appointment_time"])
@@ -325,6 +521,313 @@ export default function CheckInPage() {
           </div>
         </div>
       </div>
+      {/* Walk-in Modal */}
+      {showWalkInModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
+            <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Add Walk-in Check-in</h3>
+                <p className="text-xs text-gray-500">
+                  {walkInStep === "phone" && "Step 1: Check patient existence by mobile number"}
+                  {walkInStep === "register" && "Step 2: Register new patient details"}
+                  {walkInStep === "consultation" && "Step 3: Select department and doctor to check-in"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWalkInModal(false);
+                  setWalkInStep("phone");
+                  setWalkInPhone("");
+                  setWalkInError("");
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            {walkInError ? (
+              <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+                {walkInError}
+              </div>
+            ) : null}
+
+            {/* Step 1: Phone number lookup */}
+            {walkInStep === "phone" && (
+              <form onSubmit={handlePhoneSubmit} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mobile Number</label>
+                  <input
+                    type="tel"
+                    required
+                    value={walkInPhone}
+                    onChange={(e) => setWalkInPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="Enter 10-digit mobile number"
+                    className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowWalkInModal(false)}
+                    className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={walkInSubmitting}
+                    className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
+                  >
+                    {walkInSubmitting ? "Checking..." : "Continue"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 2: Register Patient */}
+            {walkInStep === "register" && (
+              <form onSubmit={handleRegisterNext} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-h-[50vh] overflow-y-auto pr-1">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Patient Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={walkInRegForm.patientName}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, patientName: e.target.value }))}
+                      placeholder="Full name"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mobile</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={walkInRegForm.mobile}
+                      className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 text-sm text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={walkInRegForm.dob}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, dob: e.target.value }))}
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Gender</label>
+                    <select
+                      value={walkInRegForm.gender}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, gender: e.target.value }))}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm"
+                    >
+                      <option value="">Select Gender</option>
+                      {["Male", "Female", "Other"].map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Address</label>
+                    <textarea
+                      value={walkInRegForm.address}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, address: e.target.value }))}
+                      rows={2}
+                      placeholder="Full address"
+                      className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
+                    <select
+                      value={walkInRegForm.country}
+                      onChange={(e) => handleWalkInCountryChange(e.target.value)}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm"
+                    >
+                      <option value="">Select Country</option>
+                      {countries.map((c) => (
+                        <option key={c.isoCode} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">State</label>
+                    <select
+                      disabled={!walkInRegForm.country}
+                      value={walkInRegForm.state}
+                      onChange={(e) => handleWalkInStateChange(e.target.value)}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">Select State</option>
+                      {states.map((s) => (
+                        <option key={s.isoCode} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">City</label>
+                    <select
+                      disabled={!walkInRegForm.state}
+                      value={walkInRegForm.city}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, city: e.target.value }))}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">Select City</option>
+                      {cities.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">ZIP Code</label>
+                    <input
+                      type="text"
+                      value={walkInRegForm.zipCode}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, zipCode: e.target.value }))}
+                      placeholder="ZIP / Postal code"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                    <input
+                      type="email"
+                      value={walkInRegForm.email}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, email: e.target.value }))}
+                      placeholder="email@example.com"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profession</label>
+                    <input
+                      type="text"
+                      value={walkInRegForm.profession}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, profession: e.target.value }))}
+                      placeholder="Occupation"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Phone (Office)</label>
+                    <input
+                      type="text"
+                      value={walkInRegForm.phoneOffice}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, phoneOffice: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                      placeholder="Office phone"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Phone (Resi)</label>
+                    <input
+                      type="text"
+                      value={walkInRegForm.phoneResi}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, phoneResi: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                      placeholder="Residence phone"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">HN Number</label>
+                    <input
+                      type="text"
+                      value={walkInRegForm.hnNumber}
+                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, hnNumber: e.target.value }))}
+                      placeholder="HN Number"
+                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setWalkInStep("phone")}
+                    className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 3: Consultation Check-in Details */}
+            {walkInStep === "consultation" && (
+              <form onSubmit={handleWalkInCheckIn} className="space-y-4">
+                <div className="space-y-4">
+                  <div className="p-3 bg-brand-50/50 rounded-lg text-xs space-y-1 text-gray-600">
+                    <div>Patient Name: <span className="font-semibold text-gray-800">{walkInRegForm.patientName}</span></div>
+                    <div>Mobile: <span className="font-mono font-semibold text-gray-800">{walkInRegForm.mobile}</span></div>
+                    {walkInRegForm.patientId && <div>Patient ID: <span className="font-mono font-semibold text-gray-800">{walkInRegForm.patientId}</span></div>}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Department <span className="text-red-500">*</span></label>
+                    <select
+                      required
+                      value={walkInDept}
+                      onChange={(e) => { setWalkInDept(e.target.value); setWalkInDoctor(""); }}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm"
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Doctor <span className="text-red-500">*</span></label>
+                    <select
+                      required
+                      value={walkInDoctor}
+                      onChange={(e) => setWalkInDoctor(e.target.value)}
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm"
+                    >
+                      <option value="">Select Doctor</option>
+                      {doctorsList
+                        .filter(d => !walkInDept || d.department === walkInDept)
+                        .map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (walkInRegForm.patientId) {
+                        // Came from existing patient lookup
+                        setWalkInStep("phone");
+                      } else {
+                        // Came from signup registration
+                        setWalkInStep("register");
+                      }
+                    }}
+                    className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={walkInSubmitting}
+                    className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
+                  >
+                    {walkInSubmitting ? "Saving..." : "Check-in"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

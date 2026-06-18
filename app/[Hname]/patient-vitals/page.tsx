@@ -343,7 +343,7 @@ export default function PatientVitalsPage() {
                             onClick={() => {
                               setSelectedRow(row);
                               setForm({
-                                patientId: text(row, ["registration_id", "appointment_patient_id", "patient_id"]),
+                                patientId: text(row, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
                                 patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
                                 mobile: text(row, ["mobile", "patient_phone"]),
                                 dob: text(row, ["registration_dob", "dob"]).slice(0, 10),

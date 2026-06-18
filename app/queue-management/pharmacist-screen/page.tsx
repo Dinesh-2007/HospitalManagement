@@ -1,5 +1,5 @@
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 export default function PharmacistScreenPage() {
-  return <BlankPage title="Queue Management - Pharmacist Screen" />;
+  return <PageLayout title="Queue Management - Pharmacist Screen" />;
 }

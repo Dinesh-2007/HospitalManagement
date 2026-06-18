@@ -5,12 +5,12 @@ import { usePathname, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { mastersData } from "../lib/navigation";
 
-type BlankPageProps = {
+type PageLayoutProps = {
   title: string;
   children?: React.ReactNode;
 };
 
-export function BlankPage({ title, children }: BlankPageProps) {
+export function PageLayout({ title, children }: PageLayoutProps) {
   const pathname = usePathname();
   const params = useParams();
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : "";

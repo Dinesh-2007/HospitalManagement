@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type UserRow = {
@@ -129,7 +129,7 @@ export default function ManageUsersPage() {
   }
 
   return (
-    <BlankPage title="Manage Users">
+    <PageLayout title="Manage Users">
       <section className="mx-auto max-w-4xl rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -323,6 +323,6 @@ export default function ManageUsersPage() {
           )}
         </div>
       </section>
-    </BlankPage>
+    </PageLayout>
   );
 }

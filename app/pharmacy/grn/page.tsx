@@ -1,5 +1,5 @@
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 export default function GrnPage() {
-  return <BlankPage title="Pharmacy - GRN" />;
+  return <PageLayout title="Pharmacy - GRN" />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { BlankPage } from "./blank-page";
+import { PageLayout } from "./page-layout";
 
 type Variant = {
   id: string;
@@ -80,7 +80,7 @@ export function DiscountSchemaPage() {
   };
 
   return (
-    <BlankPage title="Discount Schema">
+    <PageLayout title="Discount Schema">
       <section className="space-y-6">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -378,6 +378,6 @@ export function DiscountSchemaPage() {
           </div>
         ) : null}
       </section>
-    </BlankPage>
+    </PageLayout>
   );
 }

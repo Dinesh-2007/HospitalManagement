@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 import { withSalutation } from "../../../lib/salutation";
 
 /* ─── Types ─────────────────────────────────────────────────────── */
@@ -285,7 +285,7 @@ export default function HospitalPatientAppointmentsPage() {
 
   /* ─── Render ─────────────────────────────────────────────────── */
   return (
-    <BlankPage title="My Appointments">
+    <PageLayout title="My Appointments">
       <div className="mx-auto max-w-6xl space-y-6">
         <section className="relative overflow-hidden rounded-3xl border border-gray-200 bg-white/90 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/60">
 
@@ -530,6 +530,6 @@ export default function HospitalPatientAppointmentsPage() {
           </div>
         </section>
       </div>
-    </BlankPage>
+    </PageLayout>
   );
 }

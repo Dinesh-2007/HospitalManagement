@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { BlankPage } from "../../../components/blank-page";
+import { PageLayout } from "../../../components/page-layout";
 
 type MedicineRow = {
   id: number;
@@ -62,7 +62,7 @@ export default function PharmacyDispensingPage() {
   };
 
   return (
-    <BlankPage title="Pharmacy - Pharmacy Dispensing">
+    <PageLayout title="Pharmacy - Pharmacy Dispensing">
       <div className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="border-b border-slate-200 px-6 py-5 dark:border-gray-800">
@@ -222,6 +222,6 @@ export default function PharmacyDispensingPage() {
           </form>
         </div>
       </div>
-    </BlankPage>
+    </PageLayout>
   );
 }
