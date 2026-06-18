@@ -20,6 +20,7 @@ export function DashboardShell({
   const isBookAppointment = pathname.endsWith("/book-appointment");
   const isCalendarPage = pathname.endsWith("/calendar");
   const ispatientDash = pathname.endsWith("/patient-dashboard");
+  const isfamily = pathname.endsWith("/manage-family");
   const hideNavAndSidebar =
     pathname === "/" ||
     pathname === "/create-account" ||
@@ -27,6 +28,7 @@ export function DashboardShell({
     isPatientLoginPage ||
     isBookAppointment ||
     ispatientDash ||
+    isfamily ||
     isCalendarPage;
 
   const mainContentMargin = isMobileOpen

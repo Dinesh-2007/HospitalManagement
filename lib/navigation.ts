@@ -21,7 +21,7 @@ export const mastersData: NavigationSection[] = [
     href: "/masters/consultant-doctor-management/patient-type",
     items: [
       { title: "Consultant Doctor", href: "/masters/consultant-doctor-management/consultant-doctor" },
-      { title: "Consultant Doctor Schedule", href: "/masters/consultant-doctor-management/consultant-doctor-schedule"},
+      { title: "Consultant Doctor Schedule", href: "/masters/consultant-doctor-management/consultant-doctor-schedule" },
       { title: "Department Master", href: "/masters/consultant-doctor-management/department-master" },
     ],
   },
@@ -84,70 +84,82 @@ export const navigation: NavigationSection[] = [
     href: "/masters",
   },
   {
-    title: "Pharmacy Dispensing",
-    href: "/pharmacy-dispensing",
+    title: "Patient Login",
+    href: "/patient-login",
   },
   {
-    title: "Pharmacy",
-    items: [
-      { title: "Purchase", href: "/pharmacy/purchase" },
-      { title: "Inventory", href: "/pharmacy/inventory" },
-      { title: "Dispensing", href: "/pharmacy/dispensing" },
-      { title: "GRN", href: "/pharmacy/grn" },
-      { title: "Supplier", href: "/pharmacy/supplier" },
-    ],
+    title: "Check in",
+    href: "/checkin",
   },
   {
-    title: "Billing",
-    items: [
-      { title: "Cash Billing", href: "/billing/cash-billing" },
-      { title: "Insurance Billing", href: "/billing/insurance-billing" },
-      { title: "Claims", href: "/billing/claims" },
-    ],
-  },
-  {
-    title: "Pricing",
-    href: "/pricing",
-  },
-  {
-    title: "Discount Schema",
-    href: "/discount-schema",
-  },
-  {
-    title: "Queue Management",
-    items: [
-      { title: "Out Patient", href: "/queue-management/out-patient" },
-      { title: "In Patient", href: "/queue-management/in-patient" },
-      { title: "Pharmacist Screen", href: "/queue-management/pharmacist-screen" },
-      { title: "Patient Vitals", href: "/patient-vitals" },
-    ],
+    title: "Patient Vitals",
+    href: "/patient-vitals"
   },
   {
     title: "Doctor Consultation",
     href: "/doctor-consultation",
   },
   {
-    title: "Patient Login",
-    href: "/patient-login",
+    title: "Schedule",
+    href: "/doctor-schedule",
   },
+
   {
-    title: "Patient Registration",
-    href: "/patient-registration",
+    title: "Pharmacy",
+    items: [
+      {
+        title: "Pharmacy Dispensing",
+        href: "/pharmacy-dispensing",
+      },
+      { title: "Pricing", href: "/pricing" },
+      {
+        title: "Discount Schema",
+        href: "/discount-schema",
+      },
+    ],
+  },
+
+  {
+    title: "Records",
+    href: "/records",
   },
   {
     title: "Manage Users",
     href: "/manage-users",
   },
   {
-    title: "Schedule",
-    href: "/doctor-schedule",
-  },
-  {
-    title: "Records",
-    href: "/records",
-  },
-  {
-    title: "Check in",
-    href: "/checkin",
+    title: "Hidden",
+    items: [
+      {
+        title: "Pharmacy",
+        items: [
+          { title: "Purchase", href: "/pharmacy/purchase" },
+          { title: "Inventory", href: "/pharmacy/inventory" },
+          { title: "Dispensing", href: "/pharmacy/dispensing" },
+          { title: "GRN", href: "/pharmacy/grn" },
+          { title: "Supplier", href: "/pharmacy/supplier" },
+        ],
+      },
+      {
+        title: "Billing",
+        items: [
+          { title: "Cash Billing", href: "/billing/cash-billing" },
+          { title: "Insurance Billing", href: "/billing/insurance-billing" },
+          { title: "Claims", href: "/billing/claims" },
+        ],
+      },
+      {
+        title: "Queue Management",
+        items: [
+          { title: "Out Patient", href: "/queue-management/out-patient" },
+          { title: "In Patient", href: "/queue-management/in-patient" },
+          { title: "Pharmacist Screen", href: "/queue-management/pharmacist-screen" },
+        ],
+      },
+      {
+        title: "Patient Registration",
+        href: "/patient-registration",
+      },
+    ],
   }
 ];
