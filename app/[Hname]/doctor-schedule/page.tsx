@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "next/navigation";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
 import { DatePicker } from "../../../components/date-picker";
@@ -266,6 +267,29 @@ export default function DoctorSchedulePage() {
   const [isLoadingTransferDoctors, setIsLoadingTransferDoctors] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const [openActionDropdownId, setOpenActionDropdownId] = useState<number | string | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest(".actions-dropdown-trigger") || target.closest(".actions-dropdown-menu")) {
+        return;
+      }
+      setOpenActionDropdownId(null);
+    }
+    function handleScroll() {
+      setOpenActionDropdownId(null);
+    }
+    document.addEventListener("click", handleOutsideClick);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("click", handleOutsideClick);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, []);
 
   // Admin View State
   const [allDoctors, setAllDoctors] = useState<DoctorMasterRow[]>([]);
@@ -815,29 +839,69 @@ export default function DoctorSchedulePage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
-                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
-                              disabled={!appointment.patient_id}
-                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={(e) => {
+                                const actionId = `admin-${appointment.id ?? appointment.patient_id}`;
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setDropdownCoords({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + rect.width - 144 + window.scrollX,
+                                });
+                                setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
+                              }}
+                              className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
                             >
-                              View Profile
+                              Actions
+                              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                              </svg>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void openTransferModal(appointment)}
-                              className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-600"
-                            >
-                              Transfer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCancelTarget(appointment)}
-                              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600"
-                            >
-                              Cancel
-                            </button>
+
+                            {mounted && openActionDropdownId === `admin-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: `${dropdownCoords.top}px`,
+                                  left: `${dropdownCoords.left}px`,
+                                }}
+                                className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  disabled={!appointment.patient_id}
+                                  className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                >
+                                  View Profile
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void openTransferModal(appointment);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
+                                >
+                                  Transfer
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCancelTarget(appointment);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
+                                >
+                                  Cancel
+                                </button>
+                              </div>,
+                              document.body
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1106,29 +1170,69 @@ export default function DoctorSchedulePage() {
                         <td className="px-4 py-3 text-gray-600">-</td>
                         <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-2">
+                          <div className="relative inline-block text-left">
                             <button
                               type="button"
-                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
-                              disabled={!appointment.patient_id}
-                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={(e) => {
+                                const actionId = `doctor-${appointment.id ?? appointment.patient_id}`;
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setDropdownCoords({
+                                  top: rect.bottom + window.scrollY,
+                                  left: rect.left + rect.width - 144 + window.scrollX,
+                                });
+                                setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
+                              }}
+                              className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
                             >
-                              View Profile
+                              Actions
+                              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                              </svg>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void openTransferModal(appointment)}
-                              className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-600"
-                            >
-                              Transfer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCancelTarget(appointment)}
-                              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600"
-                            >
-                              Cancel
-                            </button>
+
+                            {mounted && openActionDropdownId === `doctor-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: `${dropdownCoords.top}px`,
+                                  left: `${dropdownCoords.left}px`,
+                                }}
+                                className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  disabled={!appointment.patient_id}
+                                  className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                >
+                                  View Profile
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void openTransferModal(appointment);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
+                                >
+                                  Transfer
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCancelTarget(appointment);
+                                    setOpenActionDropdownId(null);
+                                  }}
+                                  className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
+                                >
+                                  Cancel
+                                </button>
+                              </div>,
+                              document.body
+                            )}
                           </div>
                         </td>
                       </tr>
