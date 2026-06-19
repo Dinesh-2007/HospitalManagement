@@ -97,10 +97,14 @@ export default function PatientLoginPage() {
   /* ── login step state ── */
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [patientRows, setPatientRows] = useState<PatientRow[]>([]);
-  const [isLoadingPatients, setIsLoadingPatients] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [showOtpField, setShowOtpField] = useState(false);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+
+  const [showNotRegisteredPopup, setShowNotRegisteredPopup] = useState(false);
+  const [notRegisteredPhone, setNotRegisteredPhone] = useState<string>("");
 
   /* ── registration step state ── */
   const [step, setStep] = useState<"login" | "register">("login");
@@ -110,53 +114,102 @@ export default function PatientLoginPage() {
 
   /* ── country / state / city ── */
   const [countries] = useState(() => Country.getAllCountries());
-  const [states, setStates] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
+  const [states, setStates] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
 
-  /* load patient records for phone-check */
-  useEffect(() => {
-    if (!hname) return;
-    setIsLoadingPatients(true);
-    fetchPatientRows(hname)
-      .then((rows) => setPatientRows(rows))
-      .catch(() => setPatientRows([]))
-      .finally(() => setIsLoadingPatients(false));
-  }, [hname]);
+  /* ── login/signup intent ── */
+  const [otpIntent, setOtpIntent] = useState<"signin" | "signup">("signin");
+  const [pendingPatient, setPendingPatient] = useState<PatientRow | null>(null);
 
-  /* ── step 1: phone + OTP submit ── */
-  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  /* ── step 1: Send OTP button ── */
+  const handleSendOtp = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
+    setOtpMessage(null);
+
     try {
       const normalizedPhone = normalizePhone(phone);
       if (!normalizedPhone) {
         setError("Please enter a valid phone number.");
         return;
       }
+      if (!hname) {
+        setError("Tenant is missing.");
+        return;
+      }
 
-      const matched = patientRows.find(
-        (row) => normalizePhone(row.phone) === normalizedPhone,
-      );
+      const res = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "signin",
+          phone: normalizedPhone,
+        }),
+      });
 
-      if (matched) {
-        /* phone found → log in */
-        const payload = { id: matched.id, name: matched.name, phone: matched.phone, gender: matched.gender };
-        localStorage.setItem(storageKey(hname ?? ""), JSON.stringify(payload));
-        localStorage.setItem("patientName", matched.name);
-        localStorage.setItem("patientPhone", matched.phone);
-        localStorage.setItem("patientGender", matched.gender);
-        router.push(redirectPath);
+      const data = (await res.json()) as {
+        exists?: boolean;
+        row?: Record<string, unknown> | null;
+        patientId?: number | null;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        setNotRegisteredPhone(normalizedPhone);
+        setShowNotRegisteredPopup(true);
+        return;
+      }
+
+      if (data.exists) {
+        const row = data.row ?? null;
+        const patient: PatientRow = {
+          id: Number(row?.id ?? data.patientId ?? 0),
+          name: String(row?.patient_name ?? row?.patientName ?? ""),
+          phone: String(row?.mobile ?? row?.phone ?? normalizedPhone),
+          gender: String(row?.gender ?? ""),
+        };
+        setPendingPatient(patient);
+        setOtpIntent("signin");
+        setShowOtpField(true);
+        setOtpMessage("OTP sent successfully");
       } else {
-        /* phone NOT found → go to registration step with phone prefilled */
-        setRegForm(emptyReg(normalizedPhone));
-        setStep("register");
+        setNotRegisteredPhone(normalizedPhone);
+        setShowNotRegisteredPopup(true);
       }
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handlePopupSignup = () => {
+    const normalizedPhone = normalizePhone(phone);
+    setShowNotRegisteredPopup(false);
+    setNotRegisteredPhone("");
+
+    setOtpIntent("signup");
+    setPendingPatient(null);
+
+    // Keep step as "login", but show OTP field
+    setStep("login");
+    setOtp("");
+    setShowOtpField(true);
+    setOtpMessage("OTP sent successfully");
+  };
+
+  const handlePopupChangeNumber = () => {
+    setShowNotRegisteredPopup(false);
+    setNotRegisteredPhone("");
+    setPhone(""); // Clear phone as well
+    setOtp("");
+    setShowOtpField(false);
+    setOtpMessage(null);
+    setOtpIntent("signin");
+    setPendingPatient(null);
+    setError(null);
+    setStep("login");
   };
 
   /* ── step 2: register and redirect ── */
@@ -204,25 +257,27 @@ export default function PatientLoginPage() {
     updateReg("country", countryName);
     updateReg("state", "");
     updateReg("city", "");
-    setStates(found ? State.getStatesOfCountry(found.isoCode) : []);
+    setStates(found ? (State.getStatesOfCountry(found.isoCode).map((s: any) => String(s.name)) as string[]) : []);
     setCities([]);
   };
 
   const handleStateChange = (stateName: string) => {
-    const foundCountry = countries.find((c) => c.name === regForm.country);
-    const foundState = states.find((s) => s.name === stateName);
     updateReg("state", stateName);
     updateReg("city", "");
+    const foundCountry = countries.find((c) => c.name === regForm.country);
+    // Since we only store state names (string[]), derive cities with a lookup
+    const statesForCountry = foundCountry ? State.getStatesOfCountry(foundCountry.isoCode) : [];
+    const foundState = statesForCountry.find((s: any) => s.name === stateName);
     setCities(
       foundCountry && foundState
-        ? City.getCitiesOfState(foundCountry.isoCode, foundState.isoCode)
+        ? (City.getCitiesOfState(foundCountry.isoCode, foundState.isoCode).map((c: any) => String(c.name)) as string[])
         : [],
     );
   };
 
   /* ══════════════════ RENDER ══════════════════ */
 
-  /* ── Registration form (step 2) ── */
+  /* ── Registration step (step 2) ── */
   if (step === "register") {
     return (
       <div className="flex min-h-[80vh] items-center justify-center p-4">
@@ -239,9 +294,10 @@ export default function PatientLoginPage() {
               ) : null}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
                 <div>
-                  <Label htmlFor="reg-name">Patient Name <span className="text-error-500">*</span></Label>
+                  <Label htmlFor="reg-name">
+                    Patient Name <span className="text-error-500">*</span>
+                  </Label>
                   <input
                     id="reg-name"
                     value={regForm.patientName}
@@ -283,7 +339,9 @@ export default function PatientLoginPage() {
                   >
                     <option value="">Select Gender</option>
                     {["Male", "Female", "Others"].map((g) => (
-                      <option key={g} value={g}>{g}</option>
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -300,7 +358,6 @@ export default function PatientLoginPage() {
                   />
                 </div>
 
-                {/* ── Country / State / City / ZIP ── */}
                 <div>
                   <Label htmlFor="reg-country">Country</Label>
                   <select
@@ -311,7 +368,9 @@ export default function PatientLoginPage() {
                   >
                     <option value="">Select Country</option>
                     {countries.map((c) => (
-                      <option key={c.isoCode} value={c.name}>{c.name}</option>
+                      <option key={c.isoCode} value={c.name}>
+                        {c.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -327,7 +386,9 @@ export default function PatientLoginPage() {
                   >
                     <option value="">Select State</option>
                     {states.map((s) => (
-                      <option key={s.isoCode} value={s.name}>{s.name}</option>
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -343,7 +404,9 @@ export default function PatientLoginPage() {
                   >
                     <option value="">Select City</option>
                     {cities.map((c) => (
-                      <option key={c.name} value={c.name}>{c.name}</option>
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -358,7 +421,6 @@ export default function PatientLoginPage() {
                     placeholder="ZIP / Postal code"
                   />
                 </div>
-                {/* ── end Country / State / City / ZIP ── */}
 
                 <div>
                   <Label htmlFor="reg-email">Email</Label>
@@ -388,48 +450,19 @@ export default function PatientLoginPage() {
                   <input
                     id="reg-phone-office"
                     value={regForm.phoneOffice}
-                    onChange={(e) => updateReg("phoneOffice", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    onChange={(e) =>
+                      updateReg("phoneOffice", e.target.value.replace(/\D/g, "").slice(0, 10))
+                    }
                     inputMode="numeric"
                     className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    placeholder="Office number"
+                    placeholder="Office phone"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="reg-phone-resi">Phone (Resi)</Label>
-                  <input
-                    id="reg-phone-resi"
-                    value={regForm.phoneResi}
-                    onChange={(e) => updateReg("phoneResi", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    inputMode="numeric"
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    placeholder="Residence number"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="reg-hn">HN Number</Label>
-                  <input
-                    id="reg-hn"
-                    value={regForm.hnNumber}
-                    onChange={(e) => updateReg("hnNumber", e.target.value)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    placeholder="HN Number"
-                  />
-                </div>
-
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setStep("login")}
-                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Back
-                </button>
-                <Button type="submit" disabled={isSaving} className="flex-1">
-                  {isSaving ? "Saving…" : "Register & Continue"}
+              <div className="pt-2">
+                <Button type="submit" disabled={isSaving} className="w-full">
+                  {isSaving ? "Creating Account..." : "Create Account & Login"}
                 </Button>
               </div>
             </form>
@@ -445,9 +478,9 @@ export default function PatientLoginPage() {
       <div className="w-full max-w-md">
         <ComponentCard
           title="Patient Login"
-          desc="Enter your registered mobile number to sign in."
+          desc="Enter your mobile number. OTP will appear only if number is registered."
         >
-          <form onSubmit={(e) => void handleLoginSubmit(e)} className="space-y-5">
+          <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
             {error ? (
               <div className="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
                 {error}
@@ -462,44 +495,96 @@ export default function PatientLoginPage() {
                 type="tel"
                 placeholder="Enter 10-digit mobile number"
                 value={phone}
+                readOnly={showOtpField}
                 onChange={(e) => {
+                  if (showOtpField) return;
                   setPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
                   setError(null);
                 }}
                 required
               />
-              {isLoadingPatients ? (
-                <p className="mt-1 text-xs text-gray-400">Loading patient records…</p>
-              ) : null}
             </div>
 
-            <div>
-              <Label htmlFor="otp">OTP</Label>
-              <InputField
-                id="otp"
-                name="otp"
-                type="text"
-                inputMode="numeric"
-                placeholder="Enter OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-              />
-              <p className="mt-1 text-xs text-gray-400">
-                Enter any value — OTP verification is not active yet.
-              </p>
-            </div>
+            {/* OTP is hidden on initial screen */}
+            {showOtpField ? (
+              <div>
+                <Label htmlFor="otp">OTP</Label>
+                <InputField
+                  id="otp"
+                  name="otp"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                />
+                {otpMessage ? (
+                  <p className="mt-2 text-sm text-brand-700 font-medium">{otpMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="pt-2">
-              <Button
-                type="submit"
-                disabled={isSubmitting || isLoadingPatients}
-                className="w-full"
-              >
-                {isSubmitting ? "Checking…" : "Continue"}
-              </Button>
+              {showOtpField ? (
+                <Button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    if (otpIntent === "signin") {
+                      if (!pendingPatient) return;
+                      const payload = {
+                        id: pendingPatient.id,
+                        name: pendingPatient.name,
+                        phone: pendingPatient.phone,
+                        gender: pendingPatient.gender,
+                      };
+                      localStorage.setItem(storageKey(hname ?? ""), JSON.stringify(payload));
+                      localStorage.setItem("patientName", pendingPatient.name);
+                      localStorage.setItem("patientPhone", pendingPatient.phone);
+                      localStorage.setItem("patientGender", pendingPatient.gender);
+                      router.push(redirectPath);
+                    } else {
+                      // signup: transition to registration form
+                      setRegForm(emptyReg(normalizePhone(phone)));
+                      setStep("register");
+                    }
+                  }}
+                  className="w-full"
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={(e) => void handleSendOtp(e)}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Checking…" : "Send OTP"}
+                </Button>
+              )}
             </div>
           </form>
+
+          {/* Popup: not registered */}
+          {showNotRegisteredPopup ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-md rounded-xl bg-white shadow-lg border border-gray-200 p-5">
+                <div className="text-sm text-gray-700">
+                  The number <span className="font-semibold">{notRegisteredPhone}</span> is not yet
+                  registered would you like to signup?
+                </div>
+                <div className="mt-4 flex gap-3">
+                  <Button type="button" onClick={handlePopupSignup} className="flex-1">
+                    Signup
+                  </Button>
+                  <Button type="button" onClick={handlePopupChangeNumber} className="flex-1">
+                    Change number
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </ComponentCard>
       </div>
     </div>

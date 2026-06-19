@@ -298,6 +298,8 @@ export default function DoctorSchedulePage() {
   const [adminSelectedDate, setAdminSelectedDate] = useState(() => toKey(new Date()));
   const [adminAppointments, setAdminAppointments] = useState<AppointmentRow[]>([]);
   const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
+  const todayKey = useMemo(() => toKey(new Date()), []);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -569,6 +571,9 @@ export default function DoctorSchedulePage() {
   const recordsPageSize = 10;
   const recordsTotalPages = Math.max(Math.ceil(recordsTotal / recordsPageSize), 1);
 
+  const isPastDoctorView = Boolean(selectedDateKey) && selectedDateKey < todayKey;
+  const isPastAdminView = Boolean(adminSelectedDate) && adminSelectedDate < todayKey;
+
   async function openTransferModal(appointment: AppointmentRow) {
     if (!appointment.id) return;
     setTransferTarget(appointment);
@@ -815,7 +820,7 @@ export default function DoctorSchedulePage() {
                       <th className="px-4 py-3 text-left">Doctor</th>
                       <th className="px-4 py-3 text-left">Patient</th>
                       <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Actions</th>
+                      {!isPastAdminView && <th className="px-4 py-3 text-left">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -838,72 +843,77 @@ export default function DoctorSchedulePage() {
                           <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
-                        <td className="px-4 py-3">
-                          <div className="relative inline-block text-left">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                const actionId = `admin-${appointment.id ?? appointment.patient_id}`;
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setDropdownCoords({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + rect.width - 144 + window.scrollX,
-                                });
-                                setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
-                              }}
-                              className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
-                            >
-                              Actions
-                              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                              </svg>
-                            </button>
+                        {!isPastAdminView && (
+                          <td className="px-4 py-3">
+                            {adminSelectedDate >= todayKey && (
+                              <div className="relative inline-block text-left">
 
-                            {mounted && openActionDropdownId === `admin-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: `${dropdownCoords.top}px`,
-                                  left: `${dropdownCoords.left}px`,
-                                }}
-                                className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
-                              >
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
-                                    setOpenActionDropdownId(null);
+                                  onClick={(e) => {
+                                    const actionId = `admin-${appointment.id ?? appointment.patient_id}`;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setDropdownCoords({
+                                      top: rect.bottom + window.scrollY,
+                                      left: rect.left + rect.width - 144 + window.scrollX,
+                                    });
+                                    setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
                                   }}
-                                  disabled={!appointment.patient_id}
-                                  className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                  className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
                                 >
-                                  View Profile
+                                  Actions
+                                  <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                  </svg>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void openTransferModal(appointment);
-                                    setOpenActionDropdownId(null);
-                                  }}
-                                  className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
-                                >
-                                  Transfer
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCancelTarget(appointment);
-                                    setOpenActionDropdownId(null);
-                                  }}
-                                  className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
-                                >
-                                  Cancel
-                                </button>
-                              </div>,
-                              document.body
+
+                                {mounted && openActionDropdownId === `admin-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: `${dropdownCoords.top}px`,
+                                      left: `${dropdownCoords.left}px`,
+                                    }}
+                                    className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      disabled={!appointment.patient_id}
+                                      className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                      View Profile
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openTransferModal(appointment);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
+                                    >
+                                      Transfer
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCancelTarget(appointment);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>,
+                                  document.body
+                                )}
+                              </div>
                             )}
-                          </div>
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1030,6 +1040,23 @@ export default function DoctorSchedulePage() {
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Department: {currentDepartment}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <DatePicker
+              value={selectedDateKey}
+              onChange={(val) => {
+                const date = parseKey(val);
+                if (date) {
+                  setSelectedDate(date);
+                  // Update week start to match the selected date's week
+                  const weekStart = new Date(date);
+                  weekStart.setDate(date.getDate() - date.getDay());
+                  weekStart.setHours(0, 0, 0, 0);
+                  setSelectedWeekStart(weekStart);
+                }
+                setMessage("");
+                setErrorMessage("");
+              }}
+              className="z-[100]"
+            />
             <button
               type="button"
               onClick={() => {
@@ -1041,10 +1068,6 @@ export default function DoctorSchedulePage() {
             >
               Records
             </button>
-            <div className="inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600">
-              <CalenderIcon className="h-5 w-5" />
-              Weekly calendar
-            </div>
           </div>
         </div>
 
@@ -1146,7 +1169,7 @@ export default function DoctorSchedulePage() {
                       <th className="px-4 py-3 text-left">Patient Type</th>
                       <th className="px-4 py-3 text-left">Gender</th>
                       <th className="px-4 py-3 text-left">Remarks</th>
-                      <th className="px-4 py-3 text-left">Actions</th>
+                      {!isPastDoctorView && <th className="px-4 py-3 text-left">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1169,72 +1192,76 @@ export default function DoctorSchedulePage() {
                         <td className="px-4 py-3 text-gray-600">{appointment.department ?? "-"}</td>
                         <td className="px-4 py-3 text-gray-600">-</td>
                         <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
-                        <td className="px-4 py-3">
-                          <div className="relative inline-block text-left">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                const actionId = `doctor-${appointment.id ?? appointment.patient_id}`;
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setDropdownCoords({
-                                  top: rect.bottom + window.scrollY,
-                                  left: rect.left + rect.width - 144 + window.scrollX,
-                                });
-                                setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
-                              }}
-                              className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
-                            >
-                              Actions
-                              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                              </svg>
-                            </button>
+                        {!isPastDoctorView && (
+                          <td className="px-4 py-3">
+                            {selectedDateKey >= todayKey && (
+                              <div className="relative inline-block text-left">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    const actionId = `doctor-${appointment.id ?? appointment.patient_id}`;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setDropdownCoords({
+                                      top: rect.bottom + window.scrollY,
+                                      left: rect.left + rect.width - 144 + window.scrollX,
+                                    });
+                                    setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
+                                  }}
+                                  className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
+                                >
+                                  Actions
+                                  <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
 
-                            {mounted && openActionDropdownId === `doctor-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  top: `${dropdownCoords.top}px`,
-                                  left: `${dropdownCoords.left}px`,
-                                }}
-                                className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
-                                    setOpenActionDropdownId(null);
-                                  }}
-                                  disabled={!appointment.patient_id}
-                                  className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
-                                >
-                                  View Profile
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    void openTransferModal(appointment);
-                                    setOpenActionDropdownId(null);
-                                  }}
-                                  className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
-                                >
-                                  Transfer
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCancelTarget(appointment);
-                                    setOpenActionDropdownId(null);
-                                  }}
-                                  className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
-                                >
-                                  Cancel
-                                </button>
-                              </div>,
-                              document.body
+                                {mounted && openActionDropdownId === `doctor-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: `${dropdownCoords.top}px`,
+                                      left: `${dropdownCoords.left}px`,
+                                    }}
+                                    className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      disabled={!appointment.patient_id}
+                                      className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                      View Profile
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openTransferModal(appointment);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
+                                    >
+                                      Transfer
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCancelTarget(appointment);
+                                        setOpenActionDropdownId(null);
+                                      }}
+                                      className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>,
+                                  document.body
+                                )}
+                              </div>
                             )}
-                          </div>
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
