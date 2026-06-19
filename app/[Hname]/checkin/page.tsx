@@ -469,8 +469,9 @@ export default function CheckInPage() {
                   const isCheckedIn = !!row.appointment_check_in_time;
                   const rowId = row.appointment_id as string | number;
                   const isRowCheckingIn = checkingIn === rowId;
-                  const displayPatientId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
-                  const appointmentNum = row.appointment_id ? `APT-${String(row.appointment_id).padStart(4, "0")}` : "-";
+                  const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                  const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
+                  const appointmentNum = row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-";
 
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>

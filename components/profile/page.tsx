@@ -1,4 +1,5 @@
 "use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -7,6 +8,7 @@ import { tableNameFromCardTitle } from "../../lib/master-form-table";
 type RawRow = Record<string, unknown>;
 type PatientRow = {
   id?: number;
+  patient_id?: string | null;
   patient_name?: string;
   mobile?: string | null;
   email?: string | null;
@@ -83,6 +85,7 @@ function readText(row: RawRow, keys: string[]) {
 function normalizePatientRow(row: RawRow): PatientRow {
   return {
     id: row.id ? Number(row.id) : undefined,
+    patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || undefined,
     mobile: readText(row, ["mobile"]) || null,
     email: readText(row, ["email"]) || null,
@@ -274,28 +277,44 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [previewItem, setPreviewItem] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
     async function loadProfile() {
       if (!patientId) return;
-      const [patientRows, appointmentRows, notificationRows] = await Promise.all([
-        loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(patientId)}`),
-        loadRows(hname, `/appointments?patientId=${encodeURIComponent(patientId)}`),
-        loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(patientId)}`),
-      ]);
-      const patientRow = patientRows.map(normalizePatientRow)[0] ?? null;
-      const phoneNotifications =
-        patientRow?.mobile && patientRow.mobile !== patientId
-          ? await loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(patientRow.mobile)}`)
-          : [];
-      const notificationMap = new Map(
-        [...notificationRows, ...phoneNotifications].map((row) => [String(row.id ?? `${row.title}-${row.created_at}`), row]),
-      );
-      setPatient(patientRow);
-      setAppointments(appointmentRows.map(normalizeAppointmentRow));
-      setNotifications(Array.from(notificationMap.values()).map(normalizeNotificationRow));
+      setIsLoading(true);
+      setErrorMessage("");
+      try {
+        const patientRows = await loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(patientId)}`);
+        const pRow = patientRows.map(normalizePatientRow)[0] ?? null;
+        
+        const actualPatientId = pRow?.patient_id || patientId;
+        const actualPhone = pRow?.mobile || patientId;
+
+        const [appointmentRows, notificationRows] = await Promise.all([
+          loadRows(hname, `/appointments?patientId=${encodeURIComponent(actualPatientId)}`),
+          loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(actualPatientId)}`),
+        ]);
+
+        const phoneNotifications =
+          pRow?.mobile && pRow.mobile !== actualPatientId
+            ? await loadRows(hname, `/appointments?notificationsFor=${encodeURIComponent(pRow.mobile)}`)
+            : [];
+            
+        const notificationMap = new Map(
+          [...notificationRows, ...phoneNotifications].map((row) => [String(row.id ?? `${row.title}-${row.created_at}`), row]),
+        );
+
+        setPatient(pRow);
+        setAppointments(appointmentRows.map(normalizeAppointmentRow));
+        setNotifications(Array.from(notificationMap.values()).map(normalizeNotificationRow));
+      } catch (err) {
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
     }
 
     void loadProfile().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load profile."));
@@ -345,7 +364,7 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
       <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <section className="space-y-6 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="space-y-4 text-sm">
-            <div><p className="text-gray-500">Patient ID</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.id ?? "-"}</p></div>
+            <div><p className="text-gray-500">Patient ID</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.patient_id || "Pending Check-In"}</p></div>
             <div><p className="text-gray-500">Email</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.email ?? "-"}</p></div>
             <div><p className="text-gray-500">Patient Type</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.patient_type ?? "-"}</p></div>
             <div><p className="text-gray-500">Profession</p><p className="font-medium text-gray-800 dark:text-white/90">{patient?.profession ?? "-"}</p></div>

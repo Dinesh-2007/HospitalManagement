@@ -6,23 +6,7 @@ export const runtime = "nodejs";
 
 const TABLE_NAME = "patient_registration";
 
-/** Generate a unique Patient ID in the format P<YYYYMMDD><4-digit-seq> */
-async function generatePatientId(pool: Awaited<ReturnType<typeof getTenantDB>>): Promise<string> {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const prefix = `P${yyyy}${mm}${dd}`;
 
-  // Count patients whose patient_id starts with today's prefix to get the next sequence
-  const result = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE patient_id LIKE $1`,
-    [`${prefix}%`]
-  );
-  const count = Number(result.rows[0]?.cnt ?? 0);
-  const seq = String(count + 1).padStart(4, "0");
-  return `${prefix}${seq}`;
-}
 
 function normalizePhone(value: unknown) {
   return String(value ?? "").replace(/\D/g, "").trim();
@@ -125,9 +109,6 @@ export async function POST(
     }
 
     let resolvedPatientId = normalizeText(patient.patientId || patient.patient_id);
-    if (!resolvedPatientId) {
-      resolvedPatientId = await generatePatientId(pool);
-    }
 
     const inserted = await pool.query(
       `
@@ -166,7 +147,7 @@ export async function POST(
         RETURNING *
       `,
       [
-        resolvedPatientId,
+        resolvedPatientId || null,
         normalizeText(patient.patientName),
         normalizeText(patient.dob) || null,
         normalizeText(patient.gender),
@@ -290,9 +271,6 @@ export async function PUT(
     let resolvedPatientId = normalizeText(patient.patientId || patient.patient_id);
     if (!resolvedPatientId) {
       resolvedPatientId = String(existing.rows[0]?.patient_id ?? "").trim();
-      if (!resolvedPatientId) {
-        resolvedPatientId = await generatePatientId(pool);
-      }
     }
 
     const updated = await pool.query(
@@ -330,7 +308,7 @@ export async function PUT(
         RETURNING *
       `,
       [
-        resolvedPatientId,
+        resolvedPatientId || null,
         normalizeText(patient.patientName),
         normalizeText(patient.dob) || null,
         normalizeText(patient.gender),

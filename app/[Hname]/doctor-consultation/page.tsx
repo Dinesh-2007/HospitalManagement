@@ -199,9 +199,11 @@ export default function DoctorConsultationPage() {
   useEffect(() => {
     async function loadHistory() {
       if (!selectedPatientRow) { setHistoryRows([]); return; }
+      
       const rawPid = text(selectedPatientRow, ["appointment_patient_id", "registration_id", "registration_patient_id", "patient_id"]);
       const pName = patientName(selectedPatientRow);
-      const patientId = (rawPid.toLowerCase() === pName.toLowerCase() || !/^P\d+$/i.test(rawPid)) ? "" : rawPid;
+      const patientId = rawPid && rawPid.toLowerCase() !== pName.toLowerCase() ? rawPid : "";
+      
       if (!patientId) { setHistoryRows([]); return; }
       setIsHistoryLoading(true);
       try {
@@ -249,16 +251,22 @@ export default function DoctorConsultationPage() {
     if (!selectedPatientRow) return [];
     const rawPid = text(selectedPatientRow, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
     const pName = patientName(selectedPatientRow);
-    const pid = (rawPid.toLowerCase() === pName.toLowerCase() || !/^P\d+$/i.test(rawPid)) ? "" : rawPid;
+    const pid = (rawPid.toLowerCase() === pName.toLowerCase()) ? "" : rawPid;
     return [
       ["Patient ID", pid],
-      ["Appointment Number", text(selectedPatientRow, ["appointment_id"]) ? `APT-${String(text(selectedPatientRow, ["appointment_id"])).padStart(4, "0")}` : ""],
+      ["Appointment Number", text(selectedPatientRow, ["appointment_number"]) ? `APT-${String(text(selectedPatientRow, ["appointment_number"])).padStart(4, "0")}` : ""],
       ["Patient Name", pName],
       ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
-      ["Gender", text(selectedPatientRow, ["gender"])],
-      ["Inactive Reason", text(selectedPatientRow, ["inactive_reason"])],
-      ["Profession", text(selectedPatientRow, ["profession"])],
-    ];
+      ["Age", text(selectedPatientRow, ["registration_age", "age"]) ? `${text(selectedPatientRow, ["registration_age", "age"])} Yrs` : ""],
+      ["Gender", text(selectedPatientRow, ["registration_gender", "gender"])],
+      ["Contact Number", text(selectedPatientRow, ["registration_mobile", "mobile", "patient_phone"])],
+      ["Address", text(selectedPatientRow, ["registration_address", "address"])],
+      ["City", text(selectedPatientRow, ["registration_city", "city"])],
+      ["State", text(selectedPatientRow, ["registration_state", "state"])],
+      ["Country", text(selectedPatientRow, ["registration_country", "country"])],
+      ["Zip Code", text(selectedPatientRow, ["registration_zip_code", "zip_code"])],
+      ["Email", text(selectedPatientRow, ["registration_email", "email"])],
+    ].filter(([, val]) => val !== "");
   }, [selectedPatientRow]);
 
   const vitalsDetailFields = useMemo(() => {
@@ -281,9 +289,7 @@ export default function DoctorConsultationPage() {
   }, [selectedPatientRow]);
 
   const previousHistoryRows = useMemo(() => {
-    const appointmentId = selectedPatientRow ? text(selectedPatientRow, ["appointment_id"]) : "";
     return historyRows
-      .filter(row => !appointmentId || String(row.id ?? "") !== appointmentId)
       .sort((a, b) =>
         `${text(b, ["appointment_date"])} ${text(b, ["appointment_time"])}`.localeCompare(
           `${text(a, ["appointment_date"])} ${text(a, ["appointment_time"])}`
@@ -551,7 +557,7 @@ export default function DoctorConsultationPage() {
                         {(() => {
                           const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
                           const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
-                          const isValidPid = rawPid && rawPid.toLowerCase() !== name.toLowerCase() && /^P\d+$/i.test(rawPid);
+                          const isValidPid = rawPid && rawPid.toLowerCase() !== name.toLowerCase();
                           return isValidPid ? (
                             <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start">
                               {rawPid}

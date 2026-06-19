@@ -7,22 +7,22 @@ export const runtime = "nodejs";
 const TABLE_NAME = "appointments";
 const PATIENTS_TABLE = "patient_registration";
 
-/** Generate a unique Patient ID in the format P<YYYYMMDD><4-digit-seq> */
+/** Generate a unique Patient ID in the format PID-<4-digit-seq> */
 async function generatePatientId(pool: Awaited<ReturnType<typeof getTenantDB>>): Promise<string> {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const prefix = `P${yyyy}${mm}${dd}`;
-
-  // Count patients whose patient_id starts with today's prefix to get the next sequence
   const result = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE patient_id LIKE $1`,
-    [`${prefix}%`]
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE patient_id LIKE 'PID-%'`
   );
   const count = Number(result.rows[0]?.cnt ?? 0);
   const seq = String(count + 1).padStart(4, "0");
-  return `${prefix}${seq}`;
+  return `PID-${seq}`;
+}
+
+async function generateAppointmentNumber(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT MAX(appointment_number) AS max_num FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1`,
+    [targetDate]
+  );
+  return (Number(result.rows[0]?.max_num) || 0) + 1;
 }
 
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
@@ -86,6 +86,11 @@ export async function POST(
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMPTZ
     `);
+    
+    await pool.query(`
+      ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+      ADD COLUMN IF NOT EXISTS appointment_number INTEGER
+    `);
 
     await ensurePatientTable(pool);
 
@@ -100,32 +105,43 @@ export async function POST(
 
       // Find or create the patient_registration record
       let resolvedPatientId = bodyPatientId as string | undefined;
+      let existingIdByPhone: number | null = null;
 
       if (patientPhone) {
         // Check if patient exists by phone
         const existingByPhone = await pool.query(
-          `SELECT patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
+          `SELECT id, patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
           [patientPhone]
         );
         if ((existingByPhone.rowCount ?? 0) > 0) {
+          existingIdByPhone = existingByPhone.rows[0].id;
           resolvedPatientId = String(existingByPhone.rows[0].patient_id ?? resolvedPatientId ?? "");
         }
       }
 
       if (!resolvedPatientId) {
         resolvedPatientId = await generatePatientId(pool);
-        // Insert into patient_registration
-        await pool.query(
-          `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (patient_id) DO NOTHING`,
-          [resolvedPatientId, patientName, patientPhone || null]
-        );
+        if (existingIdByPhone) {
+          await pool.query(
+            `UPDATE ${quoteIdentifier(PATIENTS_TABLE)} SET patient_id = $1 WHERE id = $2`,
+            [resolvedPatientId, existingIdByPhone]
+          );
+        } else {
+          // Insert into patient_registration
+          await pool.query(
+            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (patient_id) DO NOTHING`,
+            [resolvedPatientId, patientName, patientPhone || null]
+          );
+        }
       }
 
       const today = new Date().toISOString().split("T")[0];
       const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
       const currentTime = new Date().toTimeString().split(" ")[0];
+      
+      const nextAppointmentNumber = await generateAppointmentNumber(pool, today);
 
       const apptResult = await pool.query(
         `
@@ -140,9 +156,10 @@ export async function POST(
             appointment_time,
             patient_type,
             check_in_time,
+            appointment_number,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), 'Scheduled')
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, 'Scheduled')
           RETURNING id
         `,
         [
@@ -154,7 +171,8 @@ export async function POST(
           resolvedPatientId,
           patientPhone || null,
           currentTime,
-          "walk-in"
+          "walk-in",
+          nextAppointmentNumber
         ]
       );
 
@@ -163,7 +181,7 @@ export async function POST(
         success: true,
         patientId: resolvedPatientId,
         appointmentId: apptId,
-        appointmentNumber: apptId ? `APT-${String(apptId).padStart(4, "0")}` : null,
+        appointmentNumber: `APT-${String(nextAppointmentNumber).padStart(4, "0")}`,
       });
     }
 
@@ -177,13 +195,13 @@ export async function POST(
 
     const today = new Date().toISOString().split("T")[0];
 
-    type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null };
+    type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null };
     // If we have the direct appointment ID, use it
     let apptRecord: ApptRecordType | null = null;
 
     if (bodyAppointmentId) {
       const directResult = await pool.query(
-        `SELECT id, patient_id, patient_name, patient_phone FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
+        `SELECT id, patient_id, patient_name, patient_phone, appointment_number FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
         [bodyAppointmentId]
       );
       if ((directResult.rowCount ?? 0) > 0) {
@@ -194,7 +212,7 @@ export async function POST(
     // Fall back to search by name/doctor/department
     if (!apptRecord) {
       let query = `
-        SELECT id, patient_id, patient_name, patient_phone
+        SELECT id, patient_id, patient_name, patient_phone, appointment_number
         FROM ${quoteIdentifier(TABLE_NAME)}
         WHERE LOWER(patient_name) = LOWER($1)
           AND appointment_date = $2
@@ -217,10 +235,15 @@ export async function POST(
     }
 
     if (apptRecord) {
+      let apptNum = apptRecord.appointment_number;
+      if (!apptNum) {
+        apptNum = await generateAppointmentNumber(pool, today);
+      }
+
       // Mark check_in_time
       await pool.query(
-        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), updated_at = NOW() WHERE id = $1`,
-        [apptRecord.id]
+        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, updated_at = NOW() WHERE id = $2`,
+        [apptNum, apptRecord.id]
       );
 
       // Resolve Patient ID — check if already has one
@@ -238,12 +261,14 @@ export async function POST(
         }
       }
 
+      let existingIdByPhone: number | null = null;
       if (!resolvedPatientId && apptRecord.patient_phone) {
         const existingByPhone = await pool.query(
-          `SELECT patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
+          `SELECT id, patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
           [apptRecord.patient_phone]
         );
         if ((existingByPhone.rowCount ?? 0) > 0) {
+          existingIdByPhone = existingByPhone.rows[0].id;
           resolvedPatientId = String(existingByPhone.rows[0].patient_id ?? "");
         }
       }
@@ -251,12 +276,19 @@ export async function POST(
       if (!resolvedPatientId) {
         // Generate a brand-new patient ID and create registration record
         resolvedPatientId = await generatePatientId(pool);
-        await pool.query(
-          `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (patient_id) DO NOTHING`,
-          [resolvedPatientId, apptRecord.patient_name, apptRecord.patient_phone || null]
-        );
+        if (existingIdByPhone) {
+          await pool.query(
+            `UPDATE ${quoteIdentifier(PATIENTS_TABLE)} SET patient_id = $1 WHERE id = $2`,
+            [resolvedPatientId, existingIdByPhone]
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (patient_id) DO NOTHING`,
+            [resolvedPatientId, apptRecord.patient_name, apptRecord.patient_phone || null]
+          );
+        }
       }
 
       // Back-fill patient_id on the appointments row if it was missing
@@ -270,7 +302,7 @@ export async function POST(
       return NextResponse.json({
         type: "scheduled",
         appointmentId: apptRecord.id,
-        appointmentNumber: `APT-${String(apptRecord.id).padStart(4, "0")}`,
+        appointmentNumber: `APT-${String(apptNum).padStart(4, "0")}`,
         patientId: resolvedPatientId,
         patientName: apptRecord.patient_name,
       });
