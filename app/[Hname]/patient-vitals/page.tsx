@@ -301,8 +301,9 @@ export default function PatientVitalsPage() {
                 ) : filteredRows.map((row) => {
                   const done = isCompleted(row);
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
-                  const displayPatientId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
-                  const appointmentNum = row.appointment_id ? `APT-${String(row.appointment_id).padStart(4, "0")}` : "-";
+                  const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                  const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
+                  const appointmentNum = row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-";
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
                       <td className="px-4 py-3">
@@ -393,7 +394,7 @@ export default function PatientVitalsPage() {
                       ) : null}
                       {selectedRow?.appointment_id ? (
                         <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-600">
-                          {`APT-${String(selectedRow.appointment_id).padStart(4, "0")}`}
+                          {selectedRow.appointment_number ? `APT-${String(selectedRow.appointment_number).padStart(4, "0")}` : "-"}
                         </span>
                       ) : null}
                     </div>
@@ -416,7 +417,7 @@ export default function PatientVitalsPage() {
                         <>
                           <span className="text-brand-300">|</span>
                           <span className="text-xs font-medium text-gray-500">Appt. No.</span>
-                          <span className="font-mono text-sm text-gray-700">{`APT-${String(selectedRow.appointment_id).padStart(4, "0")}`}</span>
+                          <span className="font-mono text-sm text-gray-700">{selectedRow.appointment_number ? `APT-${String(selectedRow.appointment_number).padStart(4, "0")}` : "-"}</span>
                         </>
                       ) : null}
                     </div>

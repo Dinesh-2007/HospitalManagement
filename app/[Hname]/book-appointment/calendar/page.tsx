@@ -303,7 +303,7 @@ export default function AppointmentCalendarPage() {
   }, []);
   const isDateAvailable = useMemo(() => {
     return (date: Date) => {
-      if (date <= todayDate) return false;
+      if (date < todayDate) return false;
       const dayName = weekDayNames[date.getDay()];
       return scheduleRows.some((row) => {
         const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
@@ -331,7 +331,7 @@ export default function AppointmentCalendarPage() {
     today.setHours(0, 0, 0, 0);
 
     return weekDaysList.find((date) => {
-      if (date <= today) return false;
+      if (date < today) return false;
       const dayName = weekDayNames[date.getDay()];
       return scheduleRows.some((row) => {
         const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
@@ -614,7 +614,7 @@ export default function AppointmentCalendarPage() {
             <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
               {weekDays.map((day, index) => {
                 const current = weekDaysList[index];
-                const isPast = current <= todayDate;
+                const isPast = current < todayDate;
                 const isAvailable = isDateAvailable(current);
                 const isSelected = effectiveSelectedDate?.toDateString() === current.toDateString();
                 const dayColorClass = isAvailable ? "text-emerald-700" : "text-red-600";
