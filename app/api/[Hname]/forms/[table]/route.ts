@@ -7,22 +7,23 @@ import {
 } from "../../../../../lib/master-form-table";
 import { getTenantDB } from "../../../../../lib/db";
 import type { Pool } from "pg";
+import bcrypt from "bcrypt";
 
 export const runtime = "nodejs";
 
 type ApiField = {
   id: string;
   type:
-    | "text"
-    | "number"
-    | "select"
-    | "multiselect"
-    | "checkbox"
-    | "display"
-    | "datetime-local"
-    | "date"
-    | "time"
-    | "textarea";
+  | "text"
+  | "number"
+  | "select"
+  | "multiselect"
+  | "checkbox"
+  | "display"
+  | "datetime-local"
+  | "date"
+  | "time"
+  | "textarea";
 };
 
 type PostBody = {
@@ -79,9 +80,9 @@ function normalizeValue(field: ApiField, rawValue: unknown) {
   if (field.type === "multiselect" || field.type === "checkbox") {
     const values = Array.isArray(rawValue)
       ? rawValue.filter(
-          (value): value is string =>
-            typeof value === "string" && value.trim().length > 0,
-        )
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
       : [];
 
     return values.length > 0 ? JSON.stringify(values) : null;
@@ -168,7 +169,7 @@ export async function GET(
     const pool = await getTenantDB(decodedHname);
     const { searchParams } = new URL(request.url);
     const recordId = Number(searchParams.get("id") ?? 0);
-    
+
     const tableName = ensureSafeIdentifier(table, "table");
 
     if (!(await tableExists(pool, tableName))) {
@@ -205,7 +206,7 @@ export async function POST(
     const { Hname, table } = await params;
     const decodedHname = decodeURIComponent(Hname);
     const pool = await getTenantDB(decodedHname);
-    
+
     const body = (await request.json()) as PostBody;
     const fields = body.fields ?? [];
     const values = { ...(body.values ?? {}) };
@@ -258,6 +259,21 @@ export async function POST(
       `,
       insertValues,
     );
+
+    // If adding a consultant doctor, also create a user account
+    if (tableName === "consultant_doctor_master" && values.username) {
+      const username = String(values.username).trim();
+      const role = String(values.type ?? "Doctor").trim();
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(username, salt);
+
+      await pool.query(`
+        INSERT INTO users (username, password, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (username) DO NOTHING
+      `, [username, hashedPassword, role]);
+    }
 
     return NextResponse.json({
       row: insertResult.rows[0],

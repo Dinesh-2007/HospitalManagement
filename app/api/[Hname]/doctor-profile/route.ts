@@ -81,22 +81,22 @@ export async function GET(
     const doctorName = String(searchParams.get("doctorName") ?? "").trim();
     const rows = username
       ? await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE username = $1 LIMIT 1`,
-          [username],
-        )
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE username = $1 LIMIT 1`,
+        [username],
+      )
       : doctorId
         ? await pool.query(
-            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_id = $1 LIMIT 1`,
-            [doctorId],
-          )
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_id = $1 LIMIT 1`,
+          [doctorId],
+        )
         : doctorCode
           ? await pool.query(
-              `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_code = $1 LIMIT 1`,
-              [doctorCode],
-            )
-      : doctorName
-        ? await pool.query(
-            `
+            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_code = $1 LIMIT 1`,
+            [doctorCode],
+          )
+          : doctorName
+            ? await pool.query(
+              `
               SELECT *
               FROM ${quoteIdentifier(TABLE_NAME)}
               WHERE lower(trim(first_name)) = lower(trim($1))
@@ -109,10 +109,30 @@ export async function GET(
               ORDER BY id DESC
               LIMIT 1
             `,
-            [doctorName],
-          )
-      : await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
-    return NextResponse.json({ row: rows.rows[0] ?? null });
+              [doctorName],
+            )
+            : await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
+
+    let profile = rows.rows[0] ?? null;
+
+    // Fallback to consultant_doctor_master if no profile found for username
+    if (!profile && username) {
+      const masterRows = await pool.query(
+        `SELECT * FROM consultant_doctor_master WHERE username = $1 LIMIT 1`,
+        [username]
+      );
+      if (masterRows.rows[0]) {
+        const master = masterRows.rows[0];
+        profile = {
+          username: master.username,
+          first_name: master.doctor_consultant_name ?? master.doctorConsultantName ?? master.name,
+          last_name: "",
+          department: master.clinic ?? master.department,
+        };
+      }
+    }
+
+    return NextResponse.json({ row: profile });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load profile." },

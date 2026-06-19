@@ -1030,482 +1030,490 @@ export default function DoctorSchedulePage() {
     );
   }
 
-  return (
-    <div>
-      <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor Schedule</p>
-            <h2 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{doctorLabel}</h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Department: {currentDepartment}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <DatePicker
-              value={selectedDateKey}
-              onChange={(val) => {
-                const date = parseKey(val);
-                if (date) {
-                  setSelectedDate(date);
-                  // Update week start to match the selected date's week
-                  const weekStart = new Date(date);
-                  weekStart.setDate(date.getDate() - date.getDay());
-                  weekStart.setHours(0, 0, 0, 0);
-                  setSelectedWeekStart(weekStart);
-                }
-                setMessage("");
-                setErrorMessage("");
-              }}
-              className="z-[100]"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const next = !showRecords;
-                setShowRecords(next);
-                if (next) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
-              }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
-            >
-              Records
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-6 p-4 sm:p-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Week Appointments</p>
-              <p className="mt-3 text-2xl font-semibold text-gray-800">{weekAppointments.length}</p>
+  if (currentRole && (currentRole.toLowerCase() === "doctor" || currentRole.toLowerCase() === "consultant")) {
+    return (
+      <div>
+        <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor Schedule</p>
+              <h2 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{doctorLabel}</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Department: {currentDepartment}</p>
             </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected Day</p>
-              <p className="mt-3 text-2xl font-semibold text-gray-800">{selectedDayAppointments.length}</p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor Availability</p>
-              <p className="mt-3 text-sm font-medium text-gray-700">
-                {selectedDaySchedules.length > 0
-                  ? selectedDaySchedules.map((s) => `${formatDisplayTime(s.availableTimeFrom)} - ${formatDisplayTime(s.availableTimeTo)}`).join(", ")
-                  : "No schedule for this day"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setSelectedWeekStart(new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() - 7))}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
-            >
-              Prev
-            </button>
-            <div className="text-sm font-medium text-gray-600">{formatWeekRange(weekDaysList[0], weekDaysList[6])}</div>
-            <button
-              type="button"
-              onClick={() => setSelectedWeekStart(new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + 7))}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
-            >
-              Next
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
-            {weekDays.map((day, index) => {
-              const current = weekDaysList[index];
-              const dateKey = toKey(current);
-              const count = appointmentCountByDate.get(dateKey) ?? 0;
-              const isSelected = sameDay(effectiveSelectedDate, current);
-              const isScheduled = isDoctorScheduledOn(current);
-
-              return (
-                <button
-                  key={dateKey}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDate(current);
-                    setMessage("");
-                    setErrorMessage("");
-                  }}
-                  className={`min-h-28 border-r border-b p-3 text-left last:border-r-0 ${isSelected ? "bg-brand-50" : "bg-white"} ${!isScheduled ? "text-gray-400" : "text-gray-800"}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="text-xs font-semibold uppercase">{day}</div>
-                    {count > 0 ? <span className="rounded-full bg-brand-500 px-2 py-1 text-[11px] font-semibold text-white">{count}</span> : null}
-                  </div>
-                  <div className="mt-3 text-lg font-semibold">{current.getDate()}</div>
-                  <div className="mt-2 text-xs text-gray-500">{isScheduled ? "Available" : "No schedule"}</div>
-                </button>
-              );
-            })}
-          </div>
-
-          <section className="rounded-2xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Booked Patients</p>
-                <h3 className="mt-1 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
-                {selectedDayAppointments.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCancelAllConfirm(true)}
-                    className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition"
-                  >
-                    Cancel All Appointments
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {selectedDayAppointments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      <th className="px-4 py-3 text-left">Time</th>
-                      <th className="px-4 py-3 text-left">Patient</th>
-                      <th className="px-4 py-3 text-left">Patient Type</th>
-                      <th className="px-4 py-3 text-left">Gender</th>
-                      <th className="px-4 py-3 text-left">Remarks</th>
-                      {!isPastDoctorView && <th className="px-4 py-3 text-left">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedDayAppointments.map((appointment) => (
-                      <tr key={appointment.id ?? `${appointment.patient_id}-${appointment.appointment_time}`} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
-                          {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
-                            disabled={!appointment.patient_id}
-                            className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {withSalutation(appointment.patient_name ?? "-", appointment.patient_gender ?? "")}
-                          </button>
-                          <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{appointment.department ?? "-"}</td>
-                        <td className="px-4 py-3 text-gray-600">-</td>
-                        <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
-                        {!isPastDoctorView && (
-                          <td className="px-4 py-3">
-                            {selectedDateKey >= todayKey && (
-                              <div className="relative inline-block text-left">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    const actionId = `doctor-${appointment.id ?? appointment.patient_id}`;
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setDropdownCoords({
-                                      top: rect.bottom + window.scrollY,
-                                      left: rect.left + rect.width - 144 + window.scrollX,
-                                    });
-                                    setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
-                                  }}
-                                  className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
-                                >
-                                  Actions
-                                  <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                                  </svg>
-                                </button>
-
-                                {mounted && openActionDropdownId === `doctor-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
-                                  <div
-                                    style={{
-                                      position: "absolute",
-                                      top: `${dropdownCoords.top}px`,
-                                      left: `${dropdownCoords.left}px`,
-                                    }}
-                                    className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
-                                        setOpenActionDropdownId(null);
-                                      }}
-                                      disabled={!appointment.patient_id}
-                                      className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
-                                    >
-                                      View Profile
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void openTransferModal(appointment);
-                                        setOpenActionDropdownId(null);
-                                      }}
-                                      className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
-                                    >
-                                      Transfer
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setCancelTarget(appointment);
-                                        setOpenActionDropdownId(null);
-                                      }}
-                                      className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>,
-                                  document.body
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">No booked patients for this day.</div>
-            )}
-          </section>
-
-          {showRecords ? (
-            <section className="rounded-2xl border border-gray-200 p-5">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Records</p>
-                  <h3 className="mt-1 text-lg font-semibold text-gray-800">{formatDisplayDate(recordsDate)}</h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="date"
-                    value={recordsDate}
-                    onChange={(event) => updateRecords({ date: event.target.value, page: 1 })}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                  <input
-                    type="search"
-                    value={recordsSearch}
-                    onChange={(event) => updateRecords({ search: event.target.value, page: 1 })}
-                    placeholder="Search patient or phone"
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
-                  <select
-                    value={recordsStatus}
-                    onChange={(event) => updateRecords({ status: event.target.value, page: 1 })}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    {["All", "Scheduled", "Transferred", "Cancelled"].map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      <th className="px-4 py-3 text-left">Patient Name</th>
-                      <th className="px-4 py-3 text-left">Phone Number</th>
-                      <th className="px-4 py-3 text-left">Gender</th>
-                      <th className="px-4 py-3 text-left">Age</th>
-                      <th className="px-4 py-3 text-left">Scheduled Time</th>
-                      <th className="px-4 py-3 text-left">Status</th>
-                      <th className="px-4 py-3 text-left">Remarks</th>
-                      <th className="px-4 py-3 text-left">Date</th>
-                      <th className="px-4 py-3 text-left">Last Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {records.map((record) => {
-                      const status = record.record_status || record.status || "Scheduled";
-                      const remarks = status === "Transferred"
-                        ? `Transferred from ${record.transferred_from_doctor || "-"} to ${record.doctor || record.transferred_to_doctor || "-"}`
-                        : record.reason || status;
-                      return (
-                        <tr key={record.id ?? `${record.patient_name}-${record.appointment_time}`} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-800">{withSalutation(record.patient_name || "-", record.patient_gender ?? "")}</td>
-                          <td className="px-4 py-3 text-gray-600">{record.patient_phone || "-"}</td>
-                          <td className="px-4 py-3 text-gray-600">{record.patient_gender || "-"}</td>
-                          <td className="px-4 py-3 text-gray-600">{calculateAge(record.patient_dob)}</td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {record.appointment_time ? formatTimeRange(record.appointment_time, record.appointment_end_time) : "-"}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">{status}</td>
-                          <td className="px-4 py-3 text-gray-600">{remarks}</td>
-                          <td className="px-4 py-3 text-gray-600">{record.appointment_date ? formatDisplayDate(record.appointment_date) : "-"}</td>
-                          <td className="px-4 py-3 text-gray-600">{formatDisplayDateTime(record.updated_at)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {records.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
-                    {isLoadingRecords ? "Loading records..." : "No records for this filter."}
-                  </div>
-                ) : null}
-              </div>
-              <div className="mt-4 flex items-center justify-between gap-3 text-sm text-gray-600">
-                <span>Page {recordsPage} of {recordsTotalPages} · {recordsTotal} records</span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={recordsPage <= 1 || isLoadingRecords}
-                    onClick={() => updateRecords({ page: recordsPage - 1 })}
-                    className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
-                  >
-                    Prev
-                  </button>
-                  <button
-                    type="button"
-                    disabled={recordsPage >= recordsTotalPages || isLoadingRecords}
-                    onClick={() => updateRecords({ page: recordsPage + 1 })}
-                    className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {message ? <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
-          {errorMessage ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
-        </div>
-      </section>
-
-      {transferTarget ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Transfer appointment</h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                  Same department only. The appointment date stays {transferTarget.appointment_date ? formatDisplayDate(transferTarget.appointment_date) : selectedDateKey}.
-                </p>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              <DatePicker
+                value={selectedDateKey}
+                onChange={(val) => {
+                  const date = parseKey(val);
+                  if (date) {
+                    setSelectedDate(date);
+                    // Update week start to match the selected date's week
+                    const weekStart = new Date(date);
+                    weekStart.setDate(date.getDate() - date.getDay());
+                    weekStart.setHours(0, 0, 0, 0);
+                    setSelectedWeekStart(weekStart);
+                  }
+                  setMessage("");
+                  setErrorMessage("");
+                }}
+                className="z-[100]"
+              />
               <button
                 type="button"
                 onClick={() => {
-                  setTransferTarget(null);
-                  setTransferDoctors([]);
+                  const next = !showRecords;
+                  setShowRecords(next);
+                  if (next) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
                 }}
-                disabled={isTransferring}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
               >
-                Close
+                Records
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-6 p-4 sm:p-6">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Week Appointments</p>
+                <p className="mt-3 text-2xl font-semibold text-gray-800">{weekAppointments.length}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected Day</p>
+                <p className="mt-3 text-2xl font-semibold text-gray-800">{selectedDayAppointments.length}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor Availability</p>
+                <p className="mt-3 text-sm font-medium text-gray-700">
+                  {selectedDaySchedules.length > 0
+                    ? selectedDaySchedules.map((s) => `${formatDisplayTime(s.availableTimeFrom)} - ${formatDisplayTime(s.availableTimeTo)}`).join(", ")
+                    : "No schedule for this day"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedWeekStart(new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() - 7))}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+              >
+                Prev
+              </button>
+              <div className="text-sm font-medium text-gray-600">{formatWeekRange(weekDaysList[0], weekDaysList[6])}</div>
+              <button
+                type="button"
+                onClick={() => setSelectedWeekStart(new Date(selectedWeekStart.getFullYear(), selectedWeekStart.getMonth(), selectedWeekStart.getDate() + 7))}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+              >
+                Next
               </button>
             </div>
 
-            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-              <p><span className="font-medium">Patient:</span> {withSalutation(transferTarget.patient_name || "-", transferTarget.patient_gender ?? "")}</p>
-              <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
-              <p className="mt-1">
-                <span className="font-medium">Current time:</span>{" "}
-                {transferTarget.appointment_time ? formatTimeRange(transferTarget.appointment_time, transferTarget.appointment_end_time) : "-"}
-              </p>
+            <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-gray-200">
+              {weekDays.map((day, index) => {
+                const current = weekDaysList[index];
+                const dateKey = toKey(current);
+                const count = appointmentCountByDate.get(dateKey) ?? 0;
+                const isSelected = sameDay(effectiveSelectedDate, current);
+                const isScheduled = isDoctorScheduledOn(current);
+
+                return (
+                  <button
+                    key={dateKey}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(current);
+                      setMessage("");
+                      setErrorMessage("");
+                    }}
+                    className={`min-h-28 border-r border-b p-3 text-left last:border-r-0 ${isSelected ? "bg-brand-50" : "bg-white"} ${!isScheduled ? "text-gray-400" : "text-gray-800"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold uppercase">{day}</div>
+                      {count > 0 ? <span className="rounded-full bg-brand-500 px-2 py-1 text-[11px] font-semibold text-white">{count}</span> : null}
+                    </div>
+                    <div className="mt-3 text-lg font-semibold">{current.getDate()}</div>
+                    <div className="mt-2 text-xs text-gray-500">{isScheduled ? "Available" : "No schedule"}</div>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="mt-5 max-h-[45vh] overflow-y-auto">
-              {isLoadingTransferDoctors ? (
-                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">Loading available doctors...</div>
-              ) : transferDoctors.length > 0 ? (
-                <div className="grid gap-3">
-                  {transferDoctors.map((doctor) => (
+            <section className="rounded-2xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Booked Patients</p>
+                  <h3 className="mt-1 text-lg font-semibold text-gray-800">{selectedDateKey ? formatDisplayDate(selectedDateKey) : "Select a day"}</h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isLoadingWeek ? <span className="text-xs text-gray-500">Refreshing...</span> : null}
+                  {selectedDayAppointments.length > 0 && (
                     <button
-                      key={doctor.doctor}
                       type="button"
-                      onClick={() => void transferAppointment(doctor.doctor)}
-                      disabled={isTransferring || !doctor.nextSlot}
-                      className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+                      onClick={() => setShowCancelAllConfirm(true)}
+                      className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-gray-900">{doctor.doctor}</p>
-                          <p className="mt-1 text-sm text-gray-500">{doctor.department || "-"}</p>
-                          <p className="mt-1 text-sm text-gray-500">Available timing: {doctor.availableTiming || "-"}</p>
-                        </div>
-                        <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-                          Next: {doctor.nextSlot ? formatTimeRange(doctor.nextSlot.start, doctor.nextSlot.end) : "-"}
-                        </div>
-                      </div>
-                      <p className="mt-3 text-xs text-gray-500">
-                        Available slots: {doctor.availableSlots.slice(0, 6).map((slot) => formatTimeRange(slot.start, slot.end)).join(", ")}
-                        {doctor.availableSlots.length > 6 ? ` +${doctor.availableSlots.length - 6} more` : ""}
-                      </p>
+                      Cancel All Appointments
                     </button>
-                  ))}
+                  )}
+                </div>
+              </div>
+
+              {selectedDayAppointments.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <th className="px-4 py-3 text-left">Time</th>
+                        <th className="px-4 py-3 text-left">Patient</th>
+                        <th className="px-4 py-3 text-left">Patient Type</th>
+                        <th className="px-4 py-3 text-left">Gender</th>
+                        <th className="px-4 py-3 text-left">Remarks</th>
+                        {!isPastDoctorView && <th className="px-4 py-3 text-left">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedDayAppointments.map((appointment) => (
+                        <tr key={appointment.id ?? `${appointment.patient_id}-${appointment.appointment_time}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
+                            {appointment.appointment_time ? formatTimeRange(appointment.appointment_time, appointment.appointment_end_time) : "-"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => appointment.patient_id && setSelectedPatientId(appointment.patient_id)}
+                              disabled={!appointment.patient_id}
+                              className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {withSalutation(appointment.patient_name ?? "-", appointment.patient_gender ?? "")}
+                            </button>
+                            <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{appointment.department ?? "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">-</td>
+                          <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
+                          {!isPastDoctorView && (
+                            <td className="px-4 py-3">
+                              {selectedDateKey >= todayKey && (
+                                <div className="relative inline-block text-left">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      const actionId = `doctor-${appointment.id ?? appointment.patient_id}`;
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setDropdownCoords({
+                                        top: rect.bottom + window.scrollY,
+                                        left: rect.left + rect.width - 144 + window.scrollX,
+                                      });
+                                      setOpenActionDropdownId(openActionDropdownId === actionId ? null : actionId);
+                                    }}
+                                    className="actions-dropdown-trigger inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition"
+                                  >
+                                    Actions
+                                    <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                    </svg>
+                                  </button>
+
+                                  {mounted && openActionDropdownId === `doctor-${appointment.id ?? appointment.patient_id}` && dropdownCoords && createPortal(
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: `${dropdownCoords.top}px`,
+                                        left: `${dropdownCoords.left}px`,
+                                      }}
+                                      className="actions-dropdown-menu z-[100] mt-1.5 w-36 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (appointment.patient_id) setSelectedPatientId(appointment.patient_id);
+                                          setOpenActionDropdownId(null);
+                                        }}
+                                        disabled={!appointment.patient_id}
+                                        className="block w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-200 dark:hover:bg-gray-700"
+                                      >
+                                        View Profile
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          void openTransferModal(appointment);
+                                          setOpenActionDropdownId(null);
+                                        }}
+                                        className="block w-full px-4 py-2 text-left text-xs text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-700"
+                                      >
+                                        Transfer
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCancelTarget(appointment);
+                                          setOpenActionDropdownId(null);
+                                        }}
+                                        className="block w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>,
+                                    document.body
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
-                  No available slots found for transfer on the selected date.
-                </div>
+                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">No booked patients for this day.</div>
               )}
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </section>
 
-      {cancelTarget ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              Cancel the appointment for {withSalutation(cancelTarget.patient_name ?? "this patient", cancelTarget.patient_gender ?? "")}
-              {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setCancelTarget(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
-              >
-                Keep
-              </button>
-              <button
-                type="button"
-                onClick={() => void cancelAppointment()}
-                disabled={isCancelling}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {isCancelling ? "Cancelling..." : "Confirm Cancel"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            {showRecords ? (
+              <section className="rounded-2xl border border-gray-200 p-5">
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Records</p>
+                    <h3 className="mt-1 text-lg font-semibold text-gray-800">{formatDisplayDate(recordsDate)}</h3>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={recordsDate}
+                      onChange={(event) => updateRecords({ date: event.target.value, page: 1 })}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="search"
+                      value={recordsSearch}
+                      onChange={(event) => updateRecords({ search: event.target.value, page: 1 })}
+                      placeholder="Search patient or phone"
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <select
+                      value={recordsStatus}
+                      onChange={(event) => updateRecords({ status: event.target.value, page: 1 })}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      {["All", "Scheduled", "Transferred", "Cancelled"].map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <th className="px-4 py-3 text-left">Patient Name</th>
+                        <th className="px-4 py-3 text-left">Phone Number</th>
+                        <th className="px-4 py-3 text-left">Gender</th>
+                        <th className="px-4 py-3 text-left">Age</th>
+                        <th className="px-4 py-3 text-left">Scheduled Time</th>
+                        <th className="px-4 py-3 text-left">Status</th>
+                        <th className="px-4 py-3 text-left">Remarks</th>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Last Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {records.map((record) => {
+                        const status = record.record_status || record.status || "Scheduled";
+                        const remarks = status === "Transferred"
+                          ? `Transferred from ${record.transferred_from_doctor || "-"} to ${record.doctor || record.transferred_to_doctor || "-"}`
+                          : record.reason || status;
+                        return (
+                          <tr key={record.id ?? `${record.patient_name}-${record.appointment_time}`} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-medium text-gray-800">{withSalutation(record.patient_name || "-", record.patient_gender ?? "")}</td>
+                            <td className="px-4 py-3 text-gray-600">{record.patient_phone || "-"}</td>
+                            <td className="px-4 py-3 text-gray-600">{record.patient_gender || "-"}</td>
+                            <td className="px-4 py-3 text-gray-600">{calculateAge(record.patient_dob)}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {record.appointment_time ? formatTimeRange(record.appointment_time, record.appointment_end_time) : "-"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">{status}</td>
+                            <td className="px-4 py-3 text-gray-600">{remarks}</td>
+                            <td className="px-4 py-3 text-gray-600">{record.appointment_date ? formatDisplayDate(record.appointment_date) : "-"}</td>
+                            <td className="px-4 py-3 text-gray-600">{formatDisplayDateTime(record.updated_at)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {records.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                      {isLoadingRecords ? "Loading records..." : "No records for this filter."}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-3 text-sm text-gray-600">
+                  <span>Page {recordsPage} of {recordsTotalPages} · {recordsTotal} records</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={recordsPage <= 1 || isLoadingRecords}
+                      onClick={() => updateRecords({ page: recordsPage - 1 })}
+                      className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      disabled={recordsPage >= recordsTotalPages || isLoadingRecords}
+                      onClick={() => updateRecords({ page: recordsPage + 1 })}
+                      className="rounded-lg border border-gray-300 px-3 py-2 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
-      {showCancelAllConfirm ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel All Appointments</h3>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              Are you sure you want to cancel ALL appointments for {selectedDateKey ? formatDisplayDate(selectedDateKey) : "this day"}? This action cannot be undone.
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCancelAllConfirm(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
-              >
-                Keep
-              </button>
-              <button
-                type="button"
-                onClick={() => void cancelAllAppointments()}
-                disabled={isCancellingAll}
-                className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {isCancellingAll ? "Cancelling all..." : "Confirm Cancel All"}
-              </button>
+            {message ? <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div> : null}
+            {errorMessage ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
+          </div>
+        </section>
+
+        {transferTarget ? (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Transfer appointment</h3>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    Same department only. The appointment date stays {transferTarget.appointment_date ? formatDisplayDate(transferTarget.appointment_date) : selectedDateKey}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferTarget(null);
+                    setTransferDoctors([]);
+                  }}
+                  disabled={isTransferring}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p><span className="font-medium">Patient:</span> {withSalutation(transferTarget.patient_name || "-", transferTarget.patient_gender ?? "")}</p>
+                <p className="mt-1"><span className="font-medium">Current doctor:</span> {transferTarget.doctor || "-"}</p>
+                <p className="mt-1">
+                  <span className="font-medium">Current time:</span>{" "}
+                  {transferTarget.appointment_time ? formatTimeRange(transferTarget.appointment_time, transferTarget.appointment_end_time) : "-"}
+                </p>
+              </div>
+
+              <div className="mt-5 max-h-[45vh] overflow-y-auto">
+                {isLoadingTransferDoctors ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">Loading available doctors...</div>
+                ) : transferDoctors.length > 0 ? (
+                  <div className="grid gap-3">
+                    {transferDoctors.map((doctor) => (
+                      <button
+                        key={doctor.doctor}
+                        type="button"
+                        onClick={() => void transferAppointment(doctor.doctor)}
+                        disabled={isTransferring || !doctor.nextSlot}
+                        className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-900">{doctor.doctor}</p>
+                            <p className="mt-1 text-sm text-gray-500">{doctor.department || "-"}</p>
+                            <p className="mt-1 text-sm text-gray-500">Available timing: {doctor.availableTiming || "-"}</p>
+                          </div>
+                          <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                            Next: {doctor.nextSlot ? formatTimeRange(doctor.nextSlot.start, doctor.nextSlot.end) : "-"}
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xs text-gray-500">
+                          Available slots: {doctor.availableSlots.slice(0, 6).map((slot) => formatTimeRange(slot.start, slot.end)).join(", ")}
+                          {doctor.availableSlots.length > 6 ? ` +${doctor.availableSlots.length - 6} more` : ""}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                    No available slots found for transfer on the selected date.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+
+        {cancelTarget ? (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel appointment</h3>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                Cancel the appointment for {withSalutation(cancelTarget.patient_name ?? "this patient", cancelTarget.patient_gender ?? "")}
+                {cancelTarget.appointment_time ? ` at ${formatTimeRange(cancelTarget.appointment_time, cancelTarget.appointment_end_time)}` : ""}?
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancelTarget(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cancelAppointment()}
+                  disabled={isCancelling}
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {showCancelAllConfirm ? (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">Cancel All Appointments</h3>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                Are you sure you want to cancel ALL appointments for {selectedDateKey ? formatDisplayDate(selectedDateKey) : "this day"}? This action cannot be undone.
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelAllConfirm(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cancelAllAppointments()}
+                  disabled={isCancellingAll}
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {isCancellingAll ? "Cancelling all..." : "Confirm Cancel All"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-600">Access denied. You do not have permission to view this page.</div>
     </div>
   );
 }

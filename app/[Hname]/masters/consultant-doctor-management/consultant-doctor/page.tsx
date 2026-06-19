@@ -255,6 +255,7 @@ export default function ConsultantDoctorPage() {
         type: "select",
         options: paymentTermsOptions,
       },
+      { id: "username", label: "Username", type: "text", maxLength: 50, pattern: "[a-zA-Z0-9]*" },
     ],
     [countries, states, cities, payModeOptions, paymentTermsOptions],
   );

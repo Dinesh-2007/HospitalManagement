@@ -3,6 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
+import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
+
+function normalizeDoctorProfileRow(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  return {
+    first_name: String(row.first_name || row.firstName || ""),
+    last_name: String(row.last_name || row.lastName || ""),
+  };
+}
+
+async function loadDoctorProfile(hname: string, username: string) {
+  const response = await fetch(
+    `/api/${encodeURIComponent(hname)}/doctor-profile?username=${encodeURIComponent(username)}`,
+    { cache: "no-store" },
+  );
+  const data = (await response.json().catch(() => ({}))) as {
+    row?: Record<string, unknown> | null;
+    error?: string;
+  };
+  if (!response.ok) throw new Error(data.error ?? "Failed to load doctor profile.");
+  return normalizeDoctorProfileRow(data.row ?? null);
+}
 
 type QueueTab = "Upcoming" | "Draft" | "Completed";
 type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "History";
@@ -126,22 +148,38 @@ export default function DoctorConsultationPage() {
     sended: "",
   });
 
-  // Fetch doctors on mount
+  // Fetch doctors and auto-select on mount
   useEffect(() => {
-    async function fetchDoctors() {
+    async function initPage() {
       if (!hname) return;
       try {
+        const [user, role] = await Promise.all([getCurrentUser(hname), getCurrentUserRole(hname)]);
+
         const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" });
         const data = await response.json();
         const docs = (data.rows || []).map((r: any) => ({
           name: String(r.doctor_consultant_name || r.doctorConsultantName || r.consultant_doctor_name || r.name || ""),
         })).filter((r: any) => r.name);
         setDoctorsList(docs);
+
+        if (role && role.toLowerCase() !== "admin" && user) {
+          const profile = await loadDoctorProfile(hname, user);
+          if (profile) {
+            const fullName = `${profile.first_name} ${profile.last_name}`.trim();
+            const matchedDoc = docs.find((d: any) => {
+              const dName = d.name.toLowerCase();
+              return dName === fullName.toLowerCase() || dName.includes(fullName.toLowerCase()) || fullName.toLowerCase().includes(dName);
+            });
+            if (matchedDoc) {
+              setSelectedDoctor(matchedDoc.name);
+            }
+          }
+        }
       } catch (err) {
-        console.error("Failed to load doctors", err);
+        console.error("Failed to load initial page data", err);
       }
     }
-    void fetchDoctors();
+    void initPage();
   }, [hname]);
 
   // Fetch symptoms on mount
