@@ -441,6 +441,16 @@ export default function AppointmentCalendarPage() {
     const [start, end] = selectedHour.value.split("|");
     return buildSubSlots(start, end, activeStep as 10 | 20);
   }, [activeStep, effectiveSelectedDate, selectedHour]);
+
+  const isToday = useMemo(() => {
+    if (!effectiveSelectedDate) return false;
+    const today = new Date();
+    return effectiveSelectedDate.getDate() === today.getDate() &&
+      effectiveSelectedDate.getMonth() === today.getMonth() &&
+      effectiveSelectedDate.getFullYear() === today.getFullYear();
+  }, [effectiveSelectedDate]);
+
+  const nowTime = new Date().toTimeString().slice(0, 5);
   async function bookSlot() {
     if (!effectiveSelectedDate || !selectedSlot || !patient) return;
     setErrorMessage("");
@@ -630,10 +640,10 @@ export default function AppointmentCalendarPage() {
                       }
                     }}
                     className={`min-h-24 border-r border-b p-3 text-left last:border-r-0 transition ${isSelected
-                        ? "bg-emerald-50 ring-1 ring-emerald-200"
-                        : isAvailable
-                          ? "bg-white hover:bg-emerald-50/60"
-                          : "bg-red-50 hover:bg-red-100/60"
+                      ? "bg-emerald-50 ring-1 ring-emerald-200"
+                      : isAvailable
+                        ? "bg-white hover:bg-emerald-50/60"
+                        : "bg-red-50 hover:bg-red-100/60"
                       } ${isPast ? "opacity-70" : ""}`}
                   >
                     <div className={`text-xs font-semibold uppercase ${dayColorClass}`}>{day}</div>
@@ -653,19 +663,25 @@ export default function AppointmentCalendarPage() {
                     {availableHours.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                     ) : (
-                      availableHours.map((hour) => (
-                        <button
-                          key={hour.value}
-                          type="button"
-                          onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
-                          className={`rounded-full border px-4 py-2 text-sm ${selectedHour?.value === hour.value
+                      availableHours.map((hour) => {
+                        const isPast = isToday && hour.end <= nowTime;
+                        return (
+                          <button
+                            key={hour.value}
+                            type="button"
+                            disabled={isPast}
+                            onClick={() => { setSelectedHour(hour); setSelectedSlot(""); }}
+                            className={`rounded-full border px-4 py-2 text-sm transition ${selectedHour?.value === hour.value
                               ? "bg-brand-500 text-white"
-                              : "bg-white text-gray-700"
-                            }`}
-                        >
-                          {hour.label}
-                        </button>
-                      ))
+                              : isPast
+                                ? "cursor-not-allowed opacity-40 bg-gray-100 text-gray-400"
+                                : "bg-white text-gray-700 hover:bg-gray-50"
+                              }`}
+                          >
+                            {hour.label}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -677,22 +693,29 @@ export default function AppointmentCalendarPage() {
                       {availableSubSlots.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
                       ) : (
-                        availableSubSlots.map((slot) => (
-                          <button
-                            key={slot.value}
-                            type="button"
-                            disabled={bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)}
-                            onClick={() => (!bookedSlots.has(slot.value) || currentPatientBookedSlots.has(slot.value)) && setSelectedSlot(slot.start)}
-                            className={`rounded-full border px-4 py-2 text-sm transition ${selectedSlot === slot.start
+                        availableSubSlots.map((slot) => {
+                          const isPast = isToday && slot.start <= nowTime;
+                          const isBooked = bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value);
+                          const isDisabled = isBooked || isPast;
+                          return (
+                            <button
+                              key={slot.value}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => !isDisabled && setSelectedSlot(slot.start)}
+                              className={`rounded-full border px-4 py-2 text-sm transition ${selectedSlot === slot.start
                                 ? "bg-brand-500 text-white"
-                                : bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value)
+                                : isBooked
                                   ? "cursor-not-allowed border-red-300 bg-red-100 text-red-700"
-                                  : "border-emerald-300 bg-emerald-50 text-emerald-700"
-                              }`}
-                          >
-                            {slot.label}
-                          </button>
-                        ))
+                                  : isPast
+                                    ? "cursor-not-allowed opacity-40 bg-gray-100 text-gray-400"
+                                    : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                }`}
+                            >
+                              {slot.label}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   </div>
