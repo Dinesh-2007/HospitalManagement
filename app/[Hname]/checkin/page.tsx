@@ -39,7 +39,7 @@ export default function CheckInPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
-  const [doctorsList, setDoctorsList] = useState<{ name: string, department: string }[]>([]);
+  const [doctorsList, setDoctorsList] = useState<{ name: string, department: string, isAvailableToday?: boolean }[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [loading, setLoading] = useState(false);
@@ -268,20 +268,62 @@ export default function CheckInPage() {
     async function loadOptions() {
       if (!hname) return;
       try {
-        const [depRes, docRes] = await Promise.all([
+        const [depRes, docRes, schedRes] = await Promise.all([
           fetch(`/api/${encodeURIComponent(hname)}/forms/department_master`, { cache: "no-store" }),
-          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" })
+          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" }),
+          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_schedule`, { cache: "no-store" })
         ]);
         const depData = await depRes.json();
         const docData = await docRes.json();
+        const schedData = await schedRes.json().catch(() => ({ rows: [] }));
 
         const deps = (depData.rows || []).map((r: any) => String(r.department_type || r.departmentType || r.department_name || r.name || r.code || "")).filter(Boolean);
         setDepartments(Array.from(new Set(deps)) as string[]);
 
-        const docs = (docData.rows || []).map((r: any) => ({
-          name: String(r.doctor_consultant_name || r.doctorConsultantName || r.consultant_doctor_name || r.name || ""),
-          department: String(r.clinic || r.department || r.department_type || r.departmentType || "")
-        })).filter((r: any) => r.name);
+        const todayStr = new Date().toISOString().split("T")[0];
+        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+
+        const readDays = (value: any) => {
+          if (Array.isArray(value)) return value.map(String).filter(Boolean);
+          if (typeof value === "string" && value.trim()) {
+            try {
+              const parsed = JSON.parse(value);
+              if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+            } catch {
+              return value.replace(/[\[\]"]/g, "").split(",").map((item: string) => item.trim()).filter(Boolean);
+            }
+          }
+          return [];
+        };
+
+        const schedules = (schedData.rows || []).map((r: any) => ({
+          doctorName: String(r.consultant_doctor_name || r.consultantDoctorName || ""),
+          fromDate: String(r.appointment_from_date || r.appointmentFromDate || "").split("T")[0],
+          toDate: String(r.appointment_to_date || r.appointmentToDate || "").split("T")[0],
+          days: readDays(r.days_available ?? r.daysAvailable)
+        }));
+
+        const isDoctorAvailable = (docName: string) => {
+          const docSchedules = schedules.filter((s: any) => s.doctorName.trim().toLowerCase() === docName.trim().toLowerCase());
+          if (docSchedules.length === 0) return false;
+          
+          return docSchedules.some((s: any) => {
+            if (s.fromDate && s.fromDate !== "undefined" && todayStr < s.fromDate) return false;
+            if (s.toDate && s.toDate !== "undefined" && todayStr > s.toDate) return false;
+            if (s.days.length > 0 && !s.days.includes(dayName)) return false;
+            return true;
+          });
+        };
+
+        const docs = (docData.rows || []).map((r: any) => {
+          const name = String(r.doctor_consultant_name || r.doctorConsultantName || r.consultant_doctor_name || r.name || "");
+          return {
+            name,
+            department: String(r.clinic || r.department || r.department_type || r.departmentType || ""),
+            isAvailableToday: isDoctorAvailable(name)
+          };
+        }).filter((r: any) => r.name);
+        
         setDoctorsList(docs);
       } catch (err) {
         console.error(err);
@@ -786,18 +828,70 @@ export default function CheckInPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Doctor <span className="text-red-500">*</span></label>
-                    <select
-                      required
-                      value={walkInDoctor}
-                      onChange={(e) => setWalkInDoctor(e.target.value)}
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm"
-                    >
-                      <option value="">Select Doctor</option>
-                      {doctorsList
-                        .filter(d => !walkInDept || d.department === walkInDept)
-                        .map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                    </select>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Select Doctor <span className="text-red-500">*</span></label>
+                    {walkInDept ? (
+                      <div className="overflow-x-auto rounded-xl border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left">Doctor Name</th>
+                              <th className="px-4 py-3 text-center">Total Appointments</th>
+                              <th className="px-4 py-3 text-center">Checked-in</th>
+                              <th className="px-4 py-3 text-center">Walked-out</th>
+                              <th className="px-4 py-3 text-center">Remaining</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 bg-white">
+                            {doctorsList
+                              .filter(d => d.department === walkInDept && d.isAvailableToday)
+                              .map(d => {
+                                const docRows = rows.filter(r => text(r, ["doctor"]) === d.name);
+                                const totalAppts = docRows.length;
+                                const checkedIn = docRows.filter(r => !!r.appointment_check_in_time).length;
+                                const walkedOut = docRows.filter(r => {
+                                  const status = text(r, ["appointment_status", "status", "vitals_status"]).toLowerCase();
+                                  return status === "walked out" || status === "walkedout" || status === "completed";
+                                }).length;
+                                const remaining = checkedIn - walkedOut;
+
+                                return (
+                                  <tr 
+                                    key={d.name} 
+                                    onClick={() => setWalkInDoctor(d.name)}
+                                    className={`cursor-pointer hover:bg-brand-50 transition ${walkInDoctor === d.name ? 'bg-brand-50 border-l-2 border-l-brand-500' : ''}`}
+                                  >
+                                    <td className="px-4 py-3 font-medium text-gray-800">
+                                      <div className="flex items-center gap-2">
+                                        <input 
+                                          type="radio" 
+                                          name="walkInDoctor" 
+                                          checked={walkInDoctor === d.name} 
+                                          onChange={() => setWalkInDoctor(d.name)}
+                                          className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-gray-300"
+                                        />
+                                        {d.name}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center text-gray-600">{totalAppts}</td>
+                                    <td className="px-4 py-3 text-center text-gray-600">{checkedIn}</td>
+                                    <td className="px-4 py-3 text-center text-gray-600">{walkedOut}</td>
+                                    <td className="px-4 py-3 text-center text-gray-600 font-semibold">{remaining}</td>
+                                  </tr>
+                                );
+                              })}
+                            {doctorsList.filter(d => d.department === walkInDept && d.isAvailableToday).length === 0 && (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">No doctors available for this department today.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500 py-2 border border-dashed border-gray-200 rounded-lg text-center bg-gray-50">
+                        Please select a department first to view available doctors.
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
