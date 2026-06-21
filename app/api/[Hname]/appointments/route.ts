@@ -949,7 +949,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ Hnam
     const existingSlot = await pool.query(
       `
         SELECT id FROM ${quoteIdentifier(TABLE_NAME)}
-        WHERE appointment_date = $1 AND department = $2 AND doctor = $3 AND appointment_time = $4 AND id <> $5
+        WHERE appointment_date = $1 AND department = $2 AND doctor = $3 AND appointment_time = $4::time AND id <> $5
           AND status IN ('Scheduled', 'Rescheduled')
         LIMIT 1
       `,
@@ -991,6 +991,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ Hnam
     );
     return NextResponse.json({ row: updated.rows[0] });
   } catch (error) {
+    if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
+      return NextResponse.json({ error: "This appointment time is already booked." }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : "Failed to reschedule appointment.";
     return NextResponse.json({ error: message }, { status: 400 });
   }

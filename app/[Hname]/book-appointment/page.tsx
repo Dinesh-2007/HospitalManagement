@@ -607,6 +607,71 @@ export default function BookAppointmentPage() {
     router.push(`/${encodeURIComponent(hname)}/book-appointment/calendar?${query.toString()}`);
   }
 
+  const [activeAppointments, setActiveAppointments] = useState<any[]>([]);
+  const [selectedPreviewAppointment, setSelectedPreviewAppointment] = useState<any | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showRescheduleConfirm, setShowRescheduleConfirm] = useState(false);
+
+  async function loadActiveAppointments() {
+    if (!hname || !authenticatedPatient) return;
+    try {
+      const patientId = authenticatedPatient.phone || authenticatedPatient.name;
+      const res = await fetch(`/api/${encodeURIComponent(hname)}/appointments?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+      const d = (await res.json().catch(() => ({}))) as { rows?: any[] };
+      const rows = d.rows ?? [];
+      // Filter for scheduled appointments
+      const scheduled = rows.filter((a: any) => a.status === "Scheduled" || !a.status);
+      setActiveAppointments(scheduled);
+    } catch (e) {
+      console.error("Failed to load active appointments", e);
+    }
+  }
+
+  useEffect(() => {
+    void loadActiveAppointments();
+  }, [hname, authenticatedPatient]);
+
+  async function handleCancelAppointment(appt: any) {
+    if (!hname || !appt) return;
+    setIsProcessingAction(true);
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: appt.id,
+          patientId: appt.patient_id || authenticatedPatient?.phone || authenticatedPatient?.name,
+          department: appt.department,
+          doctor: appt.doctor,
+          cancelledByRole: "patient",
+          cancelledByName: authenticatedPatient?.name || "Patient",
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
+
+      setSelectedPreviewAppointment(null);
+      await loadActiveAppointments();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment.");
+    } finally {
+      setIsProcessingAction(false);
+    }
+  }
+
+  function handleRescheduleAppointment(appt: any) {
+    if (!appt) return;
+    setSelectedDepartment(appt.department || "");
+    setSelectedDoctor(appt.doctor || "");
+    setSelectedPreviewAppointment(null);
+    // Scroll to doctor selection / calendar section
+    setTimeout(() => {
+      document.getElementById("doctor-selection-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }
+
   if (!isHydrated) return null;
 
   if (!authenticatedPatient) {
@@ -637,78 +702,114 @@ export default function BookAppointmentPage() {
         <div className="space-y-8 p-4 sm:p-6">
           {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
 
-          {/* Book Appointment For */}
-          <div className="relative inline-block">
-            <button
-              id="book-for-btn"
-              type="button"
-              onClick={() => setShowFamilyDropdown(v => !v)}
-              className="inline-flex items-center gap-2 rounded-lg border border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-100 transition dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-400"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4-4a4 4 0 100-8 4 4 0 000 8zm6 0a3 3 0 100-6 3 3 0 000 6z" />
-              </svg>
-              Book Appointment For
-              {bookingFor ? <span className="ml-1 font-semibold text-brand-700 dark:text-brand-300">{bookingFor.name}</span> : <span className="ml-1 text-gray-500">Myself</span>}
-              <svg className={`h-3.5 w-3.5 transition-transform ${showFamilyDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {showFamilyDropdown && (
-              <div className="absolute left-0 z-50 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
-                {/* Myself option */}
-                <button
-                  type="button"
-                  onClick={() => { setBookingFor(null); setShowFamilyDropdown(false); }}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor === null ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
-                    }`}
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </span>
-                  <div>
-                    <div className="font-medium">{authenticatedPatient.name || authenticatedPatient.phone}</div>
-                    <div className="text-xs text-gray-400">Myself</div>
-                  </div>
-                </button>
-
-                {familyMembers.length > 0 && (
-                  <div className="border-t border-gray-100 dark:border-gray-800">
-                    {familyMembers.map(member => (
-                      <button
-                        key={member.id}
-                        type="button"
-                        onClick={() => { setBookingFor(member); setShowFamilyDropdown(false); }}
-                        className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor?.id === member.id ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
-                          }`}
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800">
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </span>
-                        <div>
-                          <div className="font-medium">{member.name}</div>
-                          {member.relationship && <div className="text-xs text-gray-400">{member.relationship}</div>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {familyMembers.length === 0 && (
-                  <div className="px-4 py-3 text-xs text-gray-400">No linked family members found.</div>
-                )}
+          {/* Active Appointments Block */}
+          {activeAppointments.length > 0 && (
+            <div className="rounded-xl border border-green-300 bg-green-50 p-4 dark:border-green-500/20 dark:bg-green-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h4 className="text-sm font-bold text-green-800 dark:text-green-300 uppercase tracking-wide">Active Appointments</h4>
               </div>
-            )}
+              <div className="flex flex-wrap gap-3">
+                {activeAppointments.map((appt, idx) => (
+                  <button
+                    key={appt.id || idx}
+                    type="button"
+                    onClick={() => setSelectedPreviewAppointment(appt)}
+                    className="flex-1 min-w-[280px] text-left rounded-lg bg-green-100 p-3 border border-green-300 transition hover:border-green-400 hover:bg-green-200/50 dark:bg-gray-800/40 dark:border-green-900/20"
+                  >
+                    <div className="font-semibold text-gray-900 dark:text-white text-xs whitespace-nowrap overflow-hidden text-ellipsis">{appt.doctor || "Doctor unavailable"}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex flex-wrap gap-x-2">
+                      <span>{appt.appointment_date || "Date TBA"}</span>
+                      <span>{appt.appointment_time || ""}</span>
+                    </div>
+                    {appt.department && (
+                      <div className="text-[10px] text-green-700 dark:text-green-400 font-medium mt-1">{appt.department}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="text-sm text-gray-500">
+              Welcome, {withSalutation(authenticatedPatient.name || authenticatedPatient.phone, window.localStorage.getItem("patientGender") ?? "")}
+            </div>
+
+            {/* Book Appointment For */}
+            <div className="relative inline-block">
+              <button
+                id="book-for-btn"
+                type="button"
+                onClick={() => setShowFamilyDropdown(v => !v)}
+                className="inline-flex items-center gap-2 rounded-lg border border-brand-500 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-100 transition dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-400 w-full sm:w-auto"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4-4a4 4 0 100-8 4 4 0 000 8zm6 0a3 3 0 100-6 3 3 0 000 6z" />
+                </svg>
+                Book Appointment For
+                {bookingFor ? <span className="ml-1 font-semibold text-brand-700 dark:text-brand-300">{bookingFor.name}</span> : <span className="ml-1 text-gray-500">Myself</span>}
+                <svg className={`h-3.5 w-3.5 transition-transform ${showFamilyDropdown ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showFamilyDropdown && (
+                <div className="absolute right-0 sm:left-0 z-50 mt-2 w-72 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                  {/* Myself option */}
+                  <button
+                    type="button"
+                    onClick={() => { setBookingFor(null); setShowFamilyDropdown(false); }}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor === null ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
+                      }`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </span>
+                    <div>
+                      <div className="font-medium">{authenticatedPatient.name || authenticatedPatient.phone}</div>
+                      <div className="text-xs text-gray-400">Myself</div>
+                    </div>
+                  </button>
+
+                  {familyMembers.length > 0 && (
+                    <div className="border-t border-gray-100 dark:border-gray-800">
+                      {familyMembers.map(member => (
+                        <button
+                          key={member.id}
+                          type="button"
+                          onClick={() => { setBookingFor(member); setShowFamilyDropdown(false); }}
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${bookingFor?.id === member.id ? "bg-brand-50 text-brand-600 font-semibold dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"
+                            }`}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </span>
+                          <div>
+                            <div className="font-medium">{member.name}</div>
+                            {member.relationship && <div className="text-xs text-gray-400">{member.relationship}</div>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {familyMembers.length === 0 && (
+                    <div className="px-4 py-3 text-xs text-gray-400">No linked family members found.</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="text-sm text-gray-500">Welcome, {withSalutation(authenticatedPatient.name || authenticatedPatient.phone, window.localStorage.getItem("patientGender") ?? "")}</div>
           {!selectedDepartment ? (
-            <div>
+            <div id="doctor-selection-section">
               <div className="mb-4 flex items-center justify-between">
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Select Department</h4>
                 <span className="text-xs text-gray-500">{isLoading ? "Loading..." : `${departments.length} departments`}</span>
@@ -726,7 +827,7 @@ export default function BookAppointmentPage() {
               </div>
             </div>
           ) : (
-            <div className="mb-6 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
+            <div id="doctor-selection-section" className="mb-6 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Department</span>
                 <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
@@ -796,6 +897,144 @@ export default function BookAppointmentPage() {
           ) : null}
         </div>
       </section>
+
+      {/* Appointment Detail Popup */}
+      {selectedPreviewAppointment && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h2 className="mt-1 text-xl font-bold text-gray-900 dark:text-white">Appointment Details</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPreviewAppointment(null);
+                  setShowCancelConfirm(false);
+                  setShowRescheduleConfirm(false);
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Doctor & Department</p>
+                <p className="mt-1 text-base font-semibold text-gray-900 dark:text-white">{selectedPreviewAppointment.doctor}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{selectedPreviewAppointment.department}</p>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Schedule</p>
+                <div className="mt-1 flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="font-medium">{selectedPreviewAppointment.appointment_date}</span>
+                  <span className="mx-1 text-gray-300">|</span>
+                  <span className="font-medium">{selectedPreviewAppointment.appointment_time}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowRescheduleConfirm(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Reschedule
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessingAction}
+                  onClick={() => setShowCancelConfirm(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  {isProcessingAction ? "Processing..." : "Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule Confirmation Modal */}
+      {showRescheduleConfirm && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Reschedule Appointment?</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Are you sure you want to reschedule? You will be redirected to select a new slot for this doctor.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRescheduleConfirm(false);
+                  handleRescheduleAppointment(selectedPreviewAppointment);
+                }}
+                className="w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
+              >
+                Yes, Reschedule
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRescheduleConfirm(false)}
+                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Cancel Appointment?</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Are you sure you want to cancel this appointment? This action cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={isProcessingAction}
+                onClick={async () => {
+                  await handleCancelAppointment(selectedPreviewAppointment);
+                  setShowCancelConfirm(false);
+                }}
+                className="w-full rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {isProcessingAction ? "Cancelling..." : "Yes, Cancel"}
+              </button>
+              <button
+                type="button"
+                disabled={isProcessingAction}
+                onClick={() => setShowCancelConfirm(false)}
+                className="w-full rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
+              >
+                Keep Appointment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isDoctorPopupOpen ? (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
           <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 shadow-xl dark:bg-gray-900 max-h-[80vh] overflow-y-auto">

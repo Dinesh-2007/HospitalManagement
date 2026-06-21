@@ -251,6 +251,13 @@ export default function AppointmentCalendarPage() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<{ type: "book" | "reschedule" | "cancel" | null } | null>(null);
+  const [successData, setSuccessData] = useState<{
+    type: "book" | "reschedule";
+    doctor: string;
+    department: string;
+    date: string;
+    slot: string;
+  } | null>(null);
 
   useEffect(() => {
     async function loadPatient() {
@@ -473,8 +480,15 @@ export default function AppointmentCalendarPage() {
     });
     const data = (await response.json()) as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Failed to save appointment.");
-    setMessage(isReschedule ? "Appointment rescheduled." : "Appointment saved.");
-    setDialogMessage(isReschedule ? "Appointment rescheduled." : "Appointment booked.");
+
+    setSuccessData({
+      type: isReschedule ? "reschedule" : "book",
+      doctor,
+      department,
+      date: toKey(effectiveSelectedDate),
+      slot: formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)),
+    });
+
     setIsRescheduling(false);
     setSelectedSlot("");
     setSelectedHour(null);
@@ -724,21 +738,51 @@ export default function AppointmentCalendarPage() {
                 <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50">
                   <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm font-semibold text-brand-700 shadow-sm">
                     <span>Selected Slot Details</span>
-                    <span className="rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white">{selectedSlot ? "Selected" : "None"}</span>
                   </div>
-                  <div className="text-sm text-gray-700">
-                    <span className="font-medium">Slot:</span> {selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}
-                  </div>
-                  {patientAppointment ? (
-                    <div className="mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
-                      <div className="font-medium text-gray-800">Current booking</div>
-                      <div>Time: {patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
-                      <div>Reschedules: {patientAppointment.reschedule_count ?? 0}/3</div>
+
+                  <div className="space-y-3 rounded-xl bg-white/50 p-4 border border-brand-100">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Date</p>
+                        <p className="mt-1 font-medium text-gray-800">{effectiveSelectedDate ? formatDay(effectiveSelectedDate) : "Not selected"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Slot Time</p>
+                        <p className="mt-1 font-medium text-gray-800">{selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}</p>
+                      </div>
                     </div>
-                  ) : null}
+
+                    {patientAppointment ? (
+                      <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                        <div className="font-bold text-orange-900 flex items-center gap-2">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Current booking
+                        </div>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-orange-600 text-xs uppercase font-semibold">Date:</span>
+                            <div className="font-medium">{patientAppointment.appointment_date ? formatDay(new Date(patientAppointment.appointment_date)) : "-"}</div>
+                          </div>
+                          <div>
+                            <span className="text-orange-600 text-xs uppercase font-semibold">Time:</span>
+                            <div className="font-medium">{patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 text-xs">Reschedules: <span className="font-bold">{patientAppointment.reschedule_count ?? 0}/3</span></div>
+                      </div>
+                    ) : null}
+                  </div>
+
                   {!patientAppointment ? (
                     <div className="mt-4 flex gap-3">
-                      <button type="button" onClick={showBookConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                      <button
+                        type="button"
+                        disabled={!selectedSlot}
+                        onClick={showBookConfirmation}
+                        className="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
                         Book Appointment
                       </button>
                       <button type="button" onClick={() => { setSelectedSlot(""); setSelectedHour(null); setMessage(""); setErrorMessage(""); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
@@ -747,7 +791,12 @@ export default function AppointmentCalendarPage() {
                     </div>
                   ) : isRescheduling ? (
                     <div className="mt-4 flex gap-3">
-                      <button type="button" onClick={showRescheduleConfirmation} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                      <button
+                        type="button"
+                        disabled={!selectedSlot}
+                        onClick={showRescheduleConfirmation}
+                        className="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
                         Confirm Reschedule
                       </button>
                       <button type="button" onClick={() => { setIsRescheduling(false); setSelectedSlot(""); setSelectedHour(null); }} className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
@@ -756,7 +805,7 @@ export default function AppointmentCalendarPage() {
                     </div>
                   ) : (
                     <div className="mt-4 flex gap-3">
-                      <button type="button" onClick={handleRescheduleClick} className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
+                      <button type="button" onClick={handleRescheduleClick} className="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition">
                         Reschedule Appointment
                       </button>
                       <button type="button" onClick={showCancelConfirmation} className="rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition">
@@ -774,39 +823,89 @@ export default function AppointmentCalendarPage() {
         </section>
 
       </div>
-      {dialogMessage ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Status</h2>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{dialogMessage}</p>
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setDialogMessage("")}
-                className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white"
-              >
-                OK
-              </button>
+      {/* Success Modal */}
+      {successData && (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900/30 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 animate-bounce">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {successData.type === "reschedule" ? "Rescheduled!" : "Booked!"}
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Your appointment has been successfully {successData.type === "reschedule" ? "rescheduled" : "booked"}.
+            </p>
+
+            <div className="mt-6 space-y-3 rounded-2xl bg-gray-50 p-4 text-left dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Doctor</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{successData.doctor}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Dept</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{successData.department}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Date</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{formatDay(new Date(successData.date))}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Slot</span>
+                <span className="font-semibold text-brand-600 dark:text-brand-400">{successData.slot}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSuccessData(null)}
+              className="mt-8 w-full rounded-xl bg-brand-500 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition"
+            >
+              Done
+            </button>
           </div>
         </div>
-      ) : null}
-      {confirmDialog ? (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Confirmation</h2>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              {confirmDialog.type === "book" && "ARE YOU CONFIRM TO BOOK"}
-              {confirmDialog.type === "reschedule" && "ARE YOU CONFIRM TO RESCHEDULE"}
-              {confirmDialog.type === "cancel" && "ARE YOU CONFIRM TO CANCEL"}
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              {confirmDialog.type === "cancel" ? "Cancel Appointment?" : "Confirm Selection"}
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {confirmDialog.type === "cancel"
+                ? "Are you sure you want to cancel this appointment? This action cannot be undone."
+                : `Are you sure you want to ${confirmDialog.type} this appointment?`}
             </p>
-            <div className="mt-5 flex gap-3 justify-end">
+
+            {confirmDialog.type !== "cancel" && (
+              <div className="mt-6 space-y-3 rounded-2xl bg-brand-50 p-4 text-left dark:bg-brand-500/10 border border-brand-100 dark:border-brand-900/20">
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-600 dark:text-brand-400 font-medium font-semibold uppercase tracking-wider text-[10px]">Doctor</span>
+                  <span className="font-bold text-gray-900 dark:text-white">{doctor}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-600 dark:text-brand-400 font-medium font-semibold uppercase tracking-wider text-[10px]">Date</span>
+                  <span className="font-bold text-gray-900 dark:text-white">{effectiveSelectedDate ? formatDay(effectiveSelectedDate) : "-"}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-brand-600 dark:text-brand-400 font-medium font-semibold uppercase tracking-wider text-[10px]">Slot</span>
+                  <span className="font-bold text-brand-700 dark:text-brand-300">{selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "-"}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 flex gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmDialog(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+                className="flex-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
               >
-                No
+                No, Back
               </button>
               <button
                 type="button"
@@ -817,15 +916,17 @@ export default function AppointmentCalendarPage() {
                       ? handleConfirmReschedule
                       : handleConfirmCancel
                 }
-                className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white ${confirmDialog.type === "cancel" ? "bg-red-500" : "bg-brand-500"
+                className={`flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition ${confirmDialog.type === "cancel"
+                  ? "bg-red-500 shadow-red-500/30 hover:bg-red-600"
+                  : "bg-brand-500 shadow-brand-500/30 hover:bg-brand-600"
                   }`}
               >
-                Yes
+                Yes, Confirm
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </PageLayout>
   );
 }
