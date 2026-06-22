@@ -408,38 +408,25 @@ export default function PatientVitalsPage() {
                 </div>
 
                 <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  {/* Read-only Patient ID display */}
-                  {form.patientId ? (
-                    <div className="md:col-span-2 xl:col-span-3 flex items-center gap-3 rounded-lg border border-brand-100 bg-brand-50 px-4 py-2">
-                      <span className="text-xs font-medium text-brand-600">Patient ID</span>
-                      <span className="font-mono text-sm font-semibold text-brand-800">{form.patientId}</span>
-                      {selectedRow?.appointment_id ? (
-                        <>
-                          <span className="text-brand-300">|</span>
-                          <span className="text-xs font-medium text-gray-500">Appt. No.</span>
-                          <span className="font-mono text-sm text-gray-700">{selectedRow.appointment_number ? `APT-${String(selectedRow.appointment_number).padStart(4, "0")}` : "-"}</span>
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
                   {[
-                    ["patientName", "Patient Name", "text"],
-                    ["mobile", "Mobile Number", "text"],
-                    ["dob", "DOB", "date"],
-                    ["age", "Age", "text"],
-                    ["gender", "Gender", "select"],
-                    ["heightCm", "Height (cm)", "text"],
-                    ["weightKg", "Weight (kg)", "text"],
-                    ["temperature", "Temperature (°C/F)", "text"],
-                    ["pulseRate", "Pulse Rate (BPM)", "text"],
-                    ["respiratoryRate", "Respiratory Rate", "text"],
-                    ["systolicBp", "Systolic BP", "text"],
-                    ["diastolicBp", "Diastolic BP", "text"],
-                    ["spo2", "SpO2 (%)", "text"],
-                    ["bloodSugar", "Blood Sugar (Optional)", "text"],
-                    ["remarks", "Remarks", "textarea"],
-                    ["status", "Status", "select"],
-                  ].map(([key, label, type]) => (
+                    ["patientId", "Patient ID", "text", "Leave blank to auto-generate"],
+                    ["patientName", "Patient Name", "text", ""],
+                    ["mobile", "Mobile Number", "text", ""],
+                    ["dob", "DOB", "date", ""],
+                    ["age", "Age", "text", ""],
+                    ["gender", "Gender", "select", ""],
+                    ["heightCm", "Height (cm)", "text", ""],
+                    ["weightKg", "Weight (kg)", "text", ""],
+                    ["temperature", "Temperature (°C/F)", "text", ""],
+                    ["pulseRate", "Pulse Rate (BPM)", "text", ""],
+                    ["respiratoryRate", "Respiratory Rate", "text", ""],
+                    ["systolicBp", "Systolic BP", "text", ""],
+                    ["diastolicBp", "Diastolic BP", "text", ""],
+                    ["spo2", "SpO2 (%)", "text", ""],
+                    ["bloodSugar", "Blood Sugar (Optional)", "text", ""],
+                    ["remarks", "Remarks", "textarea", ""],
+                    ["status", "Status", "select", ""],
+                  ].map(([key, label, type, placeholder]) => (
                     <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
                       {type === "select" ? (
@@ -465,6 +452,7 @@ export default function PatientVitalsPage() {
                           value={form[key as keyof FormState]}
                           onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
                           rows={4}
+                          placeholder={placeholder}
                           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800"
                         />
                       ) : (
@@ -472,6 +460,7 @@ export default function PatientVitalsPage() {
                           type={type}
                           value={form[key as keyof FormState]}
                           onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                          placeholder={placeholder}
                           className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
                         />
                       )}

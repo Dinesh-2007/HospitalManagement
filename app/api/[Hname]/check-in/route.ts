@@ -79,7 +79,7 @@ export async function POST(
     const pool = await getTenantDB(decodedHname);
 
     const body = await request.json();
-    const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId } = body;
+    const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId, appointmentDate, appointmentTime } = body;
 
     // Ensure the appointments table has check_in_time column
     await pool.query(`
@@ -107,6 +107,11 @@ export async function POST(
       let resolvedPatientId = bodyPatientId as string | undefined;
       let existingIdByPhone: number | null = null;
 
+      if (resolvedPatientId && /^\d+$/.test(resolvedPatientId)) {
+        existingIdByPhone = Number(resolvedPatientId);
+        resolvedPatientId = "";
+      }
+
       if (patientPhone) {
         // Check if patient exists by phone
         const existingByPhone = await pool.query(
@@ -115,7 +120,10 @@ export async function POST(
         );
         if ((existingByPhone.rowCount ?? 0) > 0) {
           existingIdByPhone = existingByPhone.rows[0].id;
-          resolvedPatientId = String(existingByPhone.rows[0].patient_id ?? resolvedPatientId ?? "");
+          const dbPatientId = existingByPhone.rows[0].patient_id;
+          if (dbPatientId && !/^\d+$/.test(dbPatientId)) {
+            resolvedPatientId = String(dbPatientId);
+          }
         }
       }
 
@@ -137,9 +145,9 @@ export async function POST(
         }
       }
 
-      const today = new Date().toISOString().split("T")[0];
-      const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
-      const currentTime = new Date().toTimeString().split(" ")[0];
+      const today = appointmentDate || new Date().toISOString().split("T")[0];
+      const dayName = new Date(today).toLocaleDateString("en-US", { weekday: "long" });
+      const currentTime = appointmentTime || new Date().toTimeString().split(" ")[0];
       
       const nextAppointmentNumber = await generateAppointmentNumber(pool, today);
 
@@ -193,7 +201,7 @@ export async function POST(
       );
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = appointmentDate || new Date().toISOString().split("T")[0];
 
     type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null };
     // If we have the direct appointment ID, use it

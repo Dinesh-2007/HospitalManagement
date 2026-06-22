@@ -208,6 +208,8 @@ export default function CheckInPage() {
           doctor: walkInDoctor,
           isWalkIn: true,
           patientId: patientId,
+          appointmentDate: date,
+          appointmentTime: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
         }),
       });
       const checkInData = await checkInRes.json();
@@ -389,6 +391,7 @@ export default function CheckInPage() {
           department,
           doctor,
           appointmentId: id,
+          appointmentDate: text(row, ["appointment_date"]) || date,
         }),
       });
 

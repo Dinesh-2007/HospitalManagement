@@ -265,7 +265,7 @@ export async function GET(
                     (a.patient_id IS NULL OR a.patient_id = '')
                     AND a.patient_phone IS NOT NULL
                     AND a.patient_phone <> ''
-                    AND regexp_replace(COALESCE(p.mobile, ''), '\D', '', 'g') = regexp_replace(a.patient_phone, '\D', '', 'g')
+                    AND regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
                   )
                 )
               LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
@@ -391,7 +391,7 @@ export async function POST(
     await ensureTables(pool);
 
     const body = (await request.json()) as VitalsBody;
-    const patientId = normalizeText(body.patientId);
+    let patientId = normalizeText(body.patientId);
     const patientName = normalizeText(body.patientName);
     const dob = normalizeDate(body.dob);
     const age = normalizeNumber(body.age);
@@ -408,8 +408,26 @@ export async function POST(
     const remarks = normalizeText(body.remarks);
     const status = normalizeText(body.status) || "Active";
 
-    if (!patientId || !patientName) {
-      return NextResponse.json({ error: "Patient id and name are required." }, { status: 400 });
+    if (!patientName) {
+      return NextResponse.json({ error: "Patient name is required." }, { status: 400 });
+    }
+
+    if (!patientId || /^\d+$/.test(patientId)) {
+      const result = await pool.query(`SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE patient_id LIKE 'PID-%'`);
+      const count = Number(result.rows[0]?.cnt ?? 0);
+      const seq = String(count + 1).padStart(4, "0");
+      const generatedId = `PID-${seq}`;
+
+      if (patientId && /^\d+$/.test(patientId)) {
+        await pool.query(`UPDATE ${quoteIdentifier(PATIENTS_TABLE)} SET patient_id = $1 WHERE id = $2`, [generatedId, patientId]);
+        await pool.query(`UPDATE ${quoteIdentifier(APPOINTMENTS_TABLE)} SET patient_id = $1 WHERE patient_id = $2`, [generatedId, patientId]);
+      } else {
+        await pool.query(
+          `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name) VALUES ($1, $2) ON CONFLICT (patient_id) DO NOTHING`,
+          [generatedId, patientName]
+        );
+      }
+      patientId = generatedId;
     }
 
     const bmi = calculateBmi(heightCm, weightKg);
