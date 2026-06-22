@@ -79,39 +79,53 @@ export async function GET(
     const doctorId = String(searchParams.get("doctorId") ?? "").trim();
     const doctorCode = String(searchParams.get("doctorCode") ?? "").trim();
     const doctorName = String(searchParams.get("doctorName") ?? "").trim();
-    const rows = username
-      ? await pool.query(
+    let rows = { rows: [] as any[] };
+
+    if (username) {
+      rows = await pool.query(
         `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE username = $1 LIMIT 1`,
         [username],
-      )
-      : doctorId
-        ? await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_id = $1 LIMIT 1`,
-          [doctorId],
-        )
-        : doctorCode
-          ? await pool.query(
-            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_code = $1 LIMIT 1`,
-            [doctorCode],
-          )
-          : doctorName
-            ? await pool.query(
-              `
-              SELECT *
-              FROM ${quoteIdentifier(TABLE_NAME)}
-              WHERE lower(trim(first_name)) = lower(trim($1))
-                 OR lower(trim(first_name)) LIKE lower(trim($1)) || '%'
-                 OR lower(concat_ws(' ', first_name, last_name)) = lower(trim($1))
-                 OR lower(concat_ws(' ', first_name, last_name)) LIKE lower(trim($1)) || '%'
-                 OR lower(trim(last_name)) = lower(trim($1))
-                 OR lower(doctor_id) = lower(trim($1))
-                 OR lower(doctor_code) = lower(trim($1))
-              ORDER BY id DESC
-              LIMIT 1
-            `,
-              [doctorName],
-            )
-            : await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
+      );
+    }
+
+    if (rows.rows.length === 0 && doctorId) {
+      rows = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_id = $1 LIMIT 1`,
+        [doctorId],
+      );
+    }
+
+    if (rows.rows.length === 0 && doctorCode) {
+      rows = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE doctor_code = $1 LIMIT 1`,
+        [doctorCode],
+      );
+    }
+
+    if (rows.rows.length === 0 && doctorName) {
+      rows = await pool.query(
+        `
+        SELECT *
+        FROM ${quoteIdentifier(TABLE_NAME)}
+        WHERE lower(trim(first_name)) = lower(trim($1))
+           OR lower(trim(first_name)) LIKE lower(trim($1)) || '%'
+           OR lower(concat_ws(' ', first_name, last_name)) = lower(trim($1))
+           OR lower(concat_ws(' ', first_name, last_name)) LIKE lower(trim($1)) || '%'
+           OR lower(trim(last_name)) = lower(trim($1))
+           OR lower(trim(username)) = lower(trim($1))
+           OR lower(trim(username)) LIKE lower(trim($1)) || '%'
+           OR lower(doctor_id) = lower(trim($1))
+           OR lower(doctor_code) = lower(trim($1))
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+        [doctorName],
+      );
+    }
+
+    if (rows.rows.length === 0 && !username && !doctorId && !doctorCode && !doctorName) {
+      rows = await pool.query(`SELECT * FROM ${quoteIdentifier(TABLE_NAME)} ORDER BY id DESC LIMIT 1`);
+    }
 
     let profile = rows.rows[0] ?? null;
 

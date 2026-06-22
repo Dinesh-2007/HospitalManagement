@@ -283,8 +283,12 @@ function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
   const workExperiences: WorkExperience[] = [];
   const certifications: Certification[] = [];
 
-  if (Array.isArray(row.workExperiences)) {
-    for (const item of row.workExperiences) {
+  let rawWork = row.workExperiences ?? row.work_experiences;
+  if (typeof rawWork === "string" && rawWork.trim()) {
+    try { rawWork = JSON.parse(rawWork); } catch {}
+  }
+  if (Array.isArray(rawWork)) {
+    for (const item of rawWork) {
       if (item && typeof item === "object") {
         workExperiences.push({
           hospitalName: readText(item as MasterRow, ["hospitalName", "hospital_name", "institution"]),
@@ -298,11 +302,15 @@ function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
     }
   }
 
-  if (Array.isArray(row.certifications)) {
-    for (const item of row.certifications) {
+  let rawCerts = row.certifications;
+  if (typeof rawCerts === "string" && rawCerts.trim()) {
+    try { rawCerts = JSON.parse(rawCerts); } catch {}
+  }
+  if (Array.isArray(rawCerts)) {
+    for (const item of rawCerts) {
       if (item && typeof item === "object") {
         certifications.push({
-          name: readText(item as MasterRow, ["name", "title"]),
+          name: readText(item as MasterRow, ["name", "title", "certificationName", "certification_name"]),
           issuingOrganization: readText(item as MasterRow, ["issuingOrganization", "issuing_organization", "issuer"]),
           issueDate: readText(item as MasterRow, ["issueDate", "issue_date", "issuedOn"]),
           expiryDate: readText(item as MasterRow, ["expiryDate", "expiry_date", "expiresOn"]),
@@ -1037,7 +1045,7 @@ export default function BookAppointmentPage() {
 
       {isDoctorPopupOpen ? (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 p-4">
-          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-4 shadow-xl dark:bg-gray-900 max-h-[80vh] overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900 max-h-[90vh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setIsDoctorPopupOpen(false)}
@@ -1134,15 +1142,33 @@ export default function BookAppointmentPage() {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">Work Experience</h4>
                     {doctorDetails?.workExperiences.length ? (
-                      <div className="mt-3 space-y-3">
-                        {doctorDetails.workExperiences.map((experience, index) => (
-                          <div key={`${experience.hospitalName}-${index}`} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/50">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{experience.designation || "-"}</p>
-                            <p className="mt-1 text-sm text-gray-500">{experience.hospitalName || "-"} • {experience.location || "-"}</p>
-                            <p className="mt-2 text-sm text-gray-500">{experience.department || "-"}</p>
-                            <p className="mt-1 text-sm text-gray-500">{experience.fromDate || "-"} — {experience.toDate || "Present"}</p>
-                          </div>
-                        ))}
+                      <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm text-gray-500 dark:text-gray-400">
+                            <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
+                              <tr>
+                                <th scope="col" className="px-4 py-3 font-medium">Hospital Name</th>
+                                <th scope="col" className="px-4 py-3 font-medium">Designation</th>
+                                <th scope="col" className="px-4 py-3 font-medium">Department</th>
+                                <th scope="col" className="px-4 py-3 font-medium">Location</th>
+                                <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">From Date</th>
+                                <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">To Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                              {doctorDetails.workExperiences.map((experience, index) => (
+                                <tr key={`${experience.hospitalName}-${index}`} className="bg-white hover:bg-gray-50 dark:bg-gray-900/50 dark:hover:bg-gray-800/60">
+                                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white/90">{experience.hospitalName || "-"}</td>
+                                  <td className="px-4 py-3">{experience.designation || "-"}</td>
+                                  <td className="px-4 py-3">{experience.department || "-"}</td>
+                                  <td className="px-4 py-3">{experience.location || "-"}</td>
+                                  <td className="whitespace-nowrap px-4 py-3">{experience.fromDate || "-"}</td>
+                                  <td className="whitespace-nowrap px-4 py-3">{experience.toDate || "Present"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     ) : (
                       <p className="mt-2 text-sm text-gray-500">No work experience details available.</p>
@@ -1151,15 +1177,29 @@ export default function BookAppointmentPage() {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">Certifications</h4>
                     {doctorDetails?.certifications.length ? (
-                      <div className="mt-3 space-y-3">
-                        {doctorDetails.certifications.map((certification, index) => (
-                          <div key={`${certification.name}-${index}`} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900/50">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{certification.name || "-"}</p>
-                            <p className="mt-1 text-sm text-gray-500">{certification.issuingOrganization || "-"}</p>
-                            <p className="mt-1 text-sm text-gray-500">Issued: {certification.issueDate || "-"}</p>
-                            <p className="mt-1 text-sm text-gray-500">Expires: {certification.expiryDate || "-"}</p>
-                          </div>
-                        ))}
+                      <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm text-gray-500 dark:text-gray-400">
+                            <thead className="bg-gray-50 text-xs uppercase text-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
+                              <tr>
+                                <th scope="col" className="px-4 py-3 font-medium">Certification Name</th>
+                                <th scope="col" className="px-4 py-3 font-medium">Issuing Organization</th>
+                                <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">Issue Date</th>
+                                <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">Expiry Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                              {doctorDetails.certifications.map((certification, index) => (
+                                <tr key={`${certification.name}-${index}`} className="bg-white hover:bg-gray-50 dark:bg-gray-900/50 dark:hover:bg-gray-800/60">
+                                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white/90">{certification.name || "-"}</td>
+                                  <td className="px-4 py-3">{certification.issuingOrganization || "-"}</td>
+                                  <td className="whitespace-nowrap px-4 py-3">{certification.issueDate || "-"}</td>
+                                  <td className="whitespace-nowrap px-4 py-3">{certification.expiryDate || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     ) : (
                       <p className="mt-2 text-sm text-gray-500">No certifications available.</p>
