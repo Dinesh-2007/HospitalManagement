@@ -185,8 +185,27 @@ export async function GET(
       return NextResponse.json({ rows: rowResult.rows });
     }
 
+    // Advanced filtering by other columns
+    const filterClauses: string[] = [];
+    const filterValues: any[] = [];
+    let paramIndex = 1;
+
+    searchParams.forEach((value, key) => {
+      // Skip 'id' as it's handled above, and 'Hname' which is part of the route
+      if (key === "id" || key === "Hname") return;
+
+      filterClauses.push(`${quoteIdentifier(columnNameFromFieldId(key))} = $${paramIndex}`);
+      filterValues.push(value);
+      paramIndex++;
+    });
+
+    const whereClause = filterClauses.length > 0
+      ? `WHERE ${filterClauses.join(" AND ")}`
+      : "";
+
     const rowsResult = await pool.query(
-      `SELECT * FROM ${quoteIdentifier(tableName)} ORDER BY id DESC LIMIT 50`,
+      `SELECT * FROM ${quoteIdentifier(tableName)} ${whereClause} ORDER BY id DESC LIMIT 100`,
+      filterValues
     );
 
     return NextResponse.json({ rows: rowsResult.rows });

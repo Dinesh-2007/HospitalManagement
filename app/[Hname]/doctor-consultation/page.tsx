@@ -237,11 +237,11 @@ export default function DoctorConsultationPage() {
   useEffect(() => {
     async function loadHistory() {
       if (!selectedPatientRow) { setHistoryRows([]); return; }
-      
+
       const rawPid = text(selectedPatientRow, ["appointment_patient_id", "registration_id", "registration_patient_id", "patient_id"]);
       const pName = patientName(selectedPatientRow);
       const patientId = rawPid && rawPid.toLowerCase() !== pName.toLowerCase() ? rawPid : "";
-      
+
       if (!patientId) { setHistoryRows([]); return; }
       setIsHistoryLoading(true);
       try {
@@ -262,7 +262,7 @@ export default function DoctorConsultationPage() {
   // Upcoming = only patients who have completed vitals, sorted by time
   const upcomingRows = useMemo(() => {
     return [...vitalsRows]
-      .filter(isVitalsCompleted)
+      .filter((row) => isVitalsCompleted(row) && text(row, ["appointment_status"]) !== "Completed")
       .sort((a, b) => {
         const timeA = text(a, ["appointment_time"]);
         const timeB = text(b, ["appointment_time"]);
@@ -393,7 +393,7 @@ export default function DoctorConsultationPage() {
     setErrorMessage("");
     setSuccessMessage("");
     try {
-      const finalSended = isSended ? "Yes" : formValues.sended;
+      const finalSended = (isSended || status === "Completed") ? "Yes" : formValues.sended;
       const payload = {
         id: editingRecordId,
         cardTitle: "Doctor Consultation Entry",
@@ -428,6 +428,23 @@ export default function DoctorConsultationPage() {
       setPatientType("OP");
       setEditingRecordId(null);
       void loadData();
+
+      // If completing, also mark appointment as completed
+      if (status === "Completed" && formValues.tokenNumber) {
+        try {
+          await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: formValues.tokenNumber,
+              status: "Completed",
+            }),
+          });
+        } catch (e) {
+          console.error("Failed to mark appointment as completed:", e);
+        }
+      }
+
       setQueueTab(status === "Draft" ? "Draft" : "Completed");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save.");

@@ -10,6 +10,7 @@ type ConsultationRecord = {
   patient_details?: string | null;
   prescription_lines?: string | null;
   prescription_data?: string | null;
+  status?: string | null;
 };
 
 type DispensingBillRecord = {
@@ -458,21 +459,23 @@ export default function PharmacyDispensingPage() {
               <button
                 type="button"
                 onClick={() => setActiveView("bills")}
-                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${
-                  activeView === "bills"
-                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                }`}
+                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "bills"
+                  ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                  }`}
               >
-                View Bills
+                View Records
               </button>
               {activeView !== "form" ? (
                 <button
                   type="button"
                   onClick={() => setActiveView("records")}
-                  className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "records"
+                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                    }`}
                 >
-                  Add Dispensing
+                  Dispense
                 </button>
               ) : null}
             </div>
@@ -602,11 +605,10 @@ export default function PharmacyDispensingPage() {
                                   updateMedicineRow(row.id, "medicineName", event.target.value)
                                 }
                                 placeholder={`Medicine ${index + 1}`}
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
-                                  row.medicineName.trim().length > 0
-                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
-                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
-                                }`}
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${row.medicineName.trim().length > 0
+                                  ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                  : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                  }`}
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -618,11 +620,10 @@ export default function PharmacyDispensingPage() {
                                 onChange={(event) =>
                                   updateMedicineRow(row.id, "prescribedQty", event.target.value)
                                 }
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
-                                  row.prescribedQty.trim().length > 0
-                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
-                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
-                                }`}
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${row.prescribedQty.trim().length > 0
+                                  ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                  : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                  }`}
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -786,24 +787,25 @@ export default function PharmacyDispensingPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                        {consultationRecords.map((record) => (
-                          <tr
-                            key={record.id}
-                            onClick={() => openDispensingForm(record)}
-                            className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${
-                              selectedConsultationId === record.id
+                        {consultationRecords
+                          .filter(record => !dispensingBills.some(b => b.token_number === record.token_number))
+                          .map((record) => (
+                            <tr
+                              key={record.id}
+                              onClick={() => openDispensingForm(record)}
+                              className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${selectedConsultationId === record.id
                                 ? "bg-brand-50 dark:bg-brand-500/10"
                                 : ""
-                            }`}
-                          >
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {record.token_number || "-"}
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {record.patient_details || "-"}
-                            </td>
-                          </tr>
-                        ))}
+                                }`}
+                            >
+                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                                {record.token_number || "-"}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                                {record.patient_details || "-"}
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
