@@ -630,7 +630,18 @@ export default function BookAppointmentPage() {
       const rows = d.rows ?? [];
       // Filter for scheduled appointments
       const scheduled = rows.filter((a: any) => a.status === "Scheduled" || !a.status);
-      setActiveAppointments(scheduled);
+      
+      const now = new Date();
+      const activeAppts = scheduled.filter((a: any) => {
+        if (a.appointment_date && a.appointment_time) {
+          const apptDate = new Date(`${a.appointment_date}T${a.appointment_time}`);
+          if (!isNaN(apptDate.getTime()) && apptDate < now) {
+            return false; // exclude expired
+          }
+        }
+        return true;
+      });
+      setActiveAppointments(activeAppts);
     } catch (e) {
       console.error("Failed to load active appointments", e);
     }
@@ -725,15 +736,16 @@ export default function BookAppointmentPage() {
                     key={appt.id || idx}
                     type="button"
                     onClick={() => setSelectedPreviewAppointment(appt)}
-                    className="flex-1 min-w-[280px] text-left rounded-lg bg-green-100 p-3 border border-green-300 transition hover:border-green-400 hover:bg-green-200/50 dark:bg-gray-800/40 dark:border-green-900/20"
+                    className={`flex-1 min-w-[280px] text-left rounded-lg p-3 border transition ${appt.isExpired ? "bg-gray-100 border-gray-300 dark:bg-gray-800 dark:border-gray-700" : "bg-green-100 border-green-300 hover:border-green-400 hover:bg-green-200/50 dark:bg-gray-800/40 dark:border-green-900/20"}`}
                   >
                     <div className="font-semibold text-gray-900 dark:text-white text-xs whitespace-nowrap overflow-hidden text-ellipsis">{appt.doctor || "Doctor unavailable"}</div>
                     <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex flex-wrap gap-x-2">
                       <span>{appt.appointment_date || "Date TBA"}</span>
                       <span>{appt.appointment_time || ""}</span>
+                      {appt.isExpired && <span className="ml-auto text-red-500 font-semibold uppercase">Expired</span>}
                     </div>
                     {appt.department && (
-                      <div className="text-[10px] text-green-700 dark:text-green-400 font-medium mt-1">{appt.department}</div>
+                      <div className={`text-[10px] font-medium mt-1 ${appt.isExpired ? "text-gray-600 dark:text-gray-400" : "text-green-700 dark:text-green-400"}`}>{appt.department}</div>
                     )}
                   </button>
                 ))}
@@ -949,8 +961,9 @@ export default function BookAppointmentPage() {
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <button
                   type="button"
+                  disabled={selectedPreviewAppointment.isExpired}
                   onClick={() => setShowRescheduleConfirm(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -959,9 +972,9 @@ export default function BookAppointmentPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={isProcessingAction}
+                  disabled={isProcessingAction || selectedPreviewAppointment.isExpired}
                   onClick={() => setShowCancelConfirm(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

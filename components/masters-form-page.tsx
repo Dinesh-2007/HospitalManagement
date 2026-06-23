@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { PageLayout } from "./page-layout";
 import { columnNameFromFieldId, tableNameFromCardTitle } from "../lib/master-form-table";
+import { PatientProfileLayout } from "./patient-profile-layout";
 import { PencilIcon, TrashBinIcon } from "./icons";
 
 const HIDDEN_FIELD_NOTES = new Set([
@@ -68,6 +69,7 @@ type MastersFormPageProps = {
   backButtonText?: string;
   backHref?: string;
   columns?: 1 | 2 | 3;
+  profileLayoutTab?: "edit" | "history" | "family" | "appointments";
   children?: React.ReactNode | ((props: MastersFormPageRenderProps) => React.ReactNode);
 };
 
@@ -170,13 +172,14 @@ export function MastersFormPage({
   backButtonText = "Back to Masters",
   backHref = "/masters",
   columns,
+  profileLayoutTab,
   children,
 }: MastersFormPageProps) {
 
   const [records, setRecords] = useState<SavedRecord[]>([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isShowingForm, setIsShowingForm] = useState(false);
+  const [isShowingForm, setIsShowingForm] = useState(profileLayoutTab === "edit");
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
@@ -223,6 +226,32 @@ export function MastersFormPage({
 
     return () => window.clearTimeout(timeoutId);
   }, [loadRecords]);
+
+  // Auto-load matching patient record in edit mode
+  useEffect(() => {
+    if (profileLayoutTab === "edit" && records.length > 0 && !editingRecordId) {
+      const phone = window.localStorage.getItem("patientPhone")?.replace(/\D/g, "");
+      const name = window.localStorage.getItem("patientName")?.trim()?.toLowerCase();
+      
+      const matching = records.find(r => {
+        const rMobile = String(r.mobile ?? "").replace(/\D/g, "");
+        const rName = String(r.patient_name ?? "").trim().toLowerCase();
+        return (phone && rMobile === phone) || (name && rName === name);
+      });
+
+      if (matching) {
+        const nextValues = buildInitialFormValues(fields);
+        for (const field of fields) {
+          const recordValue = matching[field.id] ?? matching[columnNameFromFieldId(field.id)];
+          nextValues[field.id] = normalizeRecordValue(recordValue, field);
+        }
+        setFormValues(nextValues);
+        setEditingRecordId(Number(matching.id));
+        setFormStateVersion((current) => current + 1);
+        setIsShowingForm(true);
+      }
+    }
+  }, [records, profileLayoutTab, fields, editingRecordId]);
 
   // Avoid synchronously calling setState inside effects; form state is reset
   // via resetFormState or during editRecord.
@@ -347,14 +376,16 @@ export function MastersFormPage({
         throw new Error(data.error ?? "Failed to save form values.");
       }
 
-      resetFormState();
+      if (profileLayoutTab !== "edit") {
+        resetFormState();
+        setIsShowingForm(mode === "saveNext");
+      }
       setSubmitMessage(
         editingRecordId
           ? `Updated successfully in ${tableName}.`
           : `Saved successfully to ${tableName}.`,
       );
       await loadRecords();
-      setIsShowingForm(mode === "saveNext");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to save form values.";
@@ -391,9 +422,8 @@ export function MastersFormPage({
       : "lg:grid-cols-2";
   const addButtonLabel = getAddButtonLabel(cardTitle);
 
-  return (
-    <PageLayout title={title}>
-      <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+  const content = (
+    <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
@@ -404,7 +434,7 @@ export function MastersFormPage({
             </p>
           </div>
 
-          {!isShowingForm ? (
+          {!isShowingForm && profileLayoutTab !== "edit" ? (
             <button
               type="button"
               onClick={() => setIsShowingForm(true)}
@@ -584,32 +614,38 @@ export function MastersFormPage({
               )}
 
               <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
-                <Link
-                  href={backHref}
-                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-                >
-                  {backButtonText}
-                </Link>
-
-                <div className="flex flex-wrap justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetFormState();
-                      setIsShowingForm(false);
-                    }}
+                {profileLayoutTab !== "edit" ? (
+                  <Link
+                    href={backHref}
                     className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => void saveForm("saveNext")}
-                    className="inline-flex items-center justify-center rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 transition hover:bg-brand-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                  >
-                    {isSubmitting ? "Saving..." : "Save Next"}
-                  </button>
+                    {backButtonText}
+                  </Link>
+                ) : <div />}
+
+                <div className="flex flex-wrap justify-end gap-3">
+                  {profileLayoutTab !== "edit" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetFormState();
+                          setIsShowingForm(false);
+                        }}
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => void saveForm("saveNext")}
+                        className="inline-flex items-center justify-center rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 transition hover:bg-brand-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                      >
+                        {isSubmitting ? "Saving..." : "Save Next"}
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     type="submit"
                     disabled={isSubmitting}
@@ -731,6 +767,17 @@ export function MastersFormPage({
           )}
         </div>
       </section>
+  );
+
+  return (
+    <PageLayout title={profileLayoutTab ? "Patient Profile" : title}>
+      {profileLayoutTab ? (
+        <PatientProfileLayout activeTab={profileLayoutTab} hname={hname}>
+          {content}
+        </PatientProfileLayout>
+      ) : (
+        content
+      )}
     </PageLayout>
   );
 }

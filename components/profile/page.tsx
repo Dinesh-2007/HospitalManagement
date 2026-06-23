@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { tableNameFromCardTitle } from "../../lib/master-form-table";
+import { PatientProfileLayout } from "../patient-profile-layout";
 
 type RawRow = Record<string, unknown>;
 type PatientRow = {
@@ -206,19 +207,34 @@ function buildHistory(appointments: AppointmentRow[]) {
   for (const entry of appointments) {
     const baseKey = String(entry.id ?? `${entry.appointment_date}-${entry.appointment_time}`);
     const hasRescheduleHistory = Array.isArray(entry.reschedule_history) && entry.reschedule_history.length > 0;
+    
+    let isExpired = false;
+    const currentStatus = entry.status || "Scheduled";
+    if (currentStatus === "Scheduled" || currentStatus === "Rescheduled") {
+      const date = entry.appointment_date;
+      const time = entry.appointment_time;
+      if (date && time) {
+        const apptDate = new Date(`${date}T${time}`);
+        if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
+          isExpired = true;
+        }
+      }
+    }
+
+    const scheduledStatusLabel = isExpired ? "Expired" : "Scheduled";
 
     items.push({
       key: `${baseKey}-scheduled`,
-      label: "Scheduled",
-      status: "Scheduled",
+      label: scheduledStatusLabel,
+      status: scheduledStatusLabel,
       date: entry.appointment_date ?? "",
       time: entry.appointment_time ?? undefined,
       endTime: entry.appointment_end_time ?? undefined,
       note: `${entry.doctor ? `Booked with ${entry.doctor}` : "Appointment booked"}${entry.department ? ` - ${entry.department}` : ""}`,
-      variant: hasRescheduleHistory ? "red" : "green",
+      variant: hasRescheduleHistory ? "red" : isExpired ? "gray" : "green",
       doctor: entry.doctor,
       department: entry.department,
-      isPreviewable: true,
+      isPreviewable: !isExpired,
     });
 
     for (const historyEntry of entry.reschedule_history ?? []) {
@@ -283,15 +299,19 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
 
   useEffect(() => {
     async function loadProfile() {
-      if (!patientId) return;
+      let activePatientId = patientId;
+      if (!activePatientId && typeof window !== "undefined") {
+        activePatientId = window.localStorage.getItem("patientPhone") ?? undefined;
+      }
+      if (!activePatientId) return;
       setIsLoading(true);
       setErrorMessage("");
       try {
-        const patientRows = await loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(patientId)}`);
+        const patientRows = await loadRows(hname, `/forms/${PATIENT_TABLE}?id=${encodeURIComponent(activePatientId)}`);
         const pRow = patientRows.map(normalizePatientRow)[0] ?? null;
         
-        const actualPatientId = pRow?.patient_id || patientId;
-        const actualPhone = pRow?.mobile || patientId;
+        const actualPatientId = pRow?.patient_id || activePatientId;
+        const actualPhone = pRow?.mobile || activePatientId;
 
         const [appointmentRows, notificationRows] = await Promise.all([
           loadRows(hname, `/appointments?patientId=${encodeURIComponent(actualPatientId)}`),
@@ -347,6 +367,7 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
   );
 
   return (
+    <PatientProfileLayout activeTab="history" hname={hname}>
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
         <div>
@@ -354,9 +375,11 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
           <h1 className="mt-1 text-2xl font-semibold text-gray-800 dark:text-white/90">{patient?.patient_name ?? "Patient"}</h1>
           <p className="mt-1 text-sm text-gray-500">{patient?.mobile ?? "-"}</p>
         </div>
-        <button type="button" onClick={() => props.onClose?.()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
-          Back
-        </button>
+        {props.onClose && (
+          <button type="button" onClick={() => props.onClose?.()} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700">
+            Back
+          </button>
+        )}
       </div>
 
       {errorMessage ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{errorMessage}</div> : null}
@@ -471,5 +494,6 @@ export default function PatientProfilePage(props: { searchParams?: { patientId?:
         </div>
       ) : null}
     </div>
+    </PatientProfileLayout>
   );
 }

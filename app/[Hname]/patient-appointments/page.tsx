@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
+import { PatientProfileLayout } from "../../../components/patient-profile-layout";
 import { withSalutation } from "../../../lib/salutation";
 
 /* ─── Types ─────────────────────────────────────────────────────── */
@@ -93,6 +94,17 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
     }
 
     // Active row
+    let isExpired = false;
+    const currentStatus = a.status || "Scheduled";
+    if (currentStatus === "Scheduled" || currentStatus === "Rescheduled") {
+      if (date && time) {
+        const apptDate = new Date(`${date}T${time}`);
+        if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
+          isExpired = true;
+        }
+      }
+    }
+
     list.push({
       id: a.id ?? Math.random(),
       appointment_date: date,
@@ -100,13 +112,15 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
       appointment_end_time: endTime,
       department: a.department ?? null,
       doctor: a.doctor ?? null,
-      status: a.status || "Scheduled",
+      status: isExpired ? "Expired" : currentStatus,
       displayStatus:
         a.status === "Cancelled"
           ? "Cancelled"
-          : a.transferred_from_doctor
-            ? `${a.status || "Scheduled"} (from ${a.transferred_from_doctor})`
-            : a.status || "Scheduled",
+          : isExpired
+            ? "Expired"
+            : a.transferred_from_doctor
+              ? `${currentStatus} (from ${a.transferred_from_doctor})`
+              : currentStatus,
       reschedule_count: a.reschedule_count ?? null,
       patient_name: pname,
     });
@@ -285,9 +299,10 @@ export default function HospitalPatientAppointmentsPage() {
 
   /* ─── Render ─────────────────────────────────────────────────── */
   return (
-    <PageLayout title="My Appointments">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <section className="relative overflow-hidden rounded-3xl border border-gray-200 bg-white/90 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/60">
+    <PageLayout title="Patient Profile">
+      <PatientProfileLayout activeTab="appointments" hname={hname}>
+        <div className="mx-auto max-w-6xl space-y-6">
+          <section className="relative overflow-hidden rounded-3xl border border-gray-200 bg-white/90 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/60">
 
           {/* Header */}
           <div className="flex flex-col gap-4 px-8 py-7 border-b border-gray-100 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
@@ -463,6 +478,7 @@ export default function HospitalPatientAppointmentsPage() {
                       const isCancelled = row.status === "Cancelled";
                       const isTransferred = row.status === "Transferred" || row.isTransferred;
                       const isRescheduled = row.status === "Rescheduled";
+                      const isExpired = row.status === "Expired";
 
                       let badgeClass = "bg-teal-50 text-teal-700 border-teal-200/60 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20";
                       let dotColor = "bg-teal-500";
@@ -470,6 +486,9 @@ export default function HospitalPatientAppointmentsPage() {
                       if (isCancelled) {
                         badgeClass = "bg-rose-50 text-rose-700 border-rose-200/60 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20";
                         dotColor = "bg-rose-500";
+                      } else if (isExpired) {
+                        badgeClass = "bg-gray-100 text-gray-700 border-gray-300/60 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700/50";
+                        dotColor = "bg-gray-500";
                       } else if (isTransferred) {
                         badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/60 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20";
                         dotColor = "bg-indigo-500";
@@ -530,6 +549,7 @@ export default function HospitalPatientAppointmentsPage() {
           </div>
         </section>
       </div>
+      </PatientProfileLayout>
     </PageLayout>
   );
 }

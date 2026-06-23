@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   MastersFormPage,
   type MastersFormField,
@@ -11,11 +11,19 @@ import {
 export default function PatientRegistrationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
+  const searchParams = useSearchParams();
+  const mode = searchParams?.get("mode");
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [patientTypeOptions, setPatientTypeOptions] = useState<string[]>([]);
+  const [localName, setLocalName] = useState("");
+  const [localPhone, setLocalPhone] = useState("");
 
   useEffect(() => {
+    try {
+      setLocalName(window.localStorage.getItem("patientName") ?? "");
+      setLocalPhone(window.localStorage.getItem("patientPhone")?.replace(/\D/g, "") ?? "");
+    } catch {}
     async function loadPatientTypes() {
       if (!hname) {
         return;
@@ -85,7 +93,7 @@ export default function PatientRegistrationPage() {
   const patientRegistrationFields: MastersFormField[] = useMemo(
     () => [
       { id: "patientId", label: "Patient ID", type: "display", size: "small", placeholder: "Auto-generated on check-in", hint: "Auto-generated when the patient checks in for the first time." },
-      { id: "patientName", label: "Patient Name", type: "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium" },
+      { id: "patientName", label: "Patient Name", type: mode === "edit" ? "display" : "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium", defaultValue: mode === "edit" ? localName : undefined },
       { id: "dob", label: "Date of Birth", type: "date", size: "small" },
       {
         id: "gender",
@@ -116,9 +124,9 @@ export default function PatientRegistrationPage() {
       },
       { id: "zipCode", label: "ZIP Code", type: "text", maxLength: 6, pattern: "[0-9]{6}", inputMode: "numeric", size: "small" },
       { id: "email", label: "eMail", type: "text", maxLength: 255, size: "medium" },
-      { id: "phoneOffice", label: "Phone - Office", type: "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
-      { id: "phoneResi", label: "Phone - Resi", type: "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
-      { id: "mobile", label: "Mobile", type: "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
+      { id: "phoneOffice", label: "Phone - Office", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
+      { id: "phoneResi", label: "Phone - Resi", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
+      { id: "mobile", label: "Mobile", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small", defaultValue: mode === "edit" ? localPhone : undefined },
       { id: "hnNumber", label: "HN Number", type: "text", maxLength: 50, size: "small" },
       {
         id: "numberOfVisits",
@@ -186,7 +194,7 @@ export default function PatientRegistrationPage() {
         fullWidth: true,
       },
     ],
-    [cities, countries, patientTypeOptions, states],
+    [cities, countries, patientTypeOptions, states, mode, localName, localPhone],
   );
 
   return (
@@ -197,6 +205,7 @@ export default function PatientRegistrationPage() {
       fields={patientRegistrationFields}
       backButtonText="Back to Check-in"
       backHref={`/${hname}/checkin`}
+      profileLayoutTab={mode === "edit" ? "edit" : undefined}
     />
   );
 }

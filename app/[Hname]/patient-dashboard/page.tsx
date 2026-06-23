@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "../../../components/ui/button";
-import PatientProfileMenu from "../../../components/patient-profile-menu";
 import BookAppointmentPage from "../book-appointment/page";
 
 export default function HospitalPatientDashboardPage() {
   const params = useParams();
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : null;
+  const router = useRouter();
   const [patientName, setPatientName] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -27,8 +26,7 @@ export default function HospitalPatientDashboardPage() {
         <h1 className="text-2xl font-semibold">{hname ? `${hname} - Patient Dashboard` : "Patient Dashboard"}</h1>
         <div className="flex items-center gap-3 relative">
           <div className="text-sm text-gray-700">WELCOME {patientName}</div>
-          <Button variant="outline" onClick={() => setIsOpen(true)}>Profile</Button>
-          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} hname={hname ?? undefined} />
+          <Button variant="outline" onClick={() => router.push(`/${hname}/patient-appointments`)}>Profile</Button>
         </div>
       </div>
 

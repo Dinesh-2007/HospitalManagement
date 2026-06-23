@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { PageLayout } from "../../../../components/page-layout";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
-import PatientProfilePage from "../../../../components/profile/page";
+
 
 type RawRow = Record<string, unknown>;
 type ScheduleRow = {
@@ -225,6 +225,7 @@ async function loadRows(hname: string, url: string) {
 export default function AppointmentCalendarPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const hname = params?.Hname as string;
   const department = searchParams.get("department") ?? "";
   const doctor = searchParams.get("doctor") ?? "";
@@ -361,7 +362,12 @@ export default function AppointmentCalendarPage() {
   }, [selectedDaySchedules]);
 
   const patientAppointment = useMemo(() => {
-    return patientAppointments[0] ?? null;
+    const now = new Date();
+    return patientAppointments.find((appt) => {
+      if (!appt.appointment_date || !appt.appointment_time) return true;
+      const apptDate = new Date(`${appt.appointment_date}T${appt.appointment_time}`);
+      return isNaN(apptDate.getTime()) || apptDate >= now;
+    }) ?? null;
   }, [patientAppointments]);
 
   const activeStep = selectedStep ?? scheduleSlotMinutes;
@@ -585,23 +591,32 @@ export default function AppointmentCalendarPage() {
     }
   }
 
-  const [show, setShow] = useState(false);
-  if (show) {
-    return <div className="justify-center items-center"><PatientProfilePage searchParams={{ patientId }} onClose={() => setShow(false)} /></div>
-  }
+
   return (
     <PageLayout title="Appointment Calendar">
       <div className="grid gap-6 xl:grid-cols-1">
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-            <div>
-              <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Appointments</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{department} - {doctor}</p>
+            <div className="flex flex-col items-start">
+              <button
+                type="button"
+                onClick={() => router.push(`/${hname}/book-appointment`)}
+                className="mb-2 flex items-center text-xs font-medium text-gray-500 hover:text-brand-600 transition"
+              >
+                <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Booking
+              </button>
+              <div>
+                <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Appointments</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{department} - {doctor}</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShow(true)}
+                onClick={() => router.push(`/${hname}/patient-appointments`)}
                 className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50"
                 aria-label="Open user profile"
               >
@@ -781,7 +796,7 @@ export default function AppointmentCalendarPage() {
                         type="button"
                         disabled={!selectedSlot}
                         onClick={showBookConfirmation}
-                        className="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Book Appointment
                       </button>

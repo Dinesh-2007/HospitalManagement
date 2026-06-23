@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "../../components/ui/button";
-import PatientProfileMenu from "../../components/patient-profile-menu";
 
 export default function PatientDashboardPage() {
+  const router = useRouter();
   const [patientName, setPatientName] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -23,8 +23,7 @@ export default function PatientDashboardPage() {
         <h1 className="text-2xl font-semibold">Patient Dashboard</h1>
         <div className="flex items-center gap-3 relative">
           <div className="text-sm text-gray-700">WELCOME {patientName}</div>
-          <Button variant="outline" onClick={() => setIsOpen(true)}>Profile</Button>
-          <PatientProfileMenu isOpen={isOpen} onClose={() => setIsOpen(false)} />
+          <Button variant="outline" onClick={() => router.push(`/patient-appointments`)}>Profile</Button>
         </div>
       </div>
 

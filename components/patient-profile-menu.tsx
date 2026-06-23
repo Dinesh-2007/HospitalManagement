@@ -40,6 +40,11 @@ export default function PatientProfileMenu({ isOpen, onClose, hname }: { isOpen:
           </Link>
         </li>
         <li>
+          <Link href={getHref("/patient-history")} onClick={onClose} className="block rounded px-3 py-2 hover:bg-gray-50">
+            History
+          </Link>
+        </li>
+        <li>
           <button onClick={handleLogout} className="w-full text-left rounded px-3 py-2 hover:bg-gray-50">
             Logout
           </button>
