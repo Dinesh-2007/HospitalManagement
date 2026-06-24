@@ -265,7 +265,6 @@ export default function HospitalManageFamilyPage() {
   };
 
   return (
-    <PageLayout title="Patient Profile">
       <PatientProfileLayout activeTab="family" hname={hname ?? ""}>
       <section className="min-h-[80vh] rounded-2xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-6 py-5">
@@ -499,6 +498,5 @@ export default function HospitalManageFamilyPage() {
         </div>
       ) : null}
       </PatientProfileLayout>
-    </PageLayout>
   );
 }

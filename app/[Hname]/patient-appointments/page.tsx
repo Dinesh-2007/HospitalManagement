@@ -76,7 +76,39 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
     const endTime = a.appointment_end_time ?? null;
     const pname = patientLabel ?? a.patient_name ?? null;
 
-    // Transferred origin row
+    // Determine if the scheduled time is expired
+    let isExpired = false;
+    const currentStatus = a.status || "Scheduled";
+    if (currentStatus === "Scheduled" || currentStatus === "Rescheduled") {
+      if (date && time) {
+        const apptDate = new Date(`${date}T${time}`);
+        if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
+          isExpired = true;
+        }
+      }
+    }
+
+    const scheduledStatusLabel = isExpired ? "Expired" : "Scheduled";
+
+    // 1. Base Scheduled/Expired Row
+    list.push({
+      id: `${a.id ?? Math.random()}_scheduled`,
+      appointment_date: date,
+      appointment_time: time,
+      appointment_end_time: endTime,
+      department: a.department ?? null,
+      doctor: a.doctor ?? null,
+      status: scheduledStatusLabel,
+      displayStatus: scheduledStatusLabel,
+      reschedule_count: a.reschedule_count ?? null,
+      patient_name: pname,
+    });
+
+    // 2. Reschedule History Rows (if any exist on the backend)
+    // Note: The patient-appointments endpoint might not return reschedule_history unless included,
+    // but if it does, we can synthesize them. We will add a placeholder if we need it later.
+
+    // 3. Transferred Origin Row
     if (a.transferred_from_doctor) {
       list.push({
         id: `${a.id ?? Math.random()}_transferred`,
@@ -93,39 +125,29 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
       });
     }
 
-    // Active row
-    let isExpired = false;
-    const currentStatus = a.status || "Scheduled";
-    if (currentStatus === "Scheduled" || currentStatus === "Rescheduled") {
-      if (date && time) {
-        const apptDate = new Date(`${date}T${time}`);
-        if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
-          isExpired = true;
-        }
-      }
+    // 4. Cancelled Row
+    if (currentStatus === "Cancelled") {
+      list.push({
+        id: `${a.id ?? Math.random()}_cancelled`,
+        appointment_date: date,
+        appointment_time: time,
+        appointment_end_time: endTime,
+        department: a.department ?? null,
+        doctor: a.doctor ?? null,
+        status: "Cancelled",
+        displayStatus: "Cancelled",
+        reschedule_count: a.reschedule_count ?? null,
+        patient_name: pname,
+      });
     }
-
-    list.push({
-      id: a.id ?? Math.random(),
-      appointment_date: date,
-      appointment_time: time,
-      appointment_end_time: endTime,
-      department: a.department ?? null,
-      doctor: a.doctor ?? null,
-      status: isExpired ? "Expired" : currentStatus,
-      displayStatus:
-        a.status === "Cancelled"
-          ? "Cancelled"
-          : isExpired
-            ? "Expired"
-            : a.transferred_from_doctor
-              ? `${currentStatus} (from ${a.transferred_from_doctor})`
-              : currentStatus,
-      reschedule_count: a.reschedule_count ?? null,
-      patient_name: pname,
-    });
   }
-  return list;
+
+  // Sort by date/time descending to match history feed conceptually
+  return list.sort((left, right) => {
+    const dL = `${left.appointment_date ?? ""} ${left.appointment_time ?? ""}`;
+    const dR = `${right.appointment_date ?? ""} ${right.appointment_time ?? ""}`;
+    return dR.localeCompare(dL);
+  });
 }
 
 /* ─── Component ──────────────────────────────────────────────────── */
@@ -299,16 +321,15 @@ export default function HospitalPatientAppointmentsPage() {
 
   /* ─── Render ─────────────────────────────────────────────────── */
   return (
-    <PageLayout title="Patient Profile">
-      <PatientProfileLayout activeTab="appointments" hname={hname}>
-        <div className="mx-auto max-w-6xl space-y-6">
-          <section className="relative overflow-hidden rounded-3xl border border-gray-200 bg-white/90 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/60">
+    <PatientProfileLayout activeTab="appointments" hname={hname ?? ""}>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <section className="relative overflow-hidden rounded-3xl border border-gray-200 bg-white/90 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/60">
 
           {/* Header */}
           <div className="flex flex-col gap-4 px-8 py-7 border-b border-gray-100 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-xl font-bold tracking-tight text-gray-950 dark:text-white">
-                Appointment History
+                My Appointments
               </h3>
               <p className="mt-1 text-sm text-gray-500">
                 Viewing appointments for{" "}
@@ -347,11 +368,10 @@ export default function HospitalPatientAppointmentsPage() {
                     type="button"
                     id="filter-all"
                     onClick={() => { setFilterRelationship("all"); setDropdownOpen(false); }}
-                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                      filterRelationship === "all"
-                        ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
-                        : "text-gray-700 dark:text-gray-200"
-                    }`}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${filterRelationship === "all"
+                      ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
+                      : "text-gray-700 dark:text-gray-200"
+                      }`}
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -367,11 +387,10 @@ export default function HospitalPatientAppointmentsPage() {
                     type="button"
                     id="filter-myself"
                     onClick={() => { setFilterRelationship("myself"); setDropdownOpen(false); }}
-                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                      filterRelationship === "myself"
-                        ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
-                        : "text-gray-700 dark:text-gray-200"
-                    }`}
+                    className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${filterRelationship === "myself"
+                      ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
+                      : "text-gray-700 dark:text-gray-200"
+                      }`}
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-500/20">
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -396,11 +415,10 @@ export default function HospitalPatientAppointmentsPage() {
                             type="button"
                             id={`filter-${rel.toLowerCase().replace(/\s+/g, "-")}`}
                             onClick={() => { setFilterRelationship(rel); setDropdownOpen(false); }}
-                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                              filterRelationship === rel
-                                ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
-                                : "text-gray-700 dark:text-gray-200"
-                            }`}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800 ${filterRelationship === rel
+                              ? "bg-brand-50 text-brand-700 font-semibold dark:bg-brand-500/10 dark:text-brand-300"
+                              : "text-gray-700 dark:text-gray-200"
+                              }`}
                           >
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400">
                               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -511,9 +529,9 @@ export default function HospitalPatientAppointmentsPage() {
                               <span className="font-medium text-gray-800 dark:text-white whitespace-nowrap">
                                 {row.patient_name
                                   ? withSalutation(
-                                      row.patient_name,
-                                      row.patient_name === self?.name ? (self?.gender ?? "") : ""
-                                    )
+                                    row.patient_name,
+                                    row.patient_name === self?.name ? (self?.gender ?? "") : ""
+                                  )
                                   : "–"}
                               </span>
                             </span>
@@ -549,7 +567,6 @@ export default function HospitalPatientAppointmentsPage() {
           </div>
         </section>
       </div>
-      </PatientProfileLayout>
-    </PageLayout>
+    </PatientProfileLayout>
   );
 }

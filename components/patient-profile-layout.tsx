@@ -47,21 +47,19 @@ export function PatientProfileLayout({ activeTab, children, hname }: PatientProf
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props} xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
       ),
     },
-    {
-      key: "history",
-      label: "History",
-      href: `/${encodeURIComponent(hname)}/patient-history`,
-      icon: (props: any) => (
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props} xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-      ),
-    },
+
   ];
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 xl:flex">
       {/* Sidebar Navigation */}
-      <aside className="w-full shrink-0 lg:w-64">
-        <nav className="flex flex-col space-y-1 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-white/[0.03]">
+      <aside className="fixed top-0 left-0 z-50 flex h-screen w-[290px] flex-col border-r border-gray-200 bg-white px-4 py-8 text-gray-900 transition-all duration-300 ease-in-out dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-8 flex justify-start px-4">
+          <div className="text-xl font-bold tracking-tight text-slate-800 dark:text-white/90">
+            Patient Profile
+          </div>
+        </div>
+        <nav className="flex flex-col space-y-1">
           <Link
             href={`/${encodeURIComponent(hname)}/patient-dashboard`}
             className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/5 mb-1"
@@ -69,9 +67,9 @@ export function PatientProfileLayout({ activeTab, children, hname }: PatientProf
             <svg className="h-5 w-5 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             Back to Dashboard
           </Link>
-          
+
           <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
-          
+
           {navItems.map((item) => {
             const isActive = activeTab === item.key;
             const Icon = item.icon;
@@ -80,8 +78,8 @@ export function PatientProfileLayout({ activeTab, children, hname }: PatientProf
                 key={item.key}
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition ${isActive
-                    ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400"
-                    : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                  ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400"
+                  : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
                   }`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? "text-brand-600 dark:text-brand-400" : "text-gray-400 dark:text-gray-500"}`} />
@@ -104,8 +102,10 @@ export function PatientProfileLayout({ activeTab, children, hname }: PatientProf
       </aside>
 
       {/* Main Content Area */}
-      <div className="min-w-0 flex-1">
-        {children}
+      <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out lg:ml-[290px]">
+        <main className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
       </div>
     </div>
   );
