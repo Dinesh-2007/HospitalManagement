@@ -109,6 +109,9 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
       reschedule_history JSONB NOT NULL DEFAULT '[]'::jsonb
     )
   `);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS appointment_number INTEGER`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS patient_type TEXT NOT NULL DEFAULT 'scheduled'`);
 }
 
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {

@@ -256,6 +256,8 @@ async function ensureAppointmentsTable(pool: Pool | PoolClient) {
     ["cancelled_by_username", "TEXT"],
     ["cancelled_reason", "TEXT"],
     ["cancelled_at", "TIMESTAMPTZ"],
+    ["check_in_time", "TIMESTAMPTZ"],
+    ["appointment_number", "INTEGER"],
   ];
 
   for (const [column, type] of columns) {
