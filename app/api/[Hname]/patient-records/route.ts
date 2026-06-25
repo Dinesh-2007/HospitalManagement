@@ -116,7 +116,19 @@ export async function GET(
             pageSize
         });
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to fetch patient records.";
-        return NextResponse.json({ error: message }, { status: 400 });
+        const message =
+            error instanceof Error
+                ? error.message || String(error) || "Failed to fetch patient records."
+                : "Failed to fetch patient records.";
+
+        console.error("[patient-records GET] failed", {
+            error: error instanceof Error
+                ? { name: error.name, message: error.message }
+                : String(error),
+        });
+
+        // Transient DB/schema readiness issues should be treated as retryable failures.
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
+

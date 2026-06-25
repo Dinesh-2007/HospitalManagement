@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import {
   columnNameFromFieldId,
@@ -211,11 +212,23 @@ export async function GET(
     return NextResponse.json({ rows: rowsResult.rows });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to fetch records.";
+      error instanceof Error
+        ? error.message || String(error) || "Failed to fetch records."
+        : "Failed to fetch records.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    // Helps diagnose the “first request 400” race; never leak secrets.
+    console.error("[forms GET] failed", {
+      error: error instanceof Error
+        ? { name: error.name, message: error.message }
+        : String(error),
+    });
+
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+
 
 export async function POST(
   request: Request,
@@ -300,11 +313,20 @@ export async function POST(
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to save form values.";
+      error instanceof Error
+        ? error.message || String(error) || "Failed to save form values."
+        : "Failed to save form values.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    console.error("[forms POST] failed", {
+      error: error instanceof Error
+        ? { name: error.name, message: error.message }
+        : String(error),
+    });
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 export async function PUT(
   request: Request,
@@ -378,11 +400,20 @@ export async function PUT(
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to update form values.";
+      error instanceof Error
+        ? error.message || String(error) || "Failed to update form values."
+        : "Failed to update form values.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    console.error("[forms PUT] failed", {
+      error: error instanceof Error
+        ? { name: error.name, message: error.message }
+        : String(error),
+    });
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
 
 export async function DELETE(
   request: Request,
@@ -416,8 +447,17 @@ export async function DELETE(
     return NextResponse.json({ success: true, id });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to delete form values.";
+      error instanceof Error
+        ? error.message || String(error) || "Failed to delete form values."
+        : "Failed to delete form values.";
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    console.error("[forms DELETE] failed", {
+      error: error instanceof Error
+        ? { name: error.name, message: error.message }
+        : String(error),
+    });
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
