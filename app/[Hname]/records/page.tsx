@@ -145,7 +145,18 @@ async function loadRows(hname: string, path: string): Promise<RawRow[]> {
 }
 
 function display(value: string | null | undefined) {
-    return value || "-";
+    if (!value) return "-";
+    if (value.startsWith("[") && value.endsWith("]")) {
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+                return parsed.join(", ") || "-";
+            }
+        } catch {
+            // ignore and fallback
+        }
+    }
+    return value;
 }
 
 function InfoField({ label, value }: { label: string; value?: string | null }) {

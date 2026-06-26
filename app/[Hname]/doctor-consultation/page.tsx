@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
@@ -106,6 +106,337 @@ function formatDisplayTime(value: string) {
   return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date).replace(/\s/g, "");
 }
 
+function MultiSelectDropdown({
+  options,
+  value,
+  onChange,
+  placeholder = "Select..."
+}: {
+  options: string[],
+  value: string,
+  onChange: (val: string) => void,
+  placeholder?: string
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  let selected: string[] = [];
+  try {
+    if (value) {
+      if (value.startsWith("[") && value.endsWith("]")) {
+        selected = JSON.parse(value);
+      } else {
+        selected = [value];
+      }
+    } else {
+      selected = [];
+    }
+  } catch {
+    selected = [];
+  }
+  if (!Array.isArray(selected)) selected = [];
+
+  const toggle = (opt: string) => {
+    let newSelected: string[];
+    if (selected.includes(opt)) {
+      newSelected = selected.filter(o => o !== opt);
+    } else {
+      newSelected = [...selected, opt];
+    }
+    onChange(JSON.stringify(newSelected));
+  };
+
+  const removeSelected = (e: React.MouseEvent, opt: string) => {
+    e.stopPropagation();
+    onChange(JSON.stringify(selected.filter(o => o !== opt)));
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="min-h-10 w-full cursor-pointer rounded-lg border border-gray-300 bg-transparent px-3 py-1.5 text-sm focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 flex flex-wrap items-center gap-1.5 justify-between"
+      >
+        <div className="flex flex-wrap gap-1.5 items-center flex-1">
+          {selected.length === 0 ? (
+            <span className="text-gray-400 dark:text-gray-500">{placeholder}</span>
+          ) : (
+            selected.map(opt => (
+              <span
+                key={opt}
+                className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+              >
+                {opt}
+                <button
+                  type="button"
+                  onClick={(e) => removeSelected(e, opt)}
+                  className="hover:text-brand-950 dark:hover:text-brand-100 font-bold"
+                >
+                  &times;
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+        <div className="flex items-center gap-2 pl-2 text-gray-400 shrink-0">
+          <svg className={`h-4 w-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800 animate-in fade-in slide-in-from-top-1 duration-150">
+          {options.length > 5 && (
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search..."
+              className="mb-2 h-8 w-full rounded border border-gray-200 px-2 text-xs focus:border-brand-500 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              onClick={e => e.stopPropagation()}
+            />
+          )}
+          <div className="space-y-1">
+            {filteredOptions.length === 0 ? (
+              <div className="p-2 text-xs text-gray-500 dark:text-gray-400">No options found.</div>
+            ) : (
+              filteredOptions.map(opt => {
+                const isChecked = selected.includes(opt);
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => toggle(opt)}
+                    className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer transition select-none hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isChecked ? "bg-brand-50/50 dark:bg-brand-950/20" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => { }}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:checked:bg-brand-500"
+                    />
+                    <span className="text-gray-700 dark:text-gray-300">{opt}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MultiSelectCheckboxGroup({ options, value, onChange }: { options: string[], value: string, onChange: (val: string) => void }) {
+  let selected: { name: string, notes: string }[] = [];
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    if (Array.isArray(parsed)) {
+      selected = parsed.map((item: any) => {
+        if (typeof item === "string") {
+          return { name: item, notes: "" };
+        } else if (item && typeof item === "object" && item.name) {
+          return { name: item.name, notes: item.notes || "" };
+        }
+        return null;
+      }).filter((item): item is { name: string, notes: string } => item !== null);
+    }
+  } catch {
+    selected = [];
+  }
+
+  const toggle = (opt: string) => {
+    const isSelected = selected.some(item => item.name === opt);
+    if (isSelected) {
+      const updated = selected.filter(item => item.name !== opt);
+      onChange(JSON.stringify(updated));
+    } else {
+      const updated = [...selected, { name: opt, notes: "" }];
+      onChange(JSON.stringify(updated));
+    }
+  };
+
+  const updateNotes = (opt: string, notes: string) => {
+    const updated = selected.map(item => {
+      if (item.name === opt) {
+        return { ...item, notes };
+      }
+      return item;
+    });
+    onChange(JSON.stringify(updated));
+  };
+
+  return (
+    <div className="space-y-3 mt-2">
+      <div className="flex flex-wrap gap-4">
+        {options.map(opt => {
+          const isChecked = selected.some(item => item.name === opt);
+          return (
+            <label key={opt} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => toggle(opt)}
+                className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:checked:bg-brand-500"
+              />
+              {opt}
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Show text inputs for checked options */}
+      <div className="space-y-2 mt-3">
+        {options.map(opt => {
+          const matched = selected.find(item => item.name === opt);
+          if (!matched) return null;
+          return (
+            <div key={opt} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-gray-50 dark:bg-gray-800/40 p-2.5 rounded-lg border border-gray-150 dark:border-gray-800">
+              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-28 shrink-0">{opt}:</span>
+              <input
+                type="text"
+                value={matched.notes}
+                onChange={e => updateNotes(opt, e.target.value)}
+                placeholder={`Enter details/findings for ${opt}...`}
+                className="h-8 flex-1 rounded-md border border-gray-300 px-3 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DoctorTreatmentNoteGroup({
+  doctors,
+  value,
+  onChange
+}: {
+  doctors: string[],
+  value: string,
+  onChange: (val: string) => void
+}) {
+  let selected: { doctor: string, note: string }[] = [];
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    if (Array.isArray(parsed)) {
+      selected = parsed.map((item: any) => {
+        if (typeof item === "string") {
+          return { doctor: item, note: "" };
+        } else if (item && typeof item === "object" && item.doctor) {
+          return { doctor: item.doctor, note: item.note || "" };
+        }
+        return null;
+      }).filter((item): item is { doctor: string, note: string } => item !== null);
+    }
+  } catch {
+    selected = [];
+  }
+
+  const selectedDoctorNames = selected.map(s => s.doctor);
+
+  const handleDropdownChange = (newNamesJson: string) => {
+    const newNames: string[] = JSON.parse(newNamesJson);
+    const updated = newNames.map(name => {
+      const existing = selected.find(s => s.doctor === name);
+      return existing ? existing : { doctor: name, note: "" };
+    });
+    onChange(JSON.stringify(updated));
+  };
+
+  const updateDoctorNote = (doctor: string, note: string) => {
+    const updated = selected.map(s => {
+      if (s.doctor === doctor) {
+        return { ...s, note };
+      }
+      return s;
+    });
+    onChange(JSON.stringify(updated));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Choose Multiple Doctors</label>
+        <MultiSelectDropdown
+          options={doctors}
+          value={JSON.stringify(selectedDoctorNames)}
+          onChange={handleDropdownChange}
+          placeholder="Select Doctors..."
+        />
+      </div>
+
+      {selected.length > 0 && (
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">Doctor Treatment Notes</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {selected.map(item => (
+              <div key={item.doctor} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-900/30 flex flex-col gap-2">
+                <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{item.doctor}</span>
+                <textarea
+                  value={item.note}
+                  onChange={e => updateDoctorNote(item.doctor, e.target.value)}
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-300 p-2.5 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  placeholder={`Write treatment instructions/note by ${item.doctor}...`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const DEFAULT_FORM_VALUES = {
+  tokenNumber: "",
+  patientDetails: "",
+  allergies: "No",
+  allergiesDetail: "[]",
+  presentIllness: "",
+  patientPastHistory: "",
+  provisionalDiagnosis: "",
+  symptoms: "[]",
+  diagnosisName: "",
+  labInvestigations: "",
+  screeningImaging: "[]",
+  treatment: "",
+  treatmentDoctors: "[]",
+  remarks: "",
+  instructions: "",
+  followUpDays: "",
+  patientOutcome: "",
+  patientOutcomeNotes: "",
+  disposition: "",
+  referralDetails: "",
+  referralDateTime: "",
+  dutyDoctorName: "",
+  medicalOfficer: "",
+  attenderSignature: "",
+  recordsHandledOverBy: "",
+  consultationAmount: "",
+  prescriptionData: "",
+  prescriptionNotes: "",
+  sended: "",
+};
+
 export default function DoctorConsultationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
@@ -132,21 +463,24 @@ export default function DoctorConsultationPage() {
   const [isIcdSearching, setIsIcdSearching] = useState(false);
   const [showIcdDropdown, setShowIcdDropdown] = useState(false);
   const [symptomOptions, setSymptomOptions] = useState<string[]>([]);
+  const [allergyOptions, setAllergyOptions] = useState<string[]>([]);
 
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
   const [patientType, setPatientType] = useState<PatientType>("OP");
-  const [formValues, setFormValues] = useState<Record<string, string>>({
-    tokenNumber: "",
-    patientDetails: "",
-    diagnosisName: "",
-    symptoms: "",
-    remarks: "",
-    instructions: "",
-    followUpDays: "",
-    consultationAmount: "",
-    prescriptionData: "",
-    sended: "",
-  });
+  const [formValues, setFormValues] = useState<Record<string, string>>(DEFAULT_FORM_VALUES);
+
+  const handleSignatureUpload = (file: File | null) => {
+    if (!file) {
+      updateFormValue("attenderSignature", "");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      updateFormValue("attenderSignature", result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Fetch doctors and auto-select on mount
   useEffect(() => {
@@ -198,6 +532,24 @@ export default function DoctorConsultationPage() {
       }
     }
     void fetchSymptoms();
+  }, [hname]);
+
+  // Fetch allergies on mount
+  useEffect(() => {
+    async function fetchAllergies() {
+      if (!hname) return;
+      try {
+        const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/allergy_master`, { cache: "no-store" });
+        const data = await response.json();
+        const options = (data.rows || [])
+          .map((r: any) => String(r.description || ""))
+          .filter(Boolean);
+        setAllergyOptions(options);
+      } catch (err) {
+        console.error("Failed to load allergies", err);
+      }
+    }
+    void fetchAllergies();
   }, [hname]);
 
   const loadData = async () => {
@@ -345,18 +697,7 @@ export default function DoctorConsultationPage() {
     setDetailTab("Patient Details");
     setEditingRecordId(null);
     setPatientType("OP");
-    setFormValues({
-      tokenNumber: text(row, ["appointment_id"]),
-      patientDetails: patientName(row),
-      diagnosisName: "",
-      symptoms: "",
-      remarks: "",
-      instructions: "",
-      followUpDays: "",
-      consultationAmount: "",
-      prescriptionData: "",
-      sended: "",
-    });
+    setFormValues({ ...DEFAULT_FORM_VALUES, tokenNumber: text(row, ["appointment_id"]), patientDetails: patientName(row) });
     setErrorMessage("");
     setSuccessMessage("");
   };
@@ -373,15 +714,35 @@ export default function DoctorConsultationPage() {
     setDetailTab("Consultation Form");
     setEditingRecordId(row.id);
     setFormValues({
+      ...DEFAULT_FORM_VALUES,
       tokenNumber,
       patientDetails: selectedName,
+      allergies: text(row, ["allergies"]) || "No",
+      allergiesDetail: text(row, ["allergiesDetail", "allergies_detail"]) || "[]",
+      presentIllness: text(row, ["presentIllness", "present_illness"]),
+      patientPastHistory: text(row, ["patientPastHistory", "patient_past_history"]),
+      provisionalDiagnosis: text(row, ["provisionalDiagnosis", "provisional_diagnosis"]),
+      symptoms: text(row, ["symptoms"]) || "[]",
       diagnosisName: text(row, ["diagnosisName", "diagnosis_name"]),
-      symptoms: text(row, ["symptoms"]),
+      labInvestigations: text(row, ["labInvestigations", "lab_investigations"]),
+      screeningImaging: text(row, ["screeningImaging", "screening_imaging"]) || "[]",
+      treatment: text(row, ["treatment"]) || "",
+      treatmentDoctors: text(row, ["treatmentDoctors", "treatment_notes", "treatment_doctors"]) || "[]",
       remarks: text(row, ["remarks"]),
       instructions: text(row, ["instructions"]),
       followUpDays: text(row, ["followUpDays", "follow_up_days"]),
+      patientOutcome: text(row, ["patientOutcome", "patient_outcome"]),
+      patientOutcomeNotes: text(row, ["patientOutcomeNotes", "patient_outcome_notes"]) || "",
+      disposition: text(row, ["disposition"]),
+      referralDetails: text(row, ["referralDetails", "referral_details"]) || "",
+      referralDateTime: text(row, ["referralDateTime", "referral_date_time"]) || "",
+      dutyDoctorName: text(row, ["dutyDoctorName", "duty_doctor_name"]) || "",
+      medicalOfficer: text(row, ["medicalOfficer", "medical_officer"]) || "",
+      attenderSignature: text(row, ["attenderSignature", "attender_signature"]) || "",
+      recordsHandledOverBy: text(row, ["recordsHandledOverBy", "records_handed_over_by"]) || "",
       consultationAmount: text(row, ["consultationAmount", "consultation_amount"]),
       prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
+      prescriptionNotes: text(row, ["prescriptionNotes", "prescription_notes"]) || "",
       sended: text(row, ["sended"]),
     });
     setErrorMessage("");
@@ -397,21 +758,14 @@ export default function DoctorConsultationPage() {
       const payload = {
         id: editingRecordId,
         cardTitle: "Doctor Consultation Entry",
-        fields: [
+        fields: Object.keys(DEFAULT_FORM_VALUES).filter(k => !["tokenNumber", "patientDetails", "sended"].includes(k)).map(k => ({ id: k, type: "text" })).concat([
           { id: "status", type: "text" },
           { id: "doctor", type: "text" },
           { id: "tokenNumber", type: "text" },
           { id: "patientDetails", type: "text" },
-          { id: "diagnosisName", type: "text" },
-          { id: "symptoms", type: "text" },
-          { id: "remarks", type: "textarea" },
-          { id: "instructions", type: "textarea" },
-          { id: "followUpDays", type: "number" },
-          { id: "consultationAmount", type: "number" },
-          { id: "prescriptionData", type: "textarea" },
           { id: "patientType", type: "text" },
           { id: "sended", type: "text" },
-        ],
+        ]),
         values: { ...formValues, status, doctor: selectedDoctor, patientType, sended: finalSended },
       };
 
@@ -424,7 +778,7 @@ export default function DoctorConsultationPage() {
       if (!response.ok) throw new Error(data.error || "Failed to save.");
 
       setSuccessMessage(`Consultation saved as ${status}.`);
-      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", followUpDays: "", consultationAmount: "", prescriptionData: "", sended: "" });
+      setFormValues({ ...DEFAULT_FORM_VALUES });
       setPatientType("OP");
       setEditingRecordId(null);
       void loadData();
@@ -769,118 +1123,374 @@ export default function DoctorConsultationPage() {
 
             {/* Consultation Form tab */}
             {detailTab === "Consultation Form" && (
-              <form className="flex flex-col gap-6" onSubmit={e => e.preventDefault()}>
-                <div className="space-y-4">
-                  {successMessage && <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
-                  {errorMessage && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
+              <form className="flex flex-col gap-8" onSubmit={e => e.preventDefault()}>
+                {successMessage && <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
+                {errorMessage && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
 
-                  {/* Custom native ICD-11 Search Widget */}
-                  <div className="relative">
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">ICD-11 Search</label>
-                    <input
-                      type="text"
-                      value={icdQuery}
-                      onChange={e => setIcdQuery(e.target.value)}
-                      onFocus={() => { if (icdResults.length > 0) setShowIcdDropdown(true); }}
-                      onBlur={() => setTimeout(() => setShowIcdDropdown(false), 200)}
-                      className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-white"
-                      placeholder="Type to search ICD-11 diseases/symptoms (select to auto-fill Diagnosis Name)..."
-                      autoComplete="off"
-                    />
-                    {isIcdSearching && (
-                      <div className="absolute right-3 top-9 text-xs text-brand-500">Searching...</div>
-                    )}
-                    {showIcdDropdown && icdResults.length > 0 && (
-                      <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                        {icdResults.map((res: any) => (
-                          <button
-                            key={res.id}
-                            type="button"
-                            onClick={() => handleIcdSelect(res)}
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                          >
-                            <span className="font-semibold">{res.theCode ? `[${res.theCode}] ` : ""}</span>
-                            <span dangerouslySetInnerHTML={{ __html: res.title }} />
-                          </button>
+                {/* Section 1: Clinical Assessment */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    1. Clinical Assessment
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Allergies</label>
+                      <div className="flex gap-4">
+                        {(["Yes", "No"]).map(opt => (
+                          <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="allergies"
+                              value={opt}
+                              checked={formValues.allergies === opt}
+                              onChange={() => updateFormValue("allergies", opt)}
+                              className="h-4 w-4 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{opt}</span>
+                          </label>
                         ))}
                       </div>
+                    </div>
+                    {formValues.allergies === "Yes" && (
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Specify Allergies</label>
+                        <MultiSelectDropdown
+                          options={allergyOptions}
+                          value={formValues.allergiesDetail}
+                          onChange={val => updateFormValue("allergiesDetail", val)}
+                          placeholder="Select Allergy..."
+                        />
+                      </div>
                     )}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Present Illness</label>
+                      <textarea value={formValues.presentIllness} onChange={e => updateFormValue("presentIllness", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Past History</label>
+                      <textarea value={formValues.patientPastHistory} onChange={e => updateFormValue("patientPastHistory", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient past history..." />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Provisional Diagnosis</label>
+                      <textarea value={formValues.provisionalDiagnosis} onChange={e => updateFormValue("provisionalDiagnosis", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter provisional diagnosis..." />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
+                      <MultiSelectDropdown
+                        options={symptomOptions}
+                        value={formValues.symptoms}
+                        onChange={val => updateFormValue("symptoms", val)}
+                        placeholder="Select Symptoms..."
+                      />
+                    </div>
+                    <div className="relative">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">ICD-11 Search</label>
+                      <input
+                        type="text"
+                        value={icdQuery}
+                        onChange={e => setIcdQuery(e.target.value)}
+                        onFocus={() => { if (icdResults.length > 0) setShowIcdDropdown(true); }}
+                        onBlur={() => setTimeout(() => setShowIcdDropdown(false), 200)}
+                        className="h-10 w-full rounded-lg border border-gray-300 px-3 pr-10 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-white"
+                        placeholder="Type to search ICD-11..."
+                        autoComplete="off"
+                      />
+                      <svg className="absolute right-3 top-9 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      {isIcdSearching && (
+                        <div className="absolute right-3 top-9 text-xs text-brand-500">Searching...</div>
+                      )}
+                      {showIcdDropdown && icdResults.length > 0 && (
+                        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                          {icdResults.map((res: any) => (
+                            <button
+                              key={res.id}
+                              type="button"
+                              onClick={() => handleIcdSelect(res)}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                            >
+                              <span className="font-semibold">{res.theCode ? `[${res.theCode}] ` : ""}</span>
+                              <span dangerouslySetInnerHTML={{ __html: res.title }} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
                       <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Investigations */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    2. Investigations
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
-                      <select
-                        value={formValues.symptoms}
-                        onChange={e => updateFormValue("symptoms", e.target.value)}
-                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                      >
-                        <option value="">Select Symptoms</option>
-                        {symptomOptions.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Lab Investigations</label>
+                      <textarea value={formValues.labInvestigations} onChange={e => updateFormValue("labInvestigations", e.target.value)} rows={4} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter lab tests..." />
                     </div>
                     <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Screening & Imaging</label>
+                      <MultiSelectCheckboxGroup
+                        options={["ECG", "X-Ray", "Screening Echo", "Others"]}
+                        value={formValues.screeningImaging}
+                        onChange={val => updateFormValue("screeningImaging", val)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Treatment */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    3. Treatment
+                  </h3>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">General Treatment Note</label>
+                      <textarea
+                        value={formValues.treatment}
+                        onChange={e => updateFormValue("treatment", e.target.value)}
+                        rows={4}
+                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        placeholder="Enter general treatment instructions..."
+                      />
+                    </div>
+                    <div>
+                      <DoctorTreatmentNoteGroup
+                        doctors={doctorsList.map(d => d.name)}
+                        value={formValues.treatmentDoctors}
+                        onChange={val => updateFormValue("treatmentDoctors", val)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Prescription */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800 flex items-center justify-between">
+                    4. Prescription
+                  </h3>
+                  <div className="space-y-2">
+                    <PrescriptionTable
+                      value={formValues.prescriptionData}
+                      onChange={val => updateFormValue("prescriptionData", val)}
+                      isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
+                      onSendToPharmacy={handleSendToPharmacy}
+                      isSubmitting={isSubmitting}
+                    />
+                    <div className="mt-4">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Prescription Notes / Instructions</label>
+                      <textarea
+                        value={formValues.prescriptionNotes}
+                        onChange={e => updateFormValue("prescriptionNotes", e.target.value)}
+                        rows={3}
+                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        placeholder="Enter additional prescription details or special instructions..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 5: Advice */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    5. Advice
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
-                      <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Instructions</label>
-                      <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
                       <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Category</label>
+                      <div className="flex gap-4">
+                        {(["OP", "IP"] as PatientType[]).map(type => (
+                          <label
+                            key={type}
+                            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 transition-all select-none ${patientType === type
+                              ? type === "OP" ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20" : "border-purple-500 bg-purple-50 dark:border-purple-400 dark:bg-purple-900/20"
+                              : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"}`}
+                          >
+                            <input type="radio" name="patientType" value={type} checked={patientType === type} onChange={() => setPatientType(type)} className="sr-only" />
+                            <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${patientType === type ? (type === "OP" ? "border-blue-500" : "border-purple-500") : "border-gray-400 dark:border-gray-500"}`}>
+                              {patientType === type && <span className={`h-2 w-2 rounded-full ${type === "OP" ? "bg-blue-500" : "bg-purple-500"}`} />}
+                            </span>
+                            <span className={`text-sm font-medium ${patientType === type ? (type === "OP" ? "text-blue-700 dark:text-blue-300" : "text-purple-700 dark:text-purple-300") : "text-gray-600 dark:text-gray-400"}`}>
+                              {type === "OP" ? "OP — Outpatient" : "IP — Inpatient"}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome</label>
+                      <select value={formValues.patientOutcome} onChange={e => updateFormValue("patientOutcome", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                        <option value="">Select Outcome</option>
+                        <option value="Improved">Improved</option>
+                        <option value="Unchanged">Unchanged</option>
+                        <option value="Worsened">Worsened</option>
+                        <option value="Died">Died</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome Notes</label>
+                      <textarea value={formValues.patientOutcomeNotes} onChange={e => updateFormValue("patientOutcomeNotes", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient outcome notes..." />
+                    </div>
                   </div>
-                </div>
-                {/* OP / IP Radio */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Category</label>
-                  <div className="flex gap-4">
-                    {(["OP", "IP"] as PatientType[]).map(type => (
-                      <label
-                        key={type}
-                        className={`flex cursor-pointer items-center gap-2.5 rounded-xl border-2 px-5 py-3 transition-all select-none ${patientType === type
-                          ? type === "OP" ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20" : "border-purple-500 bg-purple-50 dark:border-purple-400 dark:bg-purple-900/20"
-                          : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"}`}
-                      >
-                        <input type="radio" name="patientType" value={type} checked={patientType === type} onChange={() => setPatientType(type)} className="sr-only" />
-                        <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${patientType === type ? (type === "OP" ? "border-blue-500" : "border-purple-500") : "border-gray-400 dark:border-gray-500"}`}>
-                          {patientType === type && <span className={`h-2 w-2 rounded-full ${type === "OP" ? "bg-blue-500" : "bg-purple-500"}`} />}
-                        </span>
-                        <span className={`text-sm font-semibold ${patientType === type ? (type === "OP" ? "text-blue-700 dark:text-blue-300" : "text-purple-700 dark:text-purple-300") : "text-gray-600 dark:text-gray-400"}`}>
-                          {type === "OP" ? "OP — Outpatient" : "IP — Inpatient"}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                {/* Prescription table only in Consultation Form */}
-                <div className="space-y-2">
-                  <PrescriptionTable
-                    value={formValues.prescriptionData}
-                    onChange={val => updateFormValue("prescriptionData", val)}
-                    isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
-                    onSendToPharmacy={handleSendToPharmacy}
-                    isSubmitting={isSubmitting}
-                  />
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-end">
+                {/* Section 6: Disposition */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    6. Disposition
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Disposition</label>
+                      <select value={formValues.disposition} onChange={e => updateFormValue("disposition", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                        <option value="">Select Disposition</option>
+                        <option value="Admission">Admission</option>
+                        <option value="Discharge">Discharge</option>
+                        <option value="LAMA">LAMA</option>
+                        <option value="Transferred / Refer to other hospital">Transferred / Refer to other hospital</option>
+                      </select>
+                    </div>
+
+                    {formValues.disposition === "Transferred / Refer to other hospital" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Referral / Transfer Details</label>
+                          <textarea
+                            value={formValues.referralDetails}
+                            onChange={e => updateFormValue("referralDetails", e.target.value)}
+                            rows={3}
+                            className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            placeholder="Enter hospital name, reason for transfer, or notes..."
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Transfer Date & Time</label>
+                          <input
+                            type="datetime-local"
+                            value={formValues.referralDateTime}
+                            onChange={e => updateFormValue("referralDateTime", e.target.value)}
+                            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+
+                {/* Section 7: Others */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                    7. Others
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Duty Doctor Name (View Only)</label>
+                      <input
+                        type="text"
+                        value={selectedDoctor || formValues.dutyDoctorName || ""}
+                        readOnly
+                        disabled
+                        className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500 cursor-not-allowed dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Medical Officer</label>
+                      <select
+                        value={formValues.medicalOfficer}
+                        onChange={e => updateFormValue("medicalOfficer", e.target.value)}
+                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      >
+                        <option value="">Select Medical Officer</option>
+                        {doctorsList.map(doc => (
+                          <option key={doc.name} value={doc.name}>{doc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Attender Signature</label>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-3">
+                          <label className="flex h-10 flex-1 cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-600 transition hover:border-brand-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                            <span className="truncate text-xs">
+                              {formValues.attenderSignature ? "Signature Uploaded" : "Upload Signature Image..."}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={e => handleSignatureUpload(e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          {formValues.attenderSignature && (
+                            <button
+                              type="button"
+                              onClick={() => updateFormValue("attenderSignature", "")}
+                              className="text-xs font-semibold text-red-500 hover:text-red-700"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {formValues.attenderSignature && (
+                          <div className="relative mt-1 h-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-950 flex items-center justify-center">
+                            <img
+                              src={formValues.attenderSignature}
+                              alt="Attender Signature Preview"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Records Handed Over By</label>
+                      <select
+                        value={formValues.recordsHandledOverBy}
+                        onChange={e => updateFormValue("recordsHandledOverBy", e.target.value)}
+                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      >
+                        <option value="">Select Doctor</option>
+                        {doctorsList.map(doc => (
+                          <option key={doc.name} value={doc.name}>{doc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-end">
                   <button
                     type="button"
                     onClick={() => {
-                      setFormValues({ tokenNumber: "", patientDetails: "", diagnosisName: "", symptoms: "", remarks: "", instructions: "", followUpDays: "", consultationAmount: "", prescriptionData: "" });
+                      setFormValues({ ...DEFAULT_FORM_VALUES });
                       setPatientType("OP");
                       setEditingRecordId(null);
                     }}
-                    className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition shadow-sm"
                   >
                     Cancel
                   </button>
@@ -888,7 +1498,7 @@ export default function DoctorConsultationPage() {
                     type="button"
                     disabled={isSubmitting || !selectedDoctor}
                     onClick={() => saveForm("Draft")}
-                    className="rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50"
+                    className="rounded-lg border border-brand-500 px-5 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 transition shadow-sm dark:hover:bg-brand-900/20"
                     title={!selectedDoctor ? "Please select a doctor first" : "Save as draft"}
                   >
                     {isSubmitting ? "Saving..." : "Save as Draft"}
@@ -897,7 +1507,7 @@ export default function DoctorConsultationPage() {
                     type="button"
                     disabled={isSubmitting || !selectedDoctor}
                     onClick={() => saveForm("Completed")}
-                    className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                    className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition shadow-sm"
                     title={!selectedDoctor ? "Please select a doctor first" : "Save and mark completed"}
                   >
                     {isSubmitting ? "Saving..." : "Save"}
