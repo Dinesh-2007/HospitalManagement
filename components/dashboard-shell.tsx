@@ -22,6 +22,8 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
   const isPatientAppointments = pathname.endsWith("/patient-appointments");
   const isPatientHistory = pathname.endsWith("/patient-history");
   const isPatientRegistrationEdit = pathname.endsWith("/patient-registration") && searchParams?.get("mode") === "edit";
+  const isPatientProfile = pathname.endsWith("/patient-profile");
+  const isPatientBookAppointment = pathname.endsWith("/patient-book-appointment");
 
   const hideNavAndSidebar =
     pathname === "/" ||
@@ -29,11 +31,13 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
     isLoginPage ||
     isPatientLoginPage ||
     isBookAppointment ||
+    isPatientBookAppointment ||
     ispatientDash ||
     isfamily ||
     isCalendarPage ||
     isPatientAppointments ||
     isPatientHistory ||
+    isPatientProfile ||
     isPatientRegistrationEdit;
 
   const mainContentMargin = isMobileOpen

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { PageLayout } from "../../../../components/page-layout";
+import { PatientProfileLayout } from "../../../../components/patient-profile-layout";
 import { CalenderIcon } from "../../../../components/icons";
 import { tableNameFromCardTitle } from "../../../../lib/master-form-table";
 
@@ -593,7 +593,7 @@ export default function AppointmentCalendarPage() {
 
 
   return (
-    <PageLayout title="Appointment Calendar">
+    <PatientProfileLayout activeTab="book" hname={hname}>
       <div className="grid gap-6 xl:grid-cols-1">
         <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
@@ -942,6 +942,6 @@ export default function AppointmentCalendarPage() {
           </div>
         </div>
       )}
-    </PageLayout>
+    </PatientProfileLayout>
   );
 }

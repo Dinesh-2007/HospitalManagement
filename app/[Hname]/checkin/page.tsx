@@ -112,7 +112,7 @@ export default function CheckInPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to check phone number.");
-      
+
       if (data.exists && data.row) {
         // Patient exists!
         setWalkInRegForm({
@@ -131,6 +131,7 @@ export default function CheckInPage() {
           hnNumber: data.row.hn_number || data.row.hnNumber || "",
           profession: data.row.profession || "",
           patientId: data.row.patient_id || "",
+          internalId: data.row.id || "",
         });
         setWalkInStep("consultation");
       } else {
@@ -180,9 +181,10 @@ export default function CheckInPage() {
     setWalkInSubmitting(true);
     try {
       let patientId = walkInRegForm.patientId;
-      
-      // If we are registering a new patient first
-      if (walkInStep === "register" || !patientId) {
+      let internalId = walkInRegForm.internalId;
+
+      // If we are registering a new patient first (only if they don't exist in DB yet)
+      if (walkInStep === "register" || (!patientId && !internalId)) {
         const regRes = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -196,7 +198,7 @@ export default function CheckInPage() {
         if (!regRes.ok) throw new Error(regData.error ?? "Failed to register patient.");
         patientId = regData.row?.patient_id || regData.patientId;
       }
-      
+
       // Now perform walk-in check-in
       const checkInRes = await fetch(`/api/${encodeURIComponent(hname)}/check-in`, {
         method: "POST",
@@ -207,27 +209,27 @@ export default function CheckInPage() {
           department: walkInDept,
           doctor: walkInDoctor,
           isWalkIn: true,
-          patientId: patientId,
+          patientId: patientId || internalId,
           appointmentDate: date,
           appointmentTime: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
         }),
       });
       const checkInData = await checkInRes.json();
       if (!checkInRes.ok) throw new Error(checkInData.error ?? "Failed to perform check-in.");
-      
+
       setCheckInResult({
         patientId: checkInData.patientId || patientId,
         appointmentNumber: checkInData.appointmentNumber ?? "",
         patientName: walkInRegForm.patientName,
       });
-      
+
       setShowWalkInModal(false);
       // Reset state
       setWalkInPhone("");
       setWalkInDept("");
       setWalkInDoctor("");
       setWalkInStep("phone");
-      
+
       await loadPatients();
     } catch (err: any) {
       setWalkInError(err.message);
@@ -308,7 +310,7 @@ export default function CheckInPage() {
         const isDoctorAvailable = (docName: string) => {
           const docSchedules = schedules.filter((s: any) => s.doctorName.trim().toLowerCase() === docName.trim().toLowerCase());
           if (docSchedules.length === 0) return false;
-          
+
           return docSchedules.some((s: any) => {
             if (s.fromDate && s.fromDate !== "undefined" && todayStr < s.fromDate) return false;
             if (s.toDate && s.toDate !== "undefined" && todayStr > s.toDate) return false;
@@ -325,7 +327,7 @@ export default function CheckInPage() {
             isAvailableToday: isDoctorAvailable(name)
           };
         }).filter((r: any) => r.name);
-        
+
         setDoctorsList(docs);
       } catch (err) {
         console.error(err);
@@ -858,17 +860,17 @@ export default function CheckInPage() {
                                 const remaining = checkedIn - walkedOut;
 
                                 return (
-                                  <tr 
-                                    key={d.name} 
+                                  <tr
+                                    key={d.name}
                                     onClick={() => setWalkInDoctor(d.name)}
                                     className={`cursor-pointer hover:bg-brand-50 transition ${walkInDoctor === d.name ? 'bg-brand-50 border-l-2 border-l-brand-500' : ''}`}
                                   >
                                     <td className="px-4 py-3 font-medium text-gray-800">
                                       <div className="flex items-center gap-2">
-                                        <input 
-                                          type="radio" 
-                                          name="walkInDoctor" 
-                                          checked={walkInDoctor === d.name} 
+                                        <input
+                                          type="radio"
+                                          name="walkInDoctor"
+                                          checked={walkInDoctor === d.name}
                                           onChange={() => setWalkInDoctor(d.name)}
                                           className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-gray-300"
                                         />

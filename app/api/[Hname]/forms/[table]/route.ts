@@ -219,10 +219,14 @@ export async function GET(
     // Helps diagnose the “first request 400” race; never leak secrets.
     console.error("[forms GET] failed", {
       error: error instanceof Error
-        ? { name: error.name, message: error.message }
+        ? {
+          name: error.name,
+          message: error.message,
+          // Node 18+ AggregateError exposes `errors` (often the real causes)
+          errors: error instanceof AggregateError ? error.errors : undefined,
+        }
         : String(error),
     });
-
 
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -406,7 +410,11 @@ export async function PUT(
 
     console.error("[forms PUT] failed", {
       error: error instanceof Error
-        ? { name: error.name, message: error.message }
+        ? {
+          name: error.name,
+          message: error.message,
+          errors: error instanceof AggregateError ? error.errors : undefined,
+        }
         : String(error),
     });
 

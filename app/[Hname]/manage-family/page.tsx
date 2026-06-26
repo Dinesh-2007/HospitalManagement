@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
-import { PageLayout } from "../../../components/page-layout";
 import { PatientProfileLayout } from "../../../components/patient-profile-layout";
-import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
 type FamilyFormValues = {
   patientId: string;
@@ -38,33 +36,11 @@ type FamilyFormValues = {
 };
 
 const EMPTY_VALUES: FamilyFormValues = {
-  patientId: "",
-  patientName: "",
-  dob: "",
-  gender: "",
-  address: "",
-  country: "",
-  state: "",
-  city: "",
-  zipCode: "",
-  email: "",
-  phoneOffice: "",
-  phoneResi: "",
-  mobile: "",
-  hnNumber: "",
-  numberOfVisits: "",
-  lastVisitDateTime: "",
-  lastVisitDoctorName: "",
-  profession: "",
-  patientType: "",
-  preferredPaymentType: "",
-  mediclaimPolicyAvailable: "",
-  policyDetails: "",
-  linkedPatientId: "",
-  relationshipShipLinkedPatient: "",
-  activeFrom: "",
-  inactiveFrom: "",
-  inactiveReason: "",
+  patientId: "", patientName: "", dob: "", gender: "", address: "", country: "", state: "", city: "",
+  zipCode: "", email: "", phoneOffice: "", phoneResi: "", mobile: "", hnNumber: "", numberOfVisits: "",
+  lastVisitDateTime: "", lastVisitDoctorName: "", profession: "", patientType: "", preferredPaymentType: "",
+  mediclaimPolicyAvailable: "", policyDetails: "", linkedPatientId: "", relationshipShipLinkedPatient: "",
+  activeFrom: "", inactiveFrom: "", inactiveReason: "",
 };
 
 function fromRow(row: Record<string, unknown>): FamilyFormValues {
@@ -99,6 +75,35 @@ function fromRow(row: Record<string, unknown>): FamilyFormValues {
   };
 }
 
+const RELATIONSHIP_COLORS: Record<string, string> = {
+  Spouse: "bg-pink-100 text-pink-700 border-pink-200",
+  Child: "bg-blue-100 text-blue-700 border-blue-200",
+  Parent: "bg-purple-100 text-purple-700 border-purple-200",
+  Sibling: "bg-amber-100 text-amber-700 border-amber-200",
+  Other: "bg-gray-100 text-gray-700 border-gray-200",
+};
+
+function calculateAge(dob: string) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const diff = Date.now() - birth.getTime();
+  const age = new Date(diff).getUTCFullYear() - 1970;
+  return isFinite(age) && age >= 0 ? age : null;
+}
+
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((n) => n[0]?.toUpperCase() ?? "").join("") || "?";
+}
+
+const AVATAR_GRADIENTS = [
+  "from-pink-400 to-rose-500",
+  "from-violet-400 to-purple-500",
+  "from-blue-400 to-indigo-500",
+  "from-emerald-400 to-teal-500",
+  "from-amber-400 to-orange-500",
+];
+
 export default function HospitalManageFamilyPage() {
   const params = useParams();
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : null;
@@ -109,6 +114,7 @@ export default function HospitalManageFamilyPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [formValues, setFormValues] = useState<FamilyFormValues>(EMPTY_VALUES);
@@ -142,18 +148,7 @@ export default function HospitalManageFamilyPage() {
     }
   };
 
-  const calculateAge = (dob: string) => {
-    if (!dob) return "-";
-    const birth = new Date(dob);
-    if (Number.isNaN(birth.getTime())) return "-";
-    const diff = Date.now() - birth.getTime();
-    const age = new Date(diff).getUTCFullYear() - 1970;
-    return Number.isFinite(age) && age >= 0 ? String(age) : "-";
-  };
-
-  useEffect(() => {
-    void loadFamilyMembers();
-  }, [hname]);
+  useEffect(() => { void loadFamilyMembers(); }, [hname]);
 
   const updateField = (field: keyof FamilyFormValues, value: string) => {
     setFormValues((current) => ({ ...current, [field]: value }));
@@ -201,33 +196,8 @@ export default function HospitalManageFamilyPage() {
           action: editingId ? undefined : "signup",
           phone: formValues.mobile,
           patient: {
-            patientId: formValues.patientId,
-            patientName: formValues.patientName,
-            dob: formValues.dob,
-            gender: formValues.gender,
-            address: formValues.address,
-            country: formValues.country,
-            state: formValues.state,
-            city: formValues.city,
-            zipCode: formValues.zipCode,
-            email: formValues.email,
-            phoneOffice: formValues.phoneOffice,
-            phoneResi: formValues.phoneResi,
-            mobile: formValues.mobile,
-            hnNumber: formValues.hnNumber,
-            numberOfVisits: formValues.numberOfVisits,
-            lastVisitDateTime: formValues.lastVisitDateTime,
-            lastVisitDoctorName: formValues.lastVisitDoctorName,
-            profession: formValues.profession,
-            patientType: formValues.patientType,
-            preferredPaymentType: formValues.preferredPaymentType,
-            mediclaimPolicyAvailable: formValues.mediclaimPolicyAvailable,
-            policyDetails: formValues.policyDetails,
+            ...formValues,
             linkedPatientId: parentPhone || parentName,
-            relationshipShipLinkedPatient: formValues.relationshipShipLinkedPatient,
-            activeFrom: formValues.activeFrom,
-            inactiveFrom: formValues.inactiveFrom,
-            inactiveReason: formValues.inactiveReason,
           },
         }),
       });
@@ -249,6 +219,7 @@ export default function HospitalManageFamilyPage() {
 
   const handleDelete = async (memberId: number) => {
     if (!hname) return;
+    setDeletingId(memberId);
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
         method: "DELETE",
@@ -257,246 +228,347 @@ export default function HospitalManageFamilyPage() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Failed to delete family member.");
-      setMessage("Family member deleted.");
+      setMessage("Family member removed.");
       await loadFamilyMembers();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Failed to delete family member.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
+  const inputCls = "h-11 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 shadow-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+  const labelCls = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400";
+  const selectCls = inputCls;
+  const textareaCls = "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 shadow-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+
   return (
-      <PatientProfileLayout activeTab="family" hname={hname ?? ""}>
-      <section className="min-h-[80vh] rounded-2xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-6 py-5">
-          <h3 className="text-base font-medium text-gray-800">Manage Family member</h3>
-          <p className="mt-1 text-sm text-gray-500">Family members linked to your profile.</p>
+    <PatientProfileLayout activeTab="family" hname={hname ?? ""}>
+      <div className="mx-auto max-w-5xl">
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Family</h2>
+            <p className="mt-1 text-sm text-gray-500">Family members linked to your profile</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setSelectedCountryCode(""); setSelectedStateCode(""); setShowForm(true); }}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-500/30 hover:bg-brand-600 transition-all active:scale-95"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Family Member
+          </button>
         </div>
-        <div className="p-6">
-          <div className="mb-6 flex justify-center">
+
+        {/* Status messages */}
+        {message && (
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {message}
+          </div>
+        )}
+        {error && (
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+            <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {error}
+          </div>
+        )}
+
+        {/* Content */}
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-500" />
+          </div>
+        ) : familyMembers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-gray-300 bg-white/60 py-24 text-center dark:border-gray-700 dark:bg-gray-900/30">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
+              <svg className="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">No family members yet</h3>
+            <p className="mt-2 max-w-xs text-sm text-gray-400">Add your family members to book appointments for them easily.</p>
             <button
               type="button"
-              onClick={() => {
-                setEditingId(null);
-                setFormValues(EMPTY_VALUES);
-                setSelectedCountryCode("");
-                setSelectedStateCode("");
-                setShowForm(true);
-              }}
-              className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600"
+              onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setShowForm(true); }}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
             >
-              Add New Family Member
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add First Member
             </button>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {familyMembers.map((member, index) => {
+              const memberId = Number(member.id ?? index);
+              const name = String(member.patient_name ?? "Unknown");
+              const relationship = String(member.relationship_ship_linked_patient ?? "");
+              const dob = String(member.dob ?? "");
+              const gender = String(member.gender ?? "");
+              const age = calculateAge(dob);
+              const initials = getInitials(name);
+              const gradient = AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length];
+              const relColor = RELATIONSHIP_COLORS[relationship] ?? "bg-gray-100 text-gray-700 border-gray-200";
+              const isDeleting = deletingId === memberId;
 
-          {message ? <p className="mb-4 text-sm text-green-600">{message}</p> : null}
-          {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+              return (
+                <div
+                  key={memberId}
+                  className="group relative overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition-all hover:shadow-lg hover:-translate-y-1 dark:border-gray-800 dark:bg-gray-900"
+                >
+                  {/* Card gradient header */}
+                  <div className={`h-20 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(255,255,255,0.2),transparent_70%)]" />
+                  </div>
 
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading family members...</p>
-          ) : familyMembers.length === 0 ? (
-            <p className="text-sm text-gray-500">No family members added yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Name</th>
-                    <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Relationship</th>
-                    <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Age</th>
-                    <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Gender</th>
-                    <th className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {familyMembers.map((member, index) => {
-                    const memberId = Number(member.id ?? index);
-                    const dob = String(member.dob ?? "");
-                    return (
-                      <tr key={memberId}>
-                        <td className="px-4 py-3 font-medium text-gray-900">{String(member.patient_name ?? "-")}</td>
-                        <td className="px-4 py-3 text-gray-700">{String(member.relationship_ship_linked_patient ?? "-")}</td>
-                        <td className="px-4 py-3 text-gray-700">{calculateAge(dob)}</td>
-                        <td className="px-4 py-3 text-gray-700">{String(member.gender ?? "-")}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(member)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-brand-300 text-brand-600 hover:bg-brand-50"
-                            >
-                              <PencilIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleDelete(memberId)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              <TrashBinIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
+                  {/* Avatar (overlapping) */}
+                  <div className="absolute left-5 top-10">
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${gradient} text-xl font-bold text-white shadow-md ring-4 ring-white dark:ring-gray-900`}>
+                      {initials}
+                    </div>
+                  </div>
 
-      {showForm ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
-          <div className="mx-auto w-full max-w-6xl rounded-2xl bg-white shadow-2xl">
-            <div className="border-b border-gray-100 px-6 py-5">
-              <h3 className="text-base font-medium text-gray-800">{editingId ? "Edit Family Member" : "Add New Family Member"}</h3>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Patient ID</label>
-                  <input value={formValues.patientId} onChange={(e) => updateField("patientId", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Patient Name</label>
-                  <input value={formValues.patientName} onChange={(e) => updateField("patientName", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Date of Birth</label>
-                  <input type="date" value={formValues.dob} onChange={(e) => updateField("dob", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Gender</label>
-                  <select value={formValues.gender} onChange={(e) => updateField("gender", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm">
-                    <option value="">Select Gender</option>
-                    {["Male", "Female", "Others"].map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </div>
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Address</label>
-                  <textarea rows={3} value={formValues.address} onChange={(e) => updateField("address", e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Country</label>
-                  <select value={formValues.country} onChange={(e) => handleCountryChange(e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm">
-                    <option value="">Select Country</option>
-                    {countries.map((country) => <option key={country.isoCode} value={country.name}>{country.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">State</label>
-                  <select value={formValues.state} onChange={(e) => handleStateChange(e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm">
-                    <option value="">Select State</option>
-                    {states.map((state) => <option key={state.isoCode} value={state.name}>{state.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">City</label>
-                  <select value={formValues.city} onChange={(e) => updateField("city", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm">
-                    <option value="">Select City</option>
-                    {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">ZIP Code</label>
-                  <input value={formValues.zipCode} onChange={(e) => updateField("zipCode", e.target.value.replace(/[^0-9]/g, ""))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">eMail</label>
-                  <input type="email" value={formValues.email} onChange={(e) => updateField("email", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone - Office</label>
-                  <input value={formValues.phoneOffice} onChange={(e) => updateField("phoneOffice", e.target.value.replace(/[^0-9]/g, ""))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone - Resi</label>
-                  <input value={formValues.phoneResi} onChange={(e) => updateField("phoneResi", e.target.value.replace(/[^0-9]/g, ""))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Mobile</label>
-                  <input value={formValues.mobile} onChange={(e) => updateField("mobile", e.target.value.replace(/[^0-9]/g, ""))} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">HN Number</label>
-                  <input value={formValues.hnNumber} onChange={(e) => updateField("hnNumber", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Number of Visits till now</label>
-                  <input type="number" min={0} value={formValues.numberOfVisits} onChange={(e) => updateField("numberOfVisits", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Last Visit Date & Time</label>
-                  <input type="datetime-local" value={formValues.lastVisitDateTime} onChange={(e) => updateField("lastVisitDateTime", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Last visit doctor name</label>
-                  <input value={formValues.lastVisitDoctorName} onChange={(e) => updateField("lastVisitDoctorName", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Profession</label>
-                  <input value={formValues.profession} onChange={(e) => updateField("profession", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Patient Type</label>
-                  <input value={formValues.patientType} onChange={(e) => updateField("patientType", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Preferred Payment Type</label>
-                  <input value={formValues.preferredPaymentType} onChange={(e) => updateField("preferredPaymentType", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Mediclaim Policy Available</label>
-                  <input value={formValues.mediclaimPolicyAvailable} onChange={(e) => updateField("mediclaimPolicyAvailable", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Policy Details</label>
-                  <textarea rows={3} value={formValues.policyDetails} onChange={(e) => updateField("policyDetails", e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Linked Patient Id</label>
-                  <input value={formValues.linkedPatientId} readOnly className="h-11 w-full rounded-lg border border-gray-300 bg-gray-50 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relationship</label>
-                  <select value={formValues.relationshipShipLinkedPatient} onChange={(e) => updateField("relationshipShipLinkedPatient", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm">
-                    <option value="">Select Relationship</option>
-                    {["Spouse", "Child", "Parent", "Sibling", "Other"].map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Active From</label>
-                  <input type="datetime-local" value={formValues.activeFrom} onChange={(e) => updateField("activeFrom", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Inactive From</label>
-                  <input type="datetime-local" value={formValues.inactiveFrom} onChange={(e) => updateField("inactiveFrom", e.target.value)} className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
-                </div>
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Inactive Reason</label>
-                  <textarea rows={3} value={formValues.inactiveReason} onChange={(e) => updateField("inactiveReason", e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm" />
-                </div>
-              </div>
+                  {/* Actions */}
+                  <div className="absolute right-4 top-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(member)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-600 shadow hover:bg-white hover:text-brand-600 transition"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.035H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(memberId)}
+                      disabled={isDeleting}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-600 shadow hover:bg-white hover:text-rose-600 transition disabled:opacity-50"
+                    >
+                      {isDeleting ? (
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-rose-200 border-t-rose-500" />
+                      ) : (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+                  {/* Card body */}
+                  <div className="px-5 pb-5 pt-12">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white">{name}</h3>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {relationship && (
+                          <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${relColor}`}>
+                            {relationship}
+                          </span>
+                        )}
+                        {gender && (
+                          <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                            {gender}
+                          </span>
+                        )}
+                        {age !== null && (
+                          <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                            {age} yrs
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mobile */}
+                    {String(member.mobile ?? "") && (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        {String(member.mobile)}
+                      </div>
+                    )}
+
+                    {/* Edit/Delete row (always visible on mobile) */}
+                    <div className="mt-4 flex gap-2 sm:hidden">
+                      <button type="button" onClick={() => openEdit(member)} className="flex-1 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition">
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => void handleDelete(memberId)} disabled={isDeleting} className="flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50">
+                        {isDeleting ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal Form */}
+      {showForm && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 pt-8">
+          <div className="relative mx-auto w-full max-w-4xl rounded-3xl bg-white shadow-2xl dark:bg-gray-900 overflow-hidden">
+            {/* Modal Header */}
+            <div className="relative overflow-hidden px-8 py-6 bg-gradient-to-br from-brand-500 to-indigo-600">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.15),transparent_70%)]" />
+              <div className="relative flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white">{editingId ? "Edit Family Member" : "Add New Family Member"}</h3>
+                  <p className="mt-0.5 text-sm text-brand-100/80">Fill in the details below</p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingId(null);
-                  }}
-                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700"
+                  onClick={() => { setShowForm(false); setEditingId(null); }}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 transition"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Form Body */}
+            <div className="p-8 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { key: "patientName", label: "Patient Name", type: "text" },
+                  { key: "dob", label: "Date of Birth", type: "date" },
+                  { key: "mobile", label: "Mobile", type: "tel" },
+                  { key: "email", label: "Email", type: "email" },
+                  { key: "hnNumber", label: "HN Number", type: "text" },
+                  { key: "profession", label: "Profession", type: "text" },
+                  { key: "phoneOffice", label: "Phone - Office", type: "tel" },
+                  { key: "phoneResi", label: "Phone - Resi", type: "tel" },
+                ].map(({ key, label, type }) => (
+                  <div key={key}>
+                    <label className={labelCls}>{label}</label>
+                    <input
+                      type={type}
+                      value={formValues[key as keyof FamilyFormValues]}
+                      onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
+
+                {/* Gender */}
+                <div>
+                  <label className={labelCls}>Gender</label>
+                  <select value={formValues.gender} onChange={(e) => updateField("gender", e.target.value)} className={selectCls}>
+                    <option value="">Select Gender</option>
+                    {["Male", "Female", "Others"].map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+
+                {/* Relationship */}
+                <div>
+                  <label className={labelCls}>Relationship</label>
+                  <select value={formValues.relationshipShipLinkedPatient} onChange={(e) => updateField("relationshipShipLinkedPatient", e.target.value)} className={selectCls}>
+                    <option value="">Select Relationship</option>
+                    {["Spouse", "Child", "Parent", "Sibling", "Other"].map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+
+                {/* Country */}
+                <div>
+                  <label className={labelCls}>Country</label>
+                  <select value={formValues.country} onChange={(e) => handleCountryChange(e.target.value)} className={selectCls}>
+                    <option value="">Select Country</option>
+                    {countries.map((c) => <option key={c.isoCode} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                {/* State */}
+                <div>
+                  <label className={labelCls}>State</label>
+                  <select value={formValues.state} onChange={(e) => handleStateChange(e.target.value)} className={selectCls}>
+                    <option value="">Select State</option>
+                    {states.map((s) => <option key={s.isoCode} value={s.name}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                {/* City */}
+                <div>
+                  <label className={labelCls}>City</label>
+                  <select value={formValues.city} onChange={(e) => updateField("city", e.target.value)} className={selectCls}>
+                    <option value="">Select City</option>
+                    {cities.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                {/* ZIP */}
+                <div>
+                  <label className={labelCls}>ZIP Code</label>
+                  <input value={formValues.zipCode} onChange={(e) => updateField("zipCode", e.target.value.replace(/[^0-9]/g, ""))} className={inputCls} />
+                </div>
+
+                {/* Address full width */}
+                <div className="md:col-span-2 lg:col-span-3">
+                  <label className={labelCls}>Address</label>
+                  <textarea rows={2} value={formValues.address} onChange={(e) => updateField("address", e.target.value)} className={textareaCls} />
+                </div>
+
+                {/* Payment & insurance row */}
+                <div>
+                  <label className={labelCls}>Preferred Payment</label>
+                  <select value={formValues.preferredPaymentType} onChange={(e) => updateField("preferredPaymentType", e.target.value)} className={selectCls}>
+                    <option value="">Select</option>
+                    {["Cash", "Card"].map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Mediclaim Policy</label>
+                  <select value={formValues.mediclaimPolicyAvailable} onChange={(e) => updateField("mediclaimPolicyAvailable", e.target.value)} className={selectCls}>
+                    <option value="">Select</option>
+                    {["Yes", "No"].map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+
+                {formValues.mediclaimPolicyAvailable === "Yes" && (
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <label className={labelCls}>Policy Details</label>
+                    <textarea rows={2} value={formValues.policyDetails} onChange={(e) => updateField("policyDetails", e.target.value)} className={textareaCls} />
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>
+              )}
+
+              {/* Actions */}
+              <div className="mt-8 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowForm(false); setEditingId(null); }}
+                  className="rounded-xl border border-gray-200 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
                 >
                   Cancel
                 </button>
-                <button type="button" onClick={() => void handleSave()} disabled={saving} className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white">
-                  {saving ? "Saving..." : editingId ? "Update" : "Save"}
+                <button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                  className="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-brand-600 transition disabled:opacity-60"
+                >
+                  {saving ? "Saving…" : editingId ? "Update Member" : "Add Member"}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      ) : null}
-      </PatientProfileLayout>
+      )}
+    </PatientProfileLayout>
   );
 }
