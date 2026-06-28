@@ -17,6 +17,8 @@ const pool =
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 5432,
+    // why: Neon/Postgres may warn about insecure connections unless TLS/SSL is enforced.
+    // Controlled by .env so local DB can run with SSL=false.
     ssl: process.env.SSL === "true",
   });
 
@@ -64,6 +66,8 @@ export async function getTenantDB(hospitalName: string): Promise<Pool> {
     database: safeDbName,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 5432,
+    // why: Neon/Postgres may warn about insecure connections unless TLS/SSL is enforced.
+    // Controlled by .env so local DB can run with SSL=false.
     ssl: process.env.SSL === "true",
   });
 
