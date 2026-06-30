@@ -112,6 +112,8 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS appointment_number INTEGER`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS patient_type TEXT NOT NULL DEFAULT 'scheduled'`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS appointment_id_display TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS queue_id TEXT`);
 }
 
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
@@ -217,6 +219,8 @@ export async function GET(
                 a.reschedule_count,
                 a.check_in_time AS appointment_check_in_time,
                 a.appointment_number,
+                a.appointment_id_display,
+                a.queue_id,
                 p.id AS registration_id,
                 p.patient_id AS registration_patient_id,
                 p.patient_name AS registration_patient_name,
@@ -306,6 +310,8 @@ export async function GET(
             a.reschedule_count,
             a.check_in_time AS appointment_check_in_time,
             a.appointment_number,
+            a.appointment_id_display,
+            a.queue_id,
             p.id AS registration_id,
             p.patient_id AS registration_patient_id,
             p.patient_name AS registration_patient_name,

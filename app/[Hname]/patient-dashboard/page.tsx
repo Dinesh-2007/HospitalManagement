@@ -13,6 +13,7 @@ type AppointmentRow = {
   department?: string | null;
   doctor?: string | null;
   status?: string | null;
+  appointment_id_display?: string | null;
 };
 
 function formatDate(d?: string | null) {
@@ -289,6 +290,11 @@ export default function PatientDashboardPage() {
                       <p className="truncate font-semibold text-gray-900 dark:text-white text-sm">{appt.doctor ?? "Doctor"}</p>
                       <p className="text-xs text-gray-500">{appt.department ?? "General"}</p>
                     </div>
+                    {appt.appointment_id_display && (
+                      <div className="flex-shrink-0 text-right">
+                        <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-indigo-600">{appt.appointment_id_display}</span>
+                      </div>
+                    )}
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs font-medium text-gray-700">{formatDate(appt.appointment_date)}</p>
                       <p className="text-[11px] text-gray-400">{formatTime(appt.appointment_time)}</p>
@@ -361,6 +367,11 @@ export default function PatientDashboardPage() {
               <div className="px-5 py-4">
                 <p className="text-lg font-bold text-gray-900">{upcomingAppointments[0].doctor ?? "Doctor"}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{upcomingAppointments[0].department ?? "General"}</p>
+                {upcomingAppointments[0].appointment_id_display && (
+                  <div className="mt-2">
+                    <span className="inline-block rounded-md bg-emerald-100 px-2.5 py-1 font-mono text-xs font-semibold text-emerald-700">{upcomingAppointments[0].appointment_id_display}</span>
+                  </div>
+                )}
                 <div className="mt-3 flex items-center gap-2 text-sm font-medium text-emerald-700">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

@@ -45,7 +45,7 @@ export default function CheckInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkingIn, setCheckingIn] = useState<string | number | null>(null);
-  const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; patientName: string } | null>(null);
+  const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; queueId: string; patientName: string } | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
 
   // Walk-in modal state variables
@@ -220,6 +220,7 @@ export default function CheckInPage() {
       setCheckInResult({
         patientId: checkInData.patientId || patientId,
         appointmentNumber: checkInData.appointmentNumber ?? "",
+        queueId: checkInData.queueId ?? "",
         patientName: walkInRegForm.patientName,
       });
 
@@ -397,7 +398,7 @@ export default function CheckInPage() {
         }),
       });
 
-      const data = await res.json() as { error?: string; patientId?: string; appointmentNumber?: string; patientName?: string };
+      const data = await res.json() as { error?: string; patientId?: string; appointmentNumber?: string; queueId?: string; patientName?: string };
 
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to check-in.");
@@ -407,6 +408,7 @@ export default function CheckInPage() {
         setCheckInResult({
           patientId: data.patientId,
           appointmentNumber: data.appointmentNumber ?? "",
+          queueId: data.queueId ?? "",
           patientName: data.patientName ?? patientName,
         });
       }
@@ -486,6 +488,7 @@ export default function CheckInPage() {
                 {" "}{checkInResult.patientName && <span>Patient: <span className="font-medium">{checkInResult.patientName}</span> — </span>}
                 Patient ID: <span className="font-mono font-semibold">{checkInResult.patientId}</span>
                 {checkInResult.appointmentNumber && <> &nbsp;·&nbsp; Appt. No.: <span className="font-mono font-semibold">{checkInResult.appointmentNumber}</span></>}
+                {checkInResult.queueId && <> &nbsp;·&nbsp; Queue ID: <span className="font-mono font-semibold">{checkInResult.queueId}</span></>}
               </div>
               <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
             </div>
@@ -498,6 +501,7 @@ export default function CheckInPage() {
                   <th className="px-4 py-3 text-left">Patient</th>
                   <th className="px-4 py-3 text-left">Patient ID</th>
                   <th className="px-4 py-3 text-left">Appt. No.</th>
+                  <th className="px-4 py-3 text-left">Queue ID</th>
                   <th className="px-4 py-3 text-left">Doctor</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Date</th>
@@ -508,9 +512,9 @@ export default function CheckInPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={9}>Loading...</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>Loading...</td></tr>
                 ) : filteredRows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={9}>No scheduled patients found.</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>No scheduled patients found.</td></tr>
                 ) : filteredRows.map((row) => {
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
                   const isCheckedIn = !!row.appointment_check_in_time;
@@ -518,7 +522,9 @@ export default function CheckInPage() {
                   const isRowCheckingIn = checkingIn === rowId;
                   const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
                   const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
-                  const appointmentNum = row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-";
+                  const pType = text(row, ["patient_type"]) || "scheduled";
+                  const appointmentIdDisplay = pType === "walk-in" ? "-" : (text(row, ["appointment_id_display"]) || (row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-"));
+                  const queueIdDisplay = text(row, ["queue_id"]) || "-";
 
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
@@ -531,7 +537,10 @@ export default function CheckInPage() {
                           : <span className="text-xs text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-gray-600">{appointmentNum}</span>
+                        <span className="font-mono text-xs text-gray-600">{appointmentIdDisplay}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-indigo-600">{queueIdDisplay}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
                       <td className="px-4 py-3 text-gray-600 capitalize">

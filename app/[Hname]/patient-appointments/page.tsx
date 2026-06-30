@@ -22,6 +22,7 @@ type AppointmentRow = {
   transferred_to_doctor?: string | null;
   transferred_at?: string | null;
   created_at?: string | null;
+  appointment_id_display?: string | null;
 };
 
 type FamilyMember = {
@@ -42,6 +43,7 @@ type DisplayRow = {
   displayStatus: string;
   reschedule_count: number | null;
   patient_name: string | null;
+  appointment_id_display: string | null;
   isTransferred?: boolean;
 };
 
@@ -102,6 +104,7 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
       displayStatus: scheduledStatusLabel,
       reschedule_count: a.reschedule_count ?? null,
       patient_name: pname,
+      appointment_id_display: a.appointment_id_display ?? null,
     });
 
     // 2. Reschedule History Rows (if any exist on the backend)
@@ -121,6 +124,7 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
         displayStatus: `Transferred → ${a.doctor}`,
         reschedule_count: null,
         patient_name: pname,
+        appointment_id_display: a.appointment_id_display ?? null,
         isTransferred: true,
       });
     }
@@ -138,6 +142,7 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
         displayStatus: "Cancelled",
         reschedule_count: a.reschedule_count ?? null,
         patient_name: pname,
+        appointment_id_display: a.appointment_id_display ?? null,
       });
     }
   }
@@ -484,6 +489,7 @@ export default function HospitalPatientAppointmentsPage() {
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-800">
                       <th className="pb-4 pr-6 font-semibold text-gray-500 uppercase tracking-wider text-xs dark:text-gray-400">Patient</th>
+                      <th className="pb-4 pr-6 font-semibold text-gray-500 uppercase tracking-wider text-xs dark:text-gray-400">Appt. ID</th>
                       <th className="pb-4 pr-6 font-semibold text-gray-500 uppercase tracking-wider text-xs dark:text-gray-400">Date</th>
                       <th className="pb-4 pr-6 font-semibold text-gray-500 uppercase tracking-wider text-xs dark:text-gray-400">Time</th>
                       <th className="pb-4 pr-6 font-semibold text-gray-500 uppercase tracking-wider text-xs dark:text-gray-400">Department</th>
@@ -535,6 +541,11 @@ export default function HospitalPatientAppointmentsPage() {
                                   : "–"}
                               </span>
                             </span>
+                          </td>
+                          <td className="py-4 pr-6">
+                            {row.appointment_id_display
+                              ? <span className="font-mono text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-md px-2 py-0.5">{row.appointment_id_display}</span>
+                              : <span className="text-xs text-gray-400">—</span>}
                           </td>
                           <td className="py-4 pr-6 font-medium text-gray-900 dark:text-white whitespace-nowrap">
                             {formatDate(row.appointment_date)}
