@@ -258,6 +258,8 @@ async function ensureAppointmentsTable(pool: Pool | PoolClient) {
     ["cancelled_at", "TIMESTAMPTZ"],
     ["check_in_time", "TIMESTAMPTZ"],
     ["appointment_number", "INTEGER"],
+    ["appointment_id_display", "TEXT"],
+    ["queue_id", "TEXT"],
   ];
 
   for (const [column, type] of columns) {
@@ -677,6 +679,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
   }
 }
 
+/** Generate a display Appointment ID in format APT-YYYYMMDD-XXXX using a daily running number */
+async function generateAppointmentDisplayId(pool: Pool | PoolClient, targetDate: string): Promise<{ displayId: string; seq: number }> {
+  const dateCompact = targetDate.replace(/-/g, ""); // e.g. "20260629"
+  const result = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND appointment_id_display IS NOT NULL`,
+    [targetDate],
+  );
+  const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
+  return { displayId: `APT-${dateCompact}-${String(seq).padStart(4, "0")}`, seq };
+}
+
+/** Generate a Queue ID in format QUE-YYYYMMDD-XXXX using a daily running number */
+async function generateQueueId(pool: Pool | PoolClient, targetDate: string): Promise<string> {
+  const dateCompact = targetDate.replace(/-/g, ""); // e.g. "20260629"
+  const result = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND queue_id IS NOT NULL`,
+    [targetDate],
+  );
+  const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
+  return `QUE-${dateCompact}-${String(seq).padStart(4, "0")}`;
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ Hname: string }> }) {
   try {
     const { Hname } = await params;
@@ -715,13 +739,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ Hna
       return NextResponse.json({ error: "This appointment time is already booked." }, { status: 409 });
     }
 
+    // Generate Appointment Display ID (APT-YYYYMMDD-XXXX) at booking time
+    // Queue ID is generated later at check-in time only
+    const { displayId: appointmentIdDisplay } = await generateAppointmentDisplayId(pool, appointmentDate);
+
     const inserted = await pool.query<AppointmentRow>(
       `
         INSERT INTO ${quoteIdentifier(TABLE_NAME)} (
           appointment_date, appointment_day, department, doctor, patient_name, patient_id,
-          patient_phone, appointment_time, appointment_end_time, time_slot_minutes, patient_type, reason
+          patient_phone, appointment_time, appointment_end_time, time_slot_minutes, patient_type, reason,
+          appointment_id_display
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         RETURNING *
       `,
       [
@@ -737,6 +766,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ Hna
         Number.isFinite(timeSlotMinutes) && timeSlotMinutes > 0 ? timeSlotMinutes : null,
         "scheduled",
         reason || null,
+        appointmentIdDisplay,
       ],
     );
 

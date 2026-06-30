@@ -25,6 +25,28 @@ async function generateAppointmentNumber(pool: Awaited<ReturnType<typeof getTena
   return (Number(result.rows[0]?.max_num) || 0) + 1;
 }
 
+/** Generate a display Appointment ID in format APT-YYYYMMDD-XXXX using a daily running number */
+async function generateAppointmentDisplayId(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<string> {
+  const dateCompact = targetDate.replace(/-/g, "");
+  const result = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND appointment_id_display IS NOT NULL`,
+    [targetDate],
+  );
+  const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
+  return `APT-${dateCompact}-${String(seq).padStart(4, "0")}`;
+}
+
+/** Generate a Queue ID in format QUE-YYYYMMDD-XXXX using a daily running number */
+async function generateQueueId(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<string> {
+  const dateCompact = targetDate.replace(/-/g, "");
+  const result = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND queue_id IS NOT NULL`,
+    [targetDate],
+  );
+  const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
+  return `QUE-${dateCompact}-${String(seq).padStart(4, "0")}`;
+}
+
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ${quoteIdentifier(PATIENTS_TABLE)} (
@@ -81,7 +103,7 @@ export async function POST(
     const body = await request.json();
     const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId, appointmentDate, appointmentTime } = body;
 
-    // Ensure the appointments table has check_in_time column
+    // Ensure the appointments table has required columns
     await pool.query(`
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMPTZ
@@ -90,6 +112,16 @@ export async function POST(
     await pool.query(`
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS appointment_number INTEGER
+    `);
+
+    await pool.query(`
+      ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+      ADD COLUMN IF NOT EXISTS appointment_id_display TEXT
+    `);
+
+    await pool.query(`
+      ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+      ADD COLUMN IF NOT EXISTS queue_id TEXT
     `);
 
     await ensurePatientTable(pool);
@@ -149,7 +181,8 @@ export async function POST(
       const dayName = new Date(today).toLocaleDateString("en-US", { weekday: "long" });
       const currentTime = appointmentTime || new Date().toTimeString().split(" ")[0];
       
-      const nextAppointmentNumber = await generateAppointmentNumber(pool, today);
+      // Walk-in patients do NOT get an Appointment ID or Appt Number — only a Queue ID
+      const queueIdValue = await generateQueueId(pool, today);
 
       const apptResult = await pool.query(
         `
@@ -165,9 +198,10 @@ export async function POST(
             patient_type,
             check_in_time,
             appointment_number,
+            queue_id,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, 'Scheduled')
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NULL, $10, 'Scheduled')
           RETURNING id
         `,
         [
@@ -180,7 +214,7 @@ export async function POST(
           patientPhone || null,
           currentTime,
           "walk-in",
-          nextAppointmentNumber
+          queueIdValue
         ]
       );
 
@@ -189,7 +223,8 @@ export async function POST(
         success: true,
         patientId: resolvedPatientId,
         appointmentId: apptId,
-        appointmentNumber: `APT-${String(nextAppointmentNumber).padStart(4, "0")}`,
+        appointmentNumber: "",
+        queueId: queueIdValue,
       });
     }
 
@@ -203,13 +238,13 @@ export async function POST(
 
     const today = appointmentDate || new Date().toISOString().split("T")[0];
 
-    type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null };
+    type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null; appointment_id_display: string | null; queue_id: string | null };
     // If we have the direct appointment ID, use it
     let apptRecord: ApptRecordType | null = null;
 
     if (bodyAppointmentId) {
       const directResult = await pool.query(
-        `SELECT id, patient_id, patient_name, patient_phone, appointment_number FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
+        `SELECT id, patient_id, patient_name, patient_phone, appointment_number, appointment_id_display, queue_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
         [bodyAppointmentId]
       );
       if ((directResult.rowCount ?? 0) > 0) {
@@ -220,7 +255,7 @@ export async function POST(
     // Fall back to search by name/doctor/department
     if (!apptRecord) {
       let query = `
-        SELECT id, patient_id, patient_name, patient_phone, appointment_number
+        SELECT id, patient_id, patient_name, patient_phone, appointment_number, appointment_id_display, queue_id
         FROM ${quoteIdentifier(TABLE_NAME)}
         WHERE LOWER(patient_name) = LOWER($1)
           AND appointment_date = $2
@@ -248,10 +283,18 @@ export async function POST(
         apptNum = await generateAppointmentNumber(pool, today);
       }
 
-      // Mark check_in_time
+      // Generate appointment_id_display if missing (for backward compat with older appointments)
+      let apptIdDisplay = apptRecord.appointment_id_display;
+      if (!apptIdDisplay) {
+        apptIdDisplay = await generateAppointmentDisplayId(pool, today);
+      }
+      // Queue ID is always generated fresh at check-in time (represents check-in queue order)
+      const queueIdValue = await generateQueueId(pool, today);
+
+      // Mark check_in_time and update IDs
       await pool.query(
-        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, updated_at = NOW() WHERE id = $2`,
-        [apptNum, apptRecord.id]
+        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, appointment_id_display = $3, queue_id = $4, updated_at = NOW() WHERE id = $2`,
+        [apptNum, apptRecord.id, apptIdDisplay, queueIdValue]
       );
 
       // Resolve Patient ID — check if already has one
@@ -310,7 +353,8 @@ export async function POST(
       return NextResponse.json({
         type: "scheduled",
         appointmentId: apptRecord.id,
-        appointmentNumber: `APT-${String(apptNum).padStart(4, "0")}`,
+        appointmentNumber: apptIdDisplay,
+        queueId: queueIdValue,
         patientId: resolvedPatientId,
         patientName: apptRecord.patient_name,
       });
