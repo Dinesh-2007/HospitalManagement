@@ -242,83 +242,218 @@ function MultiSelectDropdown({
   );
 }
 
-function MultiSelectCheckboxGroup({ options, value, onChange }: { options: string[], value: string, onChange: (val: string) => void }) {
-  let selected: { name: string, notes: string }[] = [];
+interface ScreeningImagingRow {
+  name: string;
+  notes: string;
+  fileName?: string;
+  fileData?: string;
+}
+
+function ScreeningImagingTable({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  let rows: ScreeningImagingRow[] = [];
   try {
     const parsed = value ? JSON.parse(value) : [];
     if (Array.isArray(parsed)) {
-      selected = parsed.map((item: any) => {
+      rows = parsed.map((item: any): ScreeningImagingRow | null => {
         if (typeof item === "string") {
-          return { name: item, notes: "" };
-        } else if (item && typeof item === "object" && item.name) {
-          return { name: item.name, notes: item.notes || "" };
+          return { name: item, notes: "", fileName: "", fileData: "" };
+        } else if (item && typeof item === "object") {
+          return {
+            name: String(item.name || item.type || ""),
+            notes: String(item.notes || ""),
+            fileName: item.fileName ? String(item.fileName) : "",
+            fileData: item.fileData ? String(item.fileData) : ""
+          };
         }
         return null;
-      }).filter((item): item is { name: string, notes: string } => item !== null);
+      }).filter((item): item is ScreeningImagingRow => item !== null);
     }
   } catch {
-    selected = [];
+    rows = [];
   }
 
-  const toggle = (opt: string) => {
-    const isSelected = selected.some(item => item.name === opt);
-    if (isSelected) {
-      const updated = selected.filter(item => item.name !== opt);
-      onChange(JSON.stringify(updated));
-    } else {
-      const updated = [...selected, { name: opt, notes: "" }];
-      onChange(JSON.stringify(updated));
-    }
+  const handleAddRow = () => {
+    const newRows = [...rows, { name: "ECG", notes: "", fileName: "", fileData: "" }];
+    onChange(JSON.stringify(newRows));
   };
 
-  const updateNotes = (opt: string, notes: string) => {
-    const updated = selected.map(item => {
-      if (item.name === opt) {
-        return { ...item, notes };
+  const handleRemoveRow = (index: number) => {
+    const newRows = rows.filter((_, idx) => idx !== index);
+    onChange(JSON.stringify(newRows));
+  };
+
+  const handleUpdateRow = (index: number, field: keyof ScreeningImagingRow, val: string) => {
+    const newRows = rows.map((row, idx) => {
+      if (idx === index) {
+        return { ...row, [field]: val };
       }
-      return item;
+      return row;
     });
-    onChange(JSON.stringify(updated));
+    onChange(JSON.stringify(newRows));
+  };
+
+  const handleFileUpload = (index: number, file: File | null) => {
+    if (!file) {
+      handleUpdateRow(index, "fileName", "");
+      handleUpdateRow(index, "fileData", "");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const newRows = rows.map((row, idx) => {
+        if (idx === index) {
+          return { ...row, fileName: file.name, fileData: result };
+        }
+        return row;
+      });
+      onChange(JSON.stringify(newRows));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    const newRows = rows.map((row, idx) => {
+      if (idx === index) {
+        return { ...row, fileName: "", fileData: "" };
+      }
+      return row;
+    });
+    onChange(JSON.stringify(newRows));
   };
 
   return (
-    <div className="space-y-3 mt-2">
-      <div className="flex flex-wrap gap-4">
-        {options.map(opt => {
-          const isChecked = selected.some(item => item.name === opt);
-          return (
-            <label key={opt} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isChecked}
-                onChange={() => toggle(opt)}
-                className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:checked:bg-brand-500"
-              />
-              {opt}
-            </label>
-          );
-        })}
+    <div className="space-y-4 mt-2">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+          <thead className="bg-gray-50 dark:bg-gray-800/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-16">#</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-52">Document Type</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Findings / Details</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-72">Document Attachment</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300 w-24">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  No screening or imaging documents added yet. Click "+ Add Document Row" to begin.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, index) => (
+                <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">
+                    {index + 1}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1.5">
+                      <select
+                        value={["ECG", "X-Ray", "Screening Echo"].includes(row.name) ? row.name : "Others"}
+                        onChange={e => {
+                          const val = e.target.value;
+                          handleUpdateRow(index, "name", val === "Others" ? "" : val);
+                        }}
+                        className="h-9 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      >
+                        <option value="ECG">ECG</option>
+                        <option value="X-Ray">X-Ray</option>
+                        <option value="Screening Echo">Screening Echo</option>
+                        <option value="Others">Others</option>
+                      </select>
+                      {!["ECG", "X-Ray", "Screening Echo"].includes(row.name) && (
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={e => handleUpdateRow(index, "name", e.target.value)}
+                          placeholder="Specify document name..."
+                          className="h-8 w-full rounded-md border border-gray-300 px-2.5 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <textarea
+                      value={row.notes}
+                      onChange={e => handleUpdateRow(index, "notes", e.target.value)}
+                      placeholder="Enter findings, observations, or details..."
+                      rows={2}
+                      className="w-full rounded-lg border border-gray-300 p-2.5 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.fileName ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate max-w-[200px]" title={row.fileName}>
+                          📎 {row.fileName}
+                        </span>
+                        <div className="flex gap-2">
+                          <a
+                            href={row.fileData}
+                            download={row.fileName}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+                          >
+                            Download/View
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFile(index)}
+                            className="text-[11px] font-semibold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Remove File
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border border-dashed border-gray-300 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/50">
+                        <svg className="mr-1.5 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Upload Document
+                        <input
+                          type="file"
+                          className="sr-only"
+                          onChange={e => handleFileUpload(index, e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRow(index)}
+                      className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition"
+                      title="Remove Row"
+                    >
+                      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
-
-      {/* Show text inputs for checked options */}
-      <div className="space-y-2 mt-3">
-        {options.map(opt => {
-          const matched = selected.find(item => item.name === opt);
-          if (!matched) return null;
-          return (
-            <div key={opt} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-gray-50 dark:bg-gray-800/40 p-2.5 rounded-lg border border-gray-150 dark:border-gray-800">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 w-28 shrink-0">{opt}:</span>
-              <input
-                type="text"
-                value={matched.notes}
-                onChange={e => updateNotes(opt, e.target.value)}
-                placeholder={`Enter details/findings for ${opt}...`}
-                className="h-8 flex-1 rounded-md border border-gray-300 px-3 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
-            </div>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        onClick={handleAddRow}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-900/40 dark:bg-brand-950/20 dark:text-brand-300 dark:hover:bg-brand-950/40 transition"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Add Document Row
+      </button>
     </div>
   );
 }
@@ -1229,15 +1364,14 @@ export default function DoctorConsultationPage() {
                   <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
                     2. Investigations
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-6">
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Lab Investigations</label>
-                      <textarea value={formValues.labInvestigations} onChange={e => updateFormValue("labInvestigations", e.target.value)} rows={4} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter lab tests..." />
+                      <textarea value={formValues.labInvestigations} onChange={e => updateFormValue("labInvestigations", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter lab tests..." />
                     </div>
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Screening & Imaging</label>
-                      <MultiSelectCheckboxGroup
-                        options={["ECG", "X-Ray", "Screening Echo", "Others"]}
+                      <ScreeningImagingTable
                         value={formValues.screeningImaging}
                         onChange={val => updateFormValue("screeningImaging", val)}
                       />

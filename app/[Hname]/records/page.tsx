@@ -26,6 +26,8 @@ type ConsultationRow = {
     hasPharmacy: boolean;
     createdAt: string;
     updatedAt: string;
+    labInvestigations?: string;
+    screeningImaging?: string;
 };
 type DoctorMasterRow = { name: string; department: string };
 type VitalsRow = Record<string, string | number | null>;
@@ -80,6 +82,8 @@ function normalizeRow(row: RawRow): ConsultationRow {
         consultationAmount: text(row, ["consultationAmount", "consultation_amount"]),
         patientType: text(row, ["patientType", "patient_type"]),
         prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
+        labInvestigations: text(row, ["labInvestigations", "lab_investigations"]),
+        screeningImaging: text(row, ["screeningImaging", "screening_imaging"]) || "[]",
         vitals: row.vitals_id ? {
             age: row.age as string | number | null,
             height_cm: row.height_cm as string | number | null,
@@ -384,6 +388,90 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                                 <InfoField label="Remarks" value={row.remarks} />
                                             </div>
                                         </div>
+
+                                        {/* Investigations Section */}
+                                        {(row.labInvestigations || (row.screeningImaging && row.screeningImaging !== "[]")) && (
+                                            <div className="rounded-xl border border-gray-150 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-900/30 space-y-4">
+                                                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 pb-2 dark:border-gray-850">Investigations</h4>
+                                                
+                                                {row.labInvestigations && (
+                                                    <div className="space-y-1">
+                                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Investigations</span>
+                                                        <div className="rounded-lg bg-white p-3 text-sm text-gray-700 border border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 whitespace-pre-wrap">
+                                                            {row.labInvestigations}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {row.screeningImaging && row.screeningImaging !== "[]" && (() => {
+                                                    const imgRows = (() => {
+                                                        try {
+                                                            const parsed = JSON.parse(row.screeningImaging || "[]");
+                                                            if (Array.isArray(parsed)) {
+                                                                const mapped = parsed.map((item: any): { name: string; notes: string; fileName?: string; fileData?: string } | null => {
+                                                                    if (typeof item === "string") {
+                                                                        return { name: item, notes: "", fileName: "", fileData: "" };
+                                                                    } else if (item && typeof item === "object") {
+                                                                        return {
+                                                                            name: String(item.name || item.type || ""),
+                                                                            notes: String(item.notes || ""),
+                                                                            fileName: item.fileName ? String(item.fileName) : "",
+                                                                            fileData: item.fileData ? String(item.fileData) : ""
+                                                                        };
+                                                                    }
+                                                                    return null;
+                                                                });
+                                                                return mapped.filter((item): item is { name: string; notes: string; fileName?: string; fileData?: string } => item !== null);
+                                                            }
+                                                        } catch {}
+                                                        return [];
+                                                    })();
+
+                                                    if (imgRows.length === 0) return null;
+
+                                                    return (
+                                                        <div className="space-y-2">
+                                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">Screening & Imaging Documents</span>
+                                                            <div className="overflow-x-auto rounded-lg border border-gray-250 bg-white dark:border-gray-800 dark:bg-gray-900">
+                                                                <table className="min-w-full divide-y divide-gray-250 text-xs text-left">
+                                                                    <thead className="bg-gray-50 dark:bg-gray-800/40">
+                                                                        <tr>
+                                                                            <th className="px-4 py-2.5 font-semibold text-gray-600 dark:text-gray-400 w-12">#</th>
+                                                                            <th className="px-4 py-2.5 font-semibold text-gray-600 dark:text-gray-400 w-40">Document Type</th>
+                                                                            <th className="px-4 py-2.5 font-semibold text-gray-600 dark:text-gray-400">Findings / Details</th>
+                                                                            <th className="px-4 py-2.5 font-semibold text-gray-600 dark:text-gray-400 w-48">Attachment</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                                                                        {imgRows.map((img, idx) => (
+                                                                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
+                                                                                <td className="px-4 py-2.5 font-medium text-gray-450">{idx + 1}</td>
+                                                                                <td className="px-4 py-2.5 font-semibold text-gray-700 dark:text-gray-200">{img.name}</td>
+                                                                                <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{img.notes || "-"}</td>
+                                                                                <td className="px-4 py-2.5 text-gray-600 dark:text-gray-350">
+                                                                                    {img.fileName ? (
+                                                                                        <a
+                                                                                            href={img.fileData}
+                                                                                            download={img.fileName}
+                                                                                            className="inline-flex items-center gap-1 font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+                                                                                        >
+                                                                                            📎 {img.fileName} (Download)
+                                                                                        </a>
+                                                                                    ) : (
+                                                                                        <span className="text-gray-400 italic">No document uploaded</span>
+                                                                                    )}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+
                                         <div>
                                             <h4 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Prescription</h4>
                                             <PrescriptionView data={row.prescriptionData} />
