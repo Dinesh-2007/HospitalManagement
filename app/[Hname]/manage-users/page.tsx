@@ -294,7 +294,7 @@ export default function ManageUsersPage() {
                               >
                                 <PencilIcon className="h-4 w-4" />
                               </button>
-                              {user.username !== "admin" ? (
+                              {user.role?.toLowerCase() !== "admin" ? (
                                 <button
                                   type="button"
                                   onClick={() => void deleteUser(user.id)}

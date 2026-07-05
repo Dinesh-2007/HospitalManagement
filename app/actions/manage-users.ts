@@ -25,7 +25,18 @@ async function ensureUsersTable(hname: string) {
 export async function checkIsAdmin(hname: string) {
   const cookieStore = await cookies();
   const authCookie = cookieStore.get(`auth_${hname.replace(/[^a-zA-Z0-9]/g, '_')}`);
-  return authCookie?.value === "admin";
+  if (!authCookie?.value) return false;
+
+  const pool = await getTenantDB(hname);
+  try {
+    const res = await pool.query(
+      "SELECT role FROM users WHERE username = $1 LIMIT 1",
+      [authCookie.value]
+    );
+    return res.rows[0]?.role?.toLowerCase() === "admin";
+  } catch (error) {
+    return false;
+  }
 }
 
 export async function fetchUsers(hname: string) {
@@ -70,9 +81,9 @@ export async function removeUser(hname: string, formData: FormData) {
   if (isNaN(id)) throw new Error("Invalid id");
   
   const pool = await ensureUsersTable(hname);
-  const userRes = await pool.query("SELECT username FROM users WHERE id = $1", [id]);
-  if (userRes.rows[0]?.username === "admin") {
-    throw new Error("Cannot remove root admin");
+  const userRes = await pool.query("SELECT username, role FROM users WHERE id = $1", [id]);
+  if (userRes.rows[0]?.role?.toLowerCase() === "admin") {
+    throw new Error("Cannot remove admin user");
   }
   
   await pool.query("DELETE FROM users WHERE id = $1", [id]);

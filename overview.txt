@@ -1,0 +1,382 @@
+Hospital Management System (Next.js) — High-level project understanding
+
+This repository contains a multi-tenant Hospital Management web app (Next.js App Router) organized by tenant name under:
+  app/[Hname]/...
+
+It includes separate modules for:
+- Patient workflows (login/registration, dashboard, appointments, check-in, records, vitals, history)
+- Doctor/scheduling and consultation workflows (doctor schedule, doctor consultation/prescription)
+- Operational workflows (queue management for OP/IP, check-in)
+- Administrative management (manage users, manage family, department/doctor-related master data)
+- “Masters” / configuration data management (numerous master tables grouped by category)
+- Pharmacy and inventory workflows (pharmacy dispensing + pharmacy/inventory masters)
+- Pricing and discount configuration
+- Billing (billing section exists in repo)
+
+Core components / modules (by route folders)
+1) Booking / Appointments / Calendar
+- app/[Hname]/book-appointment/
+  - Purpose: patient booking flow entry; lets a (logged-in) patient choose department + doctor, shows doctor details, and then redirects to slot selection.
+  - Key “fields” / state used in the page:
+    - Department selection: `selectedDepartment`
+    - Doctor selection: `selectedDoctor`, `selectedDoctorOption`
+    - Doctor details popup: `isDoctorPopupOpen`, `doctorDetails`, `selectedDoctorSchedule`
+    - Patient identity + optional booking-for-family:
+      - logged-in/local identity: `authenticatedPatient` (`id`, `name`, `phone`)
+      - choose booking target: `bookingFor` (`id`, `name`, `phone`, `relationship`) + `showFamilyDropdown`
+    - Scheduling + confirmation UI:
+      - schedule loading: `scheduleRows`, `scheduleRows` normalized into `ScheduleSummary` (`doctorName`, `daysAvailable`, `availableTimeFrom`, `availableTimeTo`, `timeSlotMinutes`)
+      - active appointments preview: `activeAppointments`, `selectedPreviewAppointment`
+      - modals: `showBookConfirmation`, `showCancelConfirm`, `showRescheduleConfirm`
+  - Key functions:
+    - `fetchMasterRows(hname, tableName)`: loads master rows from `/api/[hname]/forms/[table]`
+    - Normalizers to map master/form rows into app-friendly shapes:
+      - `normalizeDoctor(row)` → `DoctorOption`
+      - `normalizeSchedule(row)` → `ScheduleSummary`
+      - `normalizeDoctorProfile(row)` → `DoctorProfile` (includes nested `education`, `workExperiences`, `certifications`)
+      - `calculateAge(dateOfBirth)`
+    - Doctor profile loading:
+      - `openDoctorPopup(doctor: DoctorOption)` fetches `/api/[hname]/doctor-profile?doctorId/doctorCode/doctorName...`
+    - Booking navigation:
+      - `directBookDoctor(doctor)` / `executeBooking()` build query params:
+        - `department`, `doctor`, `patientId`, `patientName`, `patientPhone`
+        - then routes to `/${hname}/book-appointment/calendar?...`
+    - Appointment actions for existing appointments:
+      - `loadActiveAppointments()` calls `/api/[hname]/appointments?patientId=...` and filters scheduled/non-expired rows
+      - `handleCancelAppointment(appt)` sends `DELETE /api/[hname]/appointments` with JSON body including `appointmentId`, `patientId`, `department`, `doctor`, and `cancelledByRole/cancelledByName`
+      - `handleRescheduleAppointment(appt)` pre-fills `selectedDepartment/selectedDoctor` and scrolls to the doctor selection area
+- app/[Hname]/book-appointment/calendar/
+  - Purpose: renders a weekly calendar for a chosen `department` + `doctor` and books/reschedules/cancels a slot.
+  - Inputs (route + query params):
+    - `department`, `doctor`, `patientId` from `useSearchParams()`
+  - Key “fields” / state used:
+    - Scheduling + selection:
+      - `scheduleRows` → normalized into `ScheduleRow` (`appointmentFromDate`, `appointmentToDate`, `availableTimeFrom`, `availableTimeTo`, `daysAvailable`, `consultantDoctorName`, `timeSlotMinutes`)
+      - `appointmentRows` (all appointments for selected date/doctor) + `bookedSlots` / `currentPatientBookedSlots`
+      - selection: `selectedWeekStart`, `selectedDate`, `selectedHour`, `selectedSlot`
+      - reschedule mode: `isRescheduling` + `patientAppointment` + `currentAppointmentId`
+    - Patient + UI feedback:
+      - `patient` (`id`, `patient_name`, `mobile`)
+      - confirmation: `confirmDialog` (`type: "book" | "reschedule" | "cancel"`)
+      - messages: `message`, `errorMessage`, `dialogMessage`, `successData` (doctor/department/date/slot)
+  - Key functions:
+    - Data loaders:
+      - `loadRows(hname, url)` generic fetch wrapper for `/api/[hname]/...`
+      - `loadSchedule()` fetches schedule master rows from `/api/[hname]/forms/${SCHEDULE_TABLE}`
+      - `loadPatientAppointments()` loads `/appointments?patientId=...&department=...&doctor=...`
+      - `load appointments by date` (when `selectedDate` changes) via `/appointments?date=YYYY-MM-DD&department=...&doctor=...`
+      - reschedule/cancel helpers:
+        - `bookSlot()` calls `POST /api/[hname]/appointments` (or `PUT` when rescheduling) with JSON including:
+          - `appointmentId`, `appointmentDate`, `appointmentDay`, `department`, `doctor`, `patientId`, `patientName`, `patientPhone`, `appointmentTime`, `timeSlotMinutes`
+        - `cancelAppointment()` calls `DELETE /api/[hname]/appointments` with JSON body including:
+          - `appointmentId`, `patientId`, `department`, `doctor`, `cancelledByRole`, `cancelledByName`
+        - `handleRescheduleClick()` switches `isRescheduling=true` and positions `selectedDate` based on `patientAppointment.appointment_date`
+    - Calendar/time-slot building:
+      - `buildWeek()`, `toKey()/parseKey()` for dates (YYYY-MM-DD)
+      - `buildHourBlocks(fromTime, toTime)` and `buildSubSlots(fromTime, toTime, step)` create selectable slot ranges
+      - `availableHours` derives free blocks from `selectedDaySchedules`
+      - `bookedSlots` & `currentPatientBookedSlots` prevent collisions while allowing rescheduling of the current appointment
+- app/[Hname]/patient-book-appointment/
+  - Purpose: patient booking-related UI entry (separate route from “book-appointment”).
+- app/[Hname]/patient-appointments/
+  - Purpose: list of a patient’s appointments (used as a navigation target from the calendar UI).
+  - (This is the “where patient views their appointment list” counterpart to the calendar booking/rescheduling flow.)
+
+2) Doctor schedule / Consultation
+- app/[Hname]/doctor-schedule/
+  - Purpose: configure/manage doctor availability windows that the booking calendar uses.
+  - Data expected by the booking calendar (via the Schedule Master/form):
+    - fields used by the calendar logic:
+      - `appointment_from_date` / `appointment_to_date`
+      - `available_time_from` / `available_time_to`
+      - `days_available` (or `daysAvailable`) which maps to `daysAvailable: string[]`
+      - `consultant_doctor_name` (or `consultantDoctorName`) matched against the `doctor` query param
+      - `time_slot_minutes` (defaults to 10 in the booking flow if missing/invalid)
+  - Typical “master” linkage:
+    - Schedule items correspond to a doctor name in the calendar’s selection (`doctor-consultation` / `doctor-profile` uses doctor identifiers too).
+- app/[Hname]/doctor-consultation/
+  - Purpose: doctor-facing consultation screen; appointment context is usually tied to patient + doctor schedule.
+  - Includes “prescription-related UI”:
+    - The folder also contains `prescription-table.tsx` (used to display/manipulate prescription rows inside consultation flow).
+  - Doctor profile / identity details used across booking + consultation:
+    - Doctor identifiers and profile fields come from the doctor profile API and doctor master/form rows, including:
+      - `doctor_id`, `doctor_code`, names (`firstName/lastName` variants), `gender`
+      - `department`, `specialization`, `qualification`
+      - `profile_photo`/`profilePhoto`
+      - contact: `mobile_number`, `email_id`
+      - license/admin fields: `registration_number`, `license_number`, `employee_type`, `shift`
+      - clinical background shown in UI: education (MBBS + higher qualification) and arrays for `workExperiences[]` and `certifications[]`
+
+3) Check-in / Records / Patient clinical data
+- app/[Hname]/checkin/
+  - Purpose: staff “Check-in Portal” to view scheduled patients and mark them checked-in; also supports “Walk-in” multi-step registration + check-in.
+  - Key “fields” / state:
+    - Date selection: `date` (+ `dateInputRef`)
+    - UI filtering: `searchQuery`, `selectedDepartment`, `selectedDoctor`
+    - Listing data: `rows` (VitalsRow), `loading`, `error`
+    - Check-in action: `checkingIn` (appointment row id), `checkInResult` (`patientId`, `appointmentNumber`, `queueId`, `patientName`)
+    - Walk-in modal (3 steps):
+      - step: `walkInStep` = `"phone" | "register" | "consultation"`
+      - lookup: `walkInPhone`, `walkInSubmitting`, `walkInError`
+      - registration form object: `walkInRegForm` with patient fields (name, dob, gender, address, country/state/city, zipCode, email, office/resi/mobile, `hnNumber`, `profession`, `patientType`)
+      - assignment: `walkInDept`, `walkInDoctor`
+  - Key functions / handlers:
+    - `loadPatients()` builds vitals listing by calling `buildVitalsUrl(date, "all")` → `/api/[Hname]/vitals?...`
+    - `loadOptions()` loads masters used by the UI:
+      - department: `/api/[Hname]/forms/department_master`
+      - doctors: `/api/[Hname]/forms/consultant_doctor_master`
+      - schedule: `/api/[Hname]/forms/consultant_doctor_schedule`
+      - then computes “available today” using schedule date range + `days_available` matching current day name.
+    - `handleCheckIn(row: VitalsRow)`:
+      - derives `patientName`, `patientPhone`, `department`, `doctor`, `appointmentId`
+      - POSTs to `/api/[Hname]/check-in` with payload:
+        - `patientName`, `patientPhone`, `department`, `doctor`, `appointmentId`, `appointmentDate`
+      - stores result in `checkInResult`, then refreshes listing via `loadPatients()`.
+    - Walk-in flow:
+      - `handlePhoneSubmit()`:
+        - POST `/api/[Hname]/patient-auth` with `{ action: "signin", phone }`
+        - if exists → populates `walkInRegForm` and moves to `"consultation"`; else moves to `"register"`.
+      - `handleRegisterNext()` validates `walkInRegForm.patientName`, then moves to `"consultation"`.
+      - `handleWalkInCheckIn()`:
+        - if needed, POST `/api/[Hname]/patient-auth` `{ action: "signup", phone, patient }`
+        - then POST `/api/[Hname]/check-in` with:
+          - walk-in flags: `isWalkIn: true`
+          - patient assignment: `patientId` + `department/doctor`
+          - timing: `appointmentDate` and `appointmentTime` (localized time string)
+        - stores `checkInResult` (patientId/queueId etc.)
+- app/api/[Hname]/check-in/
+  - Purpose: creates/updates appointment rows and patient_registration rows, and generates patient/appointment/queue identifiers used by check-in + walk-in.
+  - Key server behaviors / generated identifiers:
+    - Ensures/creates `appointments` columns on demand:
+      - `check_in_time`, `appointment_number`, `appointment_id_display`, `queue_id`
+    - Ensures `patient_registration` table via `ensurePatientTable()`, including:
+      - `patient_id` (unique), `mobile`, `dob` and other profile fields
+    - Identifier generators:
+      - `generatePatientId()` → `PID-<4-digit-seq>`
+      - `generateAppointmentNumber(targetDate)` → daily appointment running number
+      - `generateAppointmentDisplayId(targetDate)` → `APT-YYYYMMDD-XXXX`
+      - `generateQueueId(targetDate)` → `QUE-YYYYMMDD-XXXX`
+  - Main request flow in `POST`:
+    - Walk-in branch (`isWalkIn`):
+      - creates/resolves patient_registration by mobile/phone matching + ensures `patient_id`
+      - creates an appointments row with:
+        - `appointment_type: "walk-in"`
+        - does NOT generate Appointment ID/appointment number (only `queue_id`)
+    - Scheduled check-in branch:
+      - resolves appointment record either by:
+        - direct `appointmentId` (if provided), else by
+        - matching `patientName + appointment_date + doctor + department` (+ optional phone) and status in `('Scheduled','Rescheduled')`
+      - if appointment_number/id_display missing → generates them
+      - always generates a fresh `queue_id`
+      - updates appointment row:
+        - sets `check_in_time = NOW()`, `appointment_number`, `appointment_id_display`, `queue_id`
+      - ensures patient_registration exists, back-fills `patient_id` on appointments if missing
+      - responds with: `type: "scheduled"`, `appointmentId`, `appointmentNumber`, `queueId`, `patientId`, `patientName`
+- app/[Hname]/records/
+  - Purpose: admin “Hospital Records” view combining consultation status + patient vitals + prescription + pharmacy + history, with a modal detail panel.
+  - Listing + navigation:
+    - Role gate: `getCurrentUserRole(hname)` → admin only
+    - view modes: `viewMode` = `"patients" | "visits"`
+    - pagination: `page`, `pageSize`, `totalCount`
+    - selects a patient → calls `loadVisits(patientName)` via `/api/[Hname]/patient-records?patientName=...`
+  - Key fields in consultation row mapping (`normalizeRow`):
+    - consultation: `id`, `status`, `doctor`, `department`, `tokenNumber`, `patientDetails`, `diagnosisName`, `symptoms`, `remarks`, `followUpDays`, `consultationAmount`, `patientType`, `prescriptionData`
+    - vitals: nested `vitals` object (age, height_cm, weight_kg, bmi, temperature, pulse_rate, respiratory_rate, systolic_bp/diastolic_bp, spo2, blood_sugar, remarks)
+    - pharmacy: `hasPharmacy` boolean
+  - Detail modal (`DetailPanel`):
+    - tabs: `DETAIL_TABS` = `"Patient Details" | "Vitals" | "Consultation Form" | "Pharmacy" | "History"`
+    - on open: `fetchDetails()` loads:
+      - history via `/api/[Hname]/appointments?patientId=...` (by patientIdentifier)
+      - pharmacy dispensing via `/forms/pharmacy_dispensing?token_number=appointmentId`
+    - consultation tab renders prescription JSON:
+      - `PrescriptionView` parses `prescriptionData` as array of items with `medicine`, `dosage`, `frequency`, `duration`, `instructions`
+- app/api/[Hname]/patient-records/
+  - Purpose: provides:
+    - patient list with summary fields for admin listing (`patient_name`, `patient_phone`, `total_visits`, `last_visit`, `department`, `status`)
+    - visit/consultation details for a given patient name
+  - Query params supported:
+    - `page`, `pageSize`, `doctor`, `department`, `search`
+    - `patientName` for “visits for a patient” mode
+  - In patientName mode:
+    - JOINs `appointments a` with `doctor_consultation_entry c`
+    - also joins `vitals v` (field-level vitals) and checks pharmacy existence:
+      - `EXISTS(SELECT 1 FROM pharmacy_dispensing ph WHERE ph.token_number = a.id::text) as has_pharmacy`
+- app/[Hname]/patient-profile/
+- app/[Hname]/patient-vitals/
+- app/[Hname]/patient-history/
+  - Purpose: patient-facing views for personal info and clinical data; used as complement to admin records and check-in/consultation workflow.
+
+4) Queue management
+- app/[Hname]/queue-management/out-patient/
+  - Purpose: OPD queue table showing outpatient consultations tracked by status and “exit” (completed/discharged).
+  - Key behaviors:
+    - Loads rows from `/api/[Hname]/forms/doctor_consultation_entry`
+    - Filters to OP:
+      - patient type `patientType/patient_type` equals `"OP"` (treats empty as OP by default)
+    - Client-side filtering:
+      - `search` matches patientDetails/patient_details, tokenNumber/token_number, doctor
+      - `statusFilter` matches `status` when not `"All"`
+    - Displays:
+      - token, patientDetails, doctor, diagnosisName/diagnosis_name, OP badge
+      - status / exit:
+        - `status === "Completed"` → “Exited Hospital”
+        - else → “In Progress”
+  - Fields used in UI mapping: `token_number/tokenNumber`, `patient_details/patientDetails`, `diagnosis_name/diagnosisName`, `status`, `doctor`, `updated_at/created_at`.
+- app/[Hname]/queue-management/in-patient/
+  - Purpose: IPD queue table showing inpatient consultations tracked by status and discharge.
+  - Key behaviors:
+    - Loads from same form endpoint `/api/[Hname]/forms/doctor_consultation_entry`
+    - Filters to IP:
+      - `patientType/patient_type` equals `"IP"`
+    - Client-side filtering: `search` + `statusFilter` same approach as OP
+    - Displays:
+      - status / discharge:
+        - `status === "Completed"` → “Discharged”
+        - else → “Admitted”
+  - Fields used similarly: `tokenNumber/token_number`, `patientDetails/patient_details`, `diagnosisName/diagnosis_name`, `status`, `doctor`, `updated_at/created_at`.
+- queue-management/pharmacist-screen/
+  - Present in repository structure (route folder exists), representing the pharmacy-side queue/operations screen used after/alongside consultation flows.
+
+5) Pharmacy / Dispensing / Inventory
+- app/[Hname]/pharmacy-dispensing/
+  - Purpose: pharmacy workflow to “dispense” prescriptions, record received quantities + amounts, and maintain a history/bills view.
+  - Main UI state / views:
+    - `activeView`: `"records" | "form" | "bills" | "add-dispense" | "dispense-history"`
+    - loading + feedback: `isLoadingRecords`, `isLoadingBills`, `submitMessage`, `submitError`
+  - Two dispensing modes:
+    - **Consultation-based dispensing**
+      - select a row from “Consultation Records” (`consultationRecords`)
+      - open dispensing form with prefilled patient/token and medicine lines parsed from `prescription_data` / `prescription_lines`
+    - **Pharmacy-only dispensing**
+      - add dispense by mobile lookup (and “new patient” entry if not found)
+      - medicines entered manually; saved record is tagged as **Pharmacy Only** in patient history (via server-side tag/field)
+  - Key derived/parsed helpers:
+    - `parsePrescriptionLines(value)` parses `prescription_*` JSON into medicine rows (`medicineName`, `prescribedQty`, etc.)
+    - medicine row amount auto-calculation uses a **pricing map**:
+      - `pricingMap` loaded from `GET /api/[Hname]/forms/pricing`
+      - on `receivedQty` / `medicineName` changes → computes `medicineAmount = sellingPrice * receivedQty`
+  - Key data loaders (client-side):
+    - Consultation records:
+      - `GET /api/[Hname]/forms/doctor_consultation_entry`
+      - filters to `r.sended === "Yes"`
+    - Bills/history:
+      - `GET /api/[Hname]/forms/pharmacy_dispensing`
+    - Pricing map:
+      - `GET /api/[Hname]/forms/pricing`
+    - Add Dispense phone lookup:
+      - `GET /api/[Hname]/dispense?phone=...` (UI calls this endpoint during “customer lookup”)
+      - returns whether patient exists, patient info, and (optionally) prior dispensing history
+  - Form submit flows:
+    - **Consultation-based submit** (`handleConsultationSubmit`)
+      - `POST /api/[Hname]/forms/pharmacy_dispensing`
+      - sends `fields: DISPENSING_FIELDS` and `values`:
+        - `tokenNumber`, `patientName`, `paymentStatus`, `billingAmount`
+        - `medicineLines: JSON.stringify(medicineRows)`
+    - **Pharmacy-only submit** (`handlePharmacyOnlySubmit`)
+      - `POST /api/[Hname]/dispense`
+      - sends `patientName`, `patientPhone`, `patientDob`, `paymentStatus`, `billingAmount`
+      - `medicineLines` as JSON
+      - server responds with created row (including `token_number`) so UI can display token on success
+  - Inventory masters / reference data:
+    - Pharmacy inventory master data is managed under the **masters** area (folder-based categories), e.g.:
+      - `masters/pharmacy-inventory-masters/*` (hospital, item category/master/uom, manufacturer, warehouse, service, medicine usage, etc.)
+    - Those masters feed selection/reference data used in pharmacy & inventory screens.
+
+6) Pricing / Discount schema
+- app/[Hname]/pricing/
+  - Purpose: create/update pricing for multiple products and compute row-wise selling prices using base cost, margin, and tax.
+  - Key UI inputs / state:
+    - effective dates: `effectiveDate`, `expiresAt`
+    - `marginType`: `"percentage"` or `"amount"`
+    - pricing rows: `pricingRows[]` with `baseCost`, `marginValue`, `taxPercent` (plus computed preview amounts)
+  - Product selection:
+    - loads item master rows via `GET /api/[Hname]/forms/item_master_medicine`
+    - provides a selection modal where rows are chosen by item code/name/category/uom (dynamic columns, filtered for modal)
+  - Pricing preview math:
+    - `calculateAmounts()` computes:
+      - `marginAmount`, `unitPrice`, `taxAmount`, `landedPrice`, `sellingPrice`
+  - Persist / save:
+    - per checked row: `POST /api/[Hname]/forms/pricing` with `fields: PRICING_FIELDS`
+    - sends computed fields (`marginAmount`, `taxAmount`, `unitPrice`, `landedPrice`, `sellingPrice`) + dates
+    - after save: reload saved pricing records via `GET /api/[Hname]/forms/pricing`
+
+- app/[Hname]/discount-schema/
+  - Purpose: create discount rules (type/value/priority/validity) and assign them to product variants.
+  - UI inputs:
+    - `name`, `description`
+    - `discountType`: `"Percentage" | "Flat" | "Buy One Get One"`
+    - `value`, `priority`, `couponCode`
+    - validity dates: `startDate`, `endDate`
+  - Variant selection:
+    - variant assignment is handled through a “Select Variants” dialog
+    - UI tracks `selectedVariantIds` and displays selected variants in a table
+    - In current component code, variant data comes from `availableVariants` within the component (mock-style/static data) and is used to drive selection UI.
+  - Implementation support:
+    - `components/discount-schema-page.tsx` provides the discount creation UI; tenant route `app/[Hname]/discount-schema/page.tsx` wraps it.
+
+7) Administration
+- app/[Hname]/manage-users/
+  - Purpose: admin/operator management entry to maintain application users and access (role-based).
+- app/[Hname]/masters/
+  - Purpose: master/configuration management UI for many admin-configured datasets (refer to the “Masters (what’s inside)” section below).
+- app/[Hname]/patient-dashboard/ + manage-family link
+  - `manage-family` is presented as part of the **patient’s dashboard** (not a separate standalone admin-only area).
+  - app/[Hname]/manage-family/
+    - Purpose: manage patient family members / booking targets that can be selected from patient booking flows.
+
+Masters (what’s inside)
+Masters are organized under:
+  app/[Hname]/masters/...
+and there are multiple master “groups” represented by folder names. The following master categories are present:
+
+A) Accounts / Finance masters
+- account-type
+- bank-master
+- credit-card-type-master
+- currency
+- ledger-master
+- ledger-type
+- pay-mode
+- payment-terms
+- reason
+- sub-ledger-master
+
+B) Administrative / General masters
+- holiday-master
+- holiday-type
+- medical-certificate
+- reason
+
+C) Clinical masters
+- allergy
+- disease
+- medicine-usage
+- patient-details
+- patient-type
+- symptoms
+
+D) Consultant doctor management masters
+- consultant-doctor
+- consultant-doctor-schedule
+- department-master
+
+E) Lab / Hospital facility masters
+- bed
+- equipment-master
+- lab
+- medicine-usage
+- operation-theater
+- room-master
+- room-type
+- ward
+
+F) Pharmacy inventory masters
+- hospital-master
+- item-category
+- item-master
+- item-uom
+- manufacturer
+- medical-certificate
+- medicine-usage
+- service
+- warehouse-master

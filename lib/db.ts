@@ -9,7 +9,27 @@ declare global {
   var __tenantPools: Record<string, Pool> | undefined;
 }
 
-const pool =
+function wrapPoolQuery(p: Pool): Pool {
+  const originalQuery = p.query.bind(p);
+  p.query = async function (text: any, params?: any) {
+    try {
+      return await originalQuery(text, params);
+    } catch (error: any) {
+      // Check if it's a unique constraint violation on pg_type (or table already exists)
+      const isPgTypeUniqueViolation =
+        (error?.code === "23505" || error?.code === "42710") &&
+        (error?.message?.includes("pg_type") || error?.message?.includes("already exists"));
+      if (isPgTypeUniqueViolation) {
+        console.warn("Caught and ignored duplicate relation/pg_type violation:", error.message);
+        return { rows: [], rowCount: 0, command: "", oid: 0, fields: [] } as any;
+      }
+      throw error;
+    }
+  } as any;
+  return p;
+}
+
+const pool = wrapPoolQuery(
   globalThis.__hsmsPool ??
   new Pool({
     user: process.env.DB_USER,
@@ -20,7 +40,8 @@ const pool =
     // why: Neon/Postgres may warn about insecure connections unless TLS/SSL is enforced.
     // Controlled by .env so local DB can run with SSL=false.
     ssl: process.env.SSL === "true",
-  });
+  })
+);
 
 const tenantPools = globalThis.__tenantPools ?? {};
 
@@ -60,7 +81,7 @@ export async function getTenantDB(hospitalName: string): Promise<Pool> {
   }
 
   // Create a new pool for this db
-  const newPool = new Pool({
+  const newPool = wrapPoolQuery(new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
     database: safeDbName,
@@ -69,7 +90,7 @@ export async function getTenantDB(hospitalName: string): Promise<Pool> {
     // why: Neon/Postgres may warn about insecure connections unless TLS/SSL is enforced.
     // Controlled by .env so local DB can run with SSL=false.
     ssl: process.env.SSL === "true",
-  });
+  }));
 
   tenantPools[safeDbName] = newPool;
   return newPool;

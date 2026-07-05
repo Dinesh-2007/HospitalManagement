@@ -1,29 +1,52 @@
 "use server";
 
-import { createTenantDbIfNotExists, getTenantDB } from "../../lib/db";
+import pool, { createTenantDbIfNotExists, getTenantDB } from "../../lib/db";
 import { redirect } from "next/navigation";
 import bcrypt from "bcrypt";
 
 export async function createAccountAction(formData: FormData) {
   const hospitalName = String(formData.get("hospitalName") ?? "").trim();
-  const siteName = String(formData.get("siteName") ?? "").trim();
+  const adminMail = String(formData.get("adminMail") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
+  const creatorName = String(formData.get("creatorName") ?? "").trim();
+  const siteName = String(formData.get("siteName") ?? "").trim();
+  const phoneNumber = String(formData.get("phoneNumber") ?? "").trim();
 
   if (!hospitalName || !siteName) {
     throw new Error("Hospital name and site name are required.");
   }
 
-  if (!password) {
-    throw new Error("Password is required to create the admin user.");
+  if (!adminMail || !password) {
+    throw new Error("Admin email and password are required.");
   }
+
+  // Create table in the main DB if not exists
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS hospitals (
+      id SERIAL PRIMARY KEY,
+      hospital_name VARCHAR(255) NOT NULL,
+      admin_mail VARCHAR(255) NOT NULL,
+      creator_name VARCHAR(255) NOT NULL,
+      site_name VARCHAR(255) UNIQUE NOT NULL,
+      phone_number VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insert hospital details into main DB
+  await pool.query(`
+    INSERT INTO hospitals (hospital_name, admin_mail, creator_name, site_name, phone_number)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (site_name) DO NOTHING
+  `, [hospitalName, adminMail, creatorName, siteName, phoneNumber]);
 
   // Generate DB based on siteName safely
   await createTenantDbIfNotExists(siteName);
 
   // Connect to the new tenant DB to create users table and insert admin
-  const pool = await getTenantDB(siteName);
+  const tenantPool = await getTenantDB(siteName);
 
-  await pool.query(`
+  await tenantPool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username VARCHAR(255) UNIQUE NOT NULL,
@@ -36,12 +59,12 @@ export async function createAccountAction(formData: FormData) {
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
-  // Insert admin (if not exists)
-  await pool.query(`
+  // Insert admin (if not exists) using the adminMail as username
+  await tenantPool.query(`
     INSERT INTO users (username, password, role) 
-    VALUES ('admin', $1, 'admin')
+    VALUES ($1, $2, 'admin')
     ON CONFLICT (username) DO NOTHING
-  `, [hashedPassword]);
+  `, [adminMail, hashedPassword]);
 
   // Use the desired siteName as the routing identifier
   const tenantRoute = encodeURIComponent(siteName);

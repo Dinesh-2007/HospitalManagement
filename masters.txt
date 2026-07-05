@@ -1,0 +1,350 @@
+
+A) Accounts / Finance masters
+
+account-type (app/[Hname]/masters/accounts-finance-masters/account-type/)
+- code (text)
+- description (text)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+bank-master (app/[Hname]/masters/accounts-finance-masters/bank-master/)
+- bankCode (text)
+- bankName (text)
+- branchName (text)
+- accountNumber (text)
+- ifscCode (text)
+- accountHolderName (text)
+- accountType (select: Savings | Current)
+- openingBalance (text)
+- status (select: Active | Inactive)
+- remarks (textarea)
+
+credit-card-type-master (app/[Hname]/masters/accounts-finance-masters/credit-card-type-master/)
+- code (text)
+- cardType (text)
+- serviceChargePercentage (number)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+currency (app/[Hname]/masters/accounts-finance-masters/currency/)
+- code (text)
+- name (text)
+
+ledger-master (app/[Hname]/masters/accounts-finance-masters/ledger-master/)
+- code (text)
+- ledgerName (text)
+- controlAccount (select: Yes | No)
+- ledgerType (select: LOV from ledger_type)
+- accountType (select: LOV from account_type)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+ledger-type (app/[Hname]/masters/accounts-finance-masters/ledger-type/)
+- code (text)
+- description (text)
+- ledgerPrefixCode (text)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+pay-mode (app/[Hname]/masters/accounts-finance-masters/pay-mode/)
+- code (text)
+- description (text)
+
+payment-terms (app/[Hname]/masters/accounts-finance-masters/payment-terms/)
+- code (text)
+- name (text)
+- type (select: Immediate | Days | Month)
+- days (select: 1..31)
+- month (select: 1..31)
+- description (text)
+
+reason (app/[Hname]/masters/accounts-finance-masters/reason/)
+- code (text)
+- description (text)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+sub-ledger-master (app/[Hname]/masters/accounts-finance-masters/sub-ledger-master/)
+- code (text)
+- subLedgerName (text)
+- ledger (select: LOV from ledger_master)
+- address (textarea)
+- country (select: LOV of country names)
+- state (select: LOV of state names for selected country)
+- city (select: LOV of city names for selected state)
+- zipCode (text)
+- email (text)
+- phoneOffice (text)
+- phoneResidence (text)
+- mobile (text)
+- taxRegistration1 (text)
+- taxRegistration2 (text)
+- taxRegistration3 (text)
+- taxRegistration4 (text)
+- bank (select: LOV from hard-coded bank list)
+- bankBranch (text)
+- bankAccountNumber (text)
+- bankBranchCode (text)
+- payMode (select: from pay_mode LOV, fallback options)
+- paymentTermsDays (select: from payment_terms LOV, fallback options)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+- contactPerson (text)
+
+B) Administrative / General masters
+
+holiday-master (app/[Hname]/masters/administrative-general-masters/holiday-master/)
+- code (text)
+- holidayName (text)
+- date (datetime-local)
+- holidayType (select: LOV from holiday_type; fallback options)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+C) Clinical masters
+
+allergy (app/[Hname]/masters/clinical-masters/allergy/)
+- code (text)
+- description (textarea)
+- symptoms (select: LOV from symptoms_master)
+- activeFrom (datetime-local)
+- inactiveFrom / inactiveDateFrom (datetime-local; inferred from UI labels)
+- inactiveReason (textarea)
+
+disease (app/[Hname]/masters/clinical-masters/disease/)
+- code (text)
+- description (textarea)
+- standardValueMinimum (number)
+- standardValueMaximum (number)
+- activeFrom (datetime-local)
+- inactiveFrom / inactiveDateFrom (datetime-local; inferred from UI labels)
+- inactiveReason (textarea)
+
+medicine-usage (app/[Hname]/masters/clinical-masters/medicine-usage/)
+- code (number; “Auto running number”)
+- medicineUsageMethod (text)
+- toBeTakenAt (multiselect: Morning | Mid-day | Evening | Sleep | Need basis)
+- remarks (textarea)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea)
+
+patient-details (app/[Hname]/masters/clinical-masters/patient-details/)
+- patientId (text)
+- patientName (text)
+- address (textarea)
+- country (select: country-state-city names; onChange updates states)
+- state (select: derived from selected country)
+- city (select: derived from selected state)
+- zipCode (text; pattern [0-9]{6})
+- email (text)
+- phoneOffice (text; pattern [0-9]{10})
+- phoneResi (text; pattern [0-9]{10})
+- mobile (text; pattern [0-9]{10})
+- hnNumber (text)
+- numberOfVisits (number)
+- lastVisitDateTime (datetime-local)
+- lastVisitDoctorName (text)
+- profession (text)
+- patientType (select: LOV from patient_type)
+- preferredPaymentType (select: Cash | Card)
+- mediclaimPolicyAvailable (select: Yes | No)
+- policyDetails (textarea)
+- linkedPatientId (select: P1001 | P1002 | P1003 | P1004)
+- relationshipShipLinkedPatient (select: Spouse | Child | Parent | Sibling)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea)
+
+symptoms (app/[Hname]/masters/clinical-masters/symptoms/)
+- code (text)
+- description (textarea)
+
+D) Consultant doctor management masters
+- app/[Hname]/masters/consultant-doctor-management/
+
+department-master (app/[Hname]/masters/consultant-doctor-management/department-master/)
+- code (text)
+- departmentType (text)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea)
+
+consultant-doctor (app/[Hname]/masters/consultant-doctor-management/consultant-doctor/)
+- code (text)
+- type (select: Consultant | Doctor)
+- doctorConsultantName (text)
+- address (textarea)
+- country (select: country-state-city names; onChange updates states)
+- state (select: derived from selected country)
+- city (select: derived from selected state)
+- zipCode (text; pattern [0-9]{6})
+- email (text)
+- phoneOffice (text; pattern [0-9]{10})
+- phoneResi (text; pattern [0-9]{10})
+- mobile (text; pattern [0-9]{10})
+- roomNo (text)
+- specialization (text)
+- registrationNumber (text)
+- clinic (select: LOV from department_master; fallback)
+- appointmentScheduleLimit (number)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea)
+- bankBranch (text)
+- bankAccountNumber (text)
+- bankBranchCode (text)
+- payMode (select: LOV from pay_mode; populated client-side)
+- paymentTermsDays (select: LOV from payment_terms; populated client-side)
+- username (text)
+
+E) Lab / Hospital facility masters
+bed (app/[Hname]/masters/lab-hospital-facility-masters/bed/)
+- code (text; pattern [a-zA-Z0-9]*)
+- description (text; maxLength 500; pattern [a-zA-Z\s]*)
+- rate (number)
+- ward (select: LOV from ward_master)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea)
+
+equipment-master (app/[Hname]/masters/lab-hospital-facility-masters/equipment-master/)
+- code (text; pattern [a-zA-Z0-9]*)
+- equipmentName (text; maxLength 120; pattern [a-zA-Z\s]*)
+- usageRate (number; step 0.01)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea; maxLength 250; fullWidth)
+
+lab (app/[Hname]/masters/lab-hospital-facility-masters/lab/)
+- labCode (text; pattern [a-zA-Z0-9]*)
+- labName (text; maxLength 500; pattern [a-zA-Z\s]*)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea; fullWidth)
+
+operation-theater (app/[Hname]/masters/lab-hospital-facility-masters/operation-theater/)
+- code (text; pattern [a-zA-Z0-9]*)
+- description (text; maxLength 500; pattern [a-zA-Z\s]*)
+- location (text; maxLength 255)
+- ratePerDay (number)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea; fullWidth)
+
+room-master (app/[Hname]/masters/lab-hospital-facility-masters/room-master/)
+- code (text; pattern [a-zA-Z0-9]*)
+- description (text; maxLength 500; pattern [a-zA-Z\s]*)
+- roomType (select: LOV from room_type_master)
+- rate (number)
+- location (text; maxLength 255)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea; fullWidth)
+
+room-type (app/[Hname]/masters/lab-hospital-facility-masters/room-type/)
+- code (text; pattern [a-zA-Z0-9]*)
+- description (text; maxLength 500; pattern [a-zA-Z\s]*)
+- activeFrom (datetime-local)
+- inactiveDateFrom (datetime-local)
+- inactiveReason (textarea; fullWidth)
+
+ward (app/[Hname]/masters/lab-hospital-facility-masters/ward/)
+- code (text; pattern [a-zA-Z0-9]*)
+- description (text; maxLength 500; pattern [a-zA-Z\s]*)
+- rate (number)
+- remarks (textarea; fullWidth)
+- activeFrom (datetime-local)
+- inactiveFrom (datetime-local)
+- inactiveReason (textarea; fullWidth)
+
+F) Pharmacy inventory masters
+hospital-master (app/[Hname]/masters/pharmacy-inventory-masters/hospital-master/)
+- id: code | label: Code | type: number | placeholder: "Enter hospital code" | note: Number
+- id: hospitalName | label: Hospital Name | type: text | placeholder: "Enter hospital name" | maxLength: 120 | note: Free Text
+- id: date | label: Date | type: datetime-local | note: Date Time
+- id: address | label: Address | type: textarea | placeholder: "Enter hospital address" | maxLength: 250 | note: Free Text | fullWidth: true
+- id: country | label: Country | type: select | options: Country.getAllCountries().map(c=>c.name) | note: LOV | onChange: handleCountryChange
+- id: state | label: State | type: select | options: states.map(s=>s.name) | note: LOV | onChange: handleStateChange
+- id: city | label: City | type: select | options: cities.map(c=>c.name) | note: LOV
+- id: zipCode | label: ZIP Code | type: text | placeholder: "Enter ZIP or postal code" | maxLength: 12 | note: Free Text
+- id: email | label: eMail | type: text | placeholder: "Enter email address" | maxLength: 120 | note: Free Text
+- id: phoneOffice | label: Phone - Office | type: text | placeholder: "Enter office phone" | maxLength: 20 | note: Free Text
+- id: phoneResidence | label: Phone - Resi | type: text | placeholder: "Enter residence phone" | maxLength: 20 | note: Free Text
+- id: mobile | label: Mobile | type: text | placeholder: "Enter mobile number" | maxLength: 20 | note: Free Text
+- id: contactPerson | label: Contact Person | type: text | placeholder: "Enter contact person" | maxLength: 80 | note: Free Text
+- id: activeFrom | label: Active From | type: datetime-local | note: Date Time
+- id: inactiveDateFrom | label: Inactive Date From | type: datetime-local | note: Date Time
+- id: inactiveReason | label: Inactive Reason | type: textarea | placeholder: "Enter inactive reason" | maxLength: 250 | note: Free Text | fullWidth: true
+
+item-category (app/[Hname]/masters/pharmacy-inventory-masters/item-category/)
+- id: groupCode | label: Group Code | type: text | placeholder: "Enter group code" | maxLength: 50 | pattern: "[a-zA-Z0-9]*"
+- id: groupName | label: Group Name | type: text | placeholder: "Enter group name" | maxLength: 500 | pattern: "[a-zA-Z\\s]*"
+
+item-master (app/[Hname]/masters/pharmacy-inventory-masters/item-master/)
+- id: itemCode | label: Item Code | type: text | pattern: "[a-zA-Z0-9]*" | placeholder: "Auto running number"
+- id: itemName | label: Item Name | type: text | maxLength: 255 | pattern: "[a-zA-Z\\s]*"
+- id: itemCategory | label: Item Category | type: select | options: itemCategoryOptions
+- id: purchaseUom | label: Purchase UOM | type: select | options: uomOptions
+- id: saleUom | label: Sale UOM | type: select | options: uomOptions
+- id: conversionFactor | label: Conversion Factor | type: number
+- id: lastPurchasePrice | label: Last Purchase Price | type: display | placeholder: "Auto display"
+- id: salesPrice | label: Sales Price | type: number
+- id: medicineCombination | label: Medicine Combination | type: text | maxLength: 255 | pattern: "[a-zA-Z\\s]*"
+- id: currentStock | label: Current Stock | type: number
+- id: minimumStockQty | label: Minimum Stock Qty | type: number
+- id: maximumStockQty | label: Maximum Stock Qty | type: number
+- id: manufacturer | label: Manufacturer | type: select | options: manufacturerOptions
+- id: lastPurchaseVendor | label: Last Purchase Vendor | type: display | placeholder: "Auto display"
+- id: activeFrom | label: Active From | type: datetime-local
+- id: inactiveFrom | label: Inactive From | type: datetime-local
+- id: inactiveReason | label: Inactive Reason | type: textarea | fullWidth: true
+
+item-uom (app/[Hname]/masters/pharmacy-inventory-masters/item-uom/)
+- id: uomCode | label: UOM Code | type: text | placeholder: "Enter UOM code" | maxLength: 50 | pattern: "[a-zA-Z0-9]*"
+- id: uomDescription | label: UOM Description | type: text | placeholder: "Enter UOM description" | maxLength: 100 | pattern: "[a-zA-Z\\s]*"
+
+manufacturer (app/[Hname]/masters/pharmacy-inventory-masters/manufacturer/)
+- id: manufacturerCode | label: Code | type: text | placeholder: "Enter manufacturer code" | maxLength: 50 | pattern: "[a-zA-Z0-9]*"
+- id: manufacturerName | label: Manufacturer Name | type: text | placeholder: "Enter manufacturer name" | maxLength: 500 | pattern: "[a-zA-Z\\s]*"
+
+medical-certificate (app/[Hname]/masters/pharmacy-inventory-masters/medical-certificate/)
+- id: code | label: Code | type: number | placeholder: "Enter code" | note: Number
+- id: description | label: Description | type: text | placeholder: "Enter description" | maxLength: 120 | note: Free Text
+- id: defaultMessage | label: Default Message | type: textarea | placeholder: "Enter default message" | maxLength: 250 | note: Free Text | fullWidth: true
+- id: activeFrom | label: Active From | type: datetime-local | note: Date Time
+- id: inactiveDateFrom | label: Inactive Date From | type: datetime-local | note: Date Time
+- id: inactiveReason | label: Inactive Reason | type: textarea | placeholder: "Enter inactive reason" | maxLength: 250 | note: Free Text | fullWidth: true
+
+medicine-usage (app/[Hname]/masters/pharmacy-inventory-masters/medicine-usage/)
+- id: code | label: Code | type: text | pattern: "[a-zA-Z0-9]*" | placeholder: "Auto running number"
+- id: medicineUsageMethod | label: Medicine usage method | type: text | pattern: "[a-zA-Z\\s]*" | maxLength: 255
+- id: toBeTakenAt | label: To be taken at | type: multiselect | options: ["Morning","Mid-day","Evening","Sleep","Need basis"] | note: Multiple Selection allowed
+- id: remarks | label: Remarks | type: textarea | fullWidth: true
+- id: activeFrom | label: Active From | type: datetime-local
+- id: inactiveFrom | label: Inactive From | type: datetime-local | note: Initially it's Empty
+- id: inactiveReason | label: Inactive Reason | type: textarea | fullWidth: true
+
+service (app/[Hname]/masters/pharmacy-inventory-masters/service/)
+- id: code | label: Code | type: text | pattern: "[a-zA-Z0-9]*" | placeholder: "Enter code" | inputMode: "text"
+- id: description | label: Description | type: text | pattern: "[a-zA-Z\\s]*" | placeholder: "Enter description" | maxLength: 200
+- id: serviceRate | label: Service Rate | type: number | placeholder: "Enter service rate" | min: 0 | step: "0.01" | inputMode: "numeric"
+- id: activeFrom | label: Active From | type: datetime-local
+- id: inactiveDateFrom | label: Inactive Date From | type: datetime-local
+- id: inactiveReason | label: Inactive Reason | type: textarea | placeholder: "Enter inactive reason" | fullWidth: true
+
+warehouse-master (app/[Hname]/masters/pharmacy-inventory-masters/warehouse-master/)
+- id: code | label: Code | type: text | pattern: "[a-zA-Z0-9]*" | placeholder: "Enter code" | inputMode: "text"
+- id: warehouseName | label: Warehouse Name | type: text | placeholder: "Enter warehouse name" | maxLength: 150 | pattern: "[a-zA-Z\\s]*"
+- id: address | label: Address | type: textarea | placeholder: not set
+- id: warehouseType | label: Warehouse Type | type: select | options: ["Central","Regional","Store","Transit"]
+- id: activeFrom | label: Active From | type: datetime-local
+- id: inactiveDateFrom | label: Inactive Date From | type: datetime-local
+- id: inactiveReason | label: Inactive Reason | type: textarea | placeholder: "Enter inactive reason" | fullWidth: true
