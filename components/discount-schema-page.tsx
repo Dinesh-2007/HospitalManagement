@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { PageLayout } from "./page-layout";
 
 type Variant = {
@@ -35,7 +36,30 @@ const availableVariants: Variant[] = [
   },
 ];
 
+type DiscountRecord = {
+  id: number;
+  name?: string;
+  description?: string;
+  discount_type?: string;
+  discountType?: string;
+  value?: string | number;
+  priority?: string | number;
+  coupon_code?: string;
+  couponCode?: string;
+  start_date?: string;
+  startDate?: string;
+  end_date?: string;
+  endDate?: string;
+  apply_level?: string;
+  applyLevel?: string;
+  selected_variants?: string;
+  selectedVariants?: string;
+};
+
 export function DiscountSchemaPage() {
+  const params = useParams();
+  const hname = decodeURIComponent(params?.Hname as string || "HSMS");
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [discountType, setDiscountType] = useState("Percentage");
@@ -44,10 +68,17 @@ export function DiscountSchemaPage() {
   const [couponCode, setCouponCode] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [applyLevel, setApplyLevel] = useState("Invoice"); // "Invoice" or "Item"
   const startDateRef = useRef<HTMLInputElement | null>(null);
   const endDateRef = useRef<HTMLInputElement | null>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
   const [variantDialogOpen, setVariantDialogOpen] = useState(false);
+
+  const [records, setRecords] = useState<DiscountRecord[]>([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const selectedVariants = useMemo(
     () => availableVariants.filter((variant) => selectedVariantIds.includes(variant.id)),
@@ -56,18 +87,121 @@ export function DiscountSchemaPage() {
 
   const selectedCount = selectedVariants.length;
 
+  const loadRecords = async () => {
+    setIsLoadingRecords(true);
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/discount_schema`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load records");
+      setRecords(data.rows || []);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "Failed to load discount schemas.");
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hname) {
+      void loadRecords();
+    }
+  }, [hname]);
+
+  const handleCreateDiscount = async () => {
+    if (!name || !value) {
+      setErrorMsg("Name and Value are required fields.");
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/discount_schema`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardTitle: "Discount Schema",
+          fields: [
+            { id: "name", type: "text" },
+            { id: "description", type: "text" },
+            { id: "discountType", type: "text" },
+            { id: "value", type: "number" },
+            { id: "priority", type: "number" },
+            { id: "couponCode", type: "text" },
+            { id: "startDate", type: "date" },
+            { id: "endDate", type: "date" },
+            { id: "applyLevel", type: "text" },
+            { id: "selectedVariants", type: "text" },
+          ],
+          values: {
+            name,
+            description,
+            discountType,
+            value: Number(value) || 0,
+            priority: Number(priority) || 1,
+            couponCode,
+            startDate,
+            endDate,
+            applyLevel,
+            selectedVariants: JSON.stringify(selectedVariants),
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to create discount schema");
+
+      setSuccessMsg("Discount Schema created successfully!");
+      // Reset form
+      setName("");
+      setDescription("");
+      setDiscountType("Percentage");
+      setValue("");
+      setPriority("1");
+      setCouponCode("");
+      setStartDate("");
+      setEndDate("");
+      setApplyLevel("Invoice");
+      setSelectedVariantIds([]);
+      await loadRecords();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to create discount schema.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteRecord = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this discount schema?")) return;
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/discount_schema`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete record.");
+      }
+      setSuccessMsg("Discount Schema deleted successfully.");
+      await loadRecords();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to delete record.");
+    }
+  };
+
   const openDatePicker = (input: HTMLInputElement | null) => {
     if (!input) {
       return;
     }
-
     const picker = input as HTMLInputElement & { showPicker?: () => void };
-
     if (typeof picker.showPicker === "function") {
       picker.showPicker();
       return;
     }
-
     input.focus();
   };
 
@@ -87,7 +221,7 @@ export function DiscountSchemaPage() {
             <div>
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Create Discount</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Define the discount details and apply them to selected product variants.
+                Define the discount details and apply them to selected product variants or globally.
               </p>
             </div>
           </div>
@@ -136,7 +270,7 @@ export function DiscountSchemaPage() {
 
             <label className="space-y-2">
               <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                Value
+                Value (Amount or %)
               </span>
               <input
                 type="text"
@@ -145,6 +279,20 @@ export function DiscountSchemaPage() {
                 placeholder="Enter discount value"
                 className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                Apply Level
+              </span>
+              <select
+                value={applyLevel}
+                onChange={(event) => setApplyLevel(event.target.value)}
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              >
+                <option value="Invoice">Whole Invoice Level</option>
+                <option value="Item">Item Level</option>
+              </select>
             </label>
 
             <label className="space-y-2">
@@ -173,7 +321,6 @@ export function DiscountSchemaPage() {
                 className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-hidden transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
             </label>
-
           </div>
         </div>
 
@@ -247,7 +394,7 @@ export function DiscountSchemaPage() {
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-white">Selected Variants</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {selectedCount} variant{selectedCount === 1 ? "" : "s"} selected
+                {selectedCount} variant{selectedCount === 1 ? "" : "s"} selected (Leave empty for all products)
               </p>
             </div>
             <button
@@ -273,7 +420,7 @@ export function DiscountSchemaPage() {
                 {selectedVariants.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                      No variants selected.
+                      No specific variants selected. Applies to all.
                     </td>
                   </tr>
                 ) : (
@@ -291,6 +438,9 @@ export function DiscountSchemaPage() {
           </div>
         </div>
 
+        {errorMsg && <p className="text-sm text-red-600 font-medium">{errorMsg}</p>}
+        {successMsg && <p className="text-sm text-green-600 font-medium">{successMsg}</p>}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
@@ -303,6 +453,7 @@ export function DiscountSchemaPage() {
               setCouponCode("");
               setStartDate("");
               setEndDate("");
+              setApplyLevel("Invoice");
               setSelectedVariantIds([]);
             }}
             className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
@@ -311,10 +462,74 @@ export function DiscountSchemaPage() {
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
+            onClick={handleCreateDiscount}
             className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600"
           >
-            Create Discount
+            {isSubmitting ? "Creating..." : "Create Discount"}
           </button>
+        </div>
+
+        {/* Saved schemas table: matches look/feel of other master tables */}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950 mt-8">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Active Discount Schemas</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Manage defined discounts for invoice and items.</p>
+          </div>
+          {isLoadingRecords ? (
+            <p className="text-sm text-slate-500">Loading saved discount schemas...</p>
+          ) : records.length === 0 ? (
+            <p className="text-sm text-slate-500">No discount schemas defined yet.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-800">
+              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                <thead className="bg-slate-50 dark:bg-white/[0.02]">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">ID</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Name</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Type</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Value</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Level</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Coupon</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Start Date</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">End Date</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-transparent">
+                  {records.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.id}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.name || r.name}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.discount_type || r.discountType}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.value}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          (r.apply_level || r.applyLevel) === "Item" 
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                            : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                        }`}>
+                          {r.apply_level || r.applyLevel || "Invoice"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.coupon_code || r.couponCode || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.start_date || r.startDate || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{r.end_date || r.endDate || "-"}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRecord(r.id)}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {variantDialogOpen ? (

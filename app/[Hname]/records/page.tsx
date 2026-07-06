@@ -33,8 +33,8 @@ type DoctorMasterRow = { name: string; department: string };
 type VitalsRow = Record<string, string | number | null>;
 type AppointmentRow = Record<string, string | number | null>;
 
-type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "Pharmacy" | "History";
-const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "Pharmacy", "History"];
+type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "Pharmacy" | "Billing" | "History";
+const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "Pharmacy", "Billing", "History"];
 
 const DOCTOR_TABLE = tableNameFromCardTitle("Consultant / Doctor Master");
 
@@ -227,6 +227,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
     const [vitalsData, setVitalsData] = useState<VitalsRow | null>(null);
     const [historyRows, setHistoryRows] = useState<AppointmentRow[]>([]);
     const [pharmacyRecords, setPharmacyRecords] = useState<any[]>([]);
+    const [billingRecords, setBillingRecords] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     const appointmentId = row.id;
@@ -238,13 +239,16 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
         try {
             // Use appointmentId for consultation-specific records (pharmacy)
             // Use patientIdentifier (patientId or Name) for global history
-            const [histRes, pharmRes] = await Promise.all([
+            const phone = row.vitals?.mobile || "";
+            const [histRes, pharmRes, billingRes] = await Promise.all([
                 patientIdentifier ? loadRows(hname, `/appointments?patientId=${encodeURIComponent(patientIdentifier)}`) : Promise.resolve([]),
-                appointmentId ? loadRows(hname, `/forms/pharmacy_dispensing?token_number=${encodeURIComponent(appointmentId)}`) : Promise.resolve([])
+                appointmentId ? loadRows(hname, `/forms/pharmacy_dispensing?token_number=${encodeURIComponent(appointmentId)}`) : Promise.resolve([]),
+                fetch(`/api/${encodeURIComponent(hname)}/billing?action=history&patientName=${encodeURIComponent(row.patientDetails || "")}&patientPhone=${encodeURIComponent(String(phone))}`).then(r => r.json().catch(() => ({})))
             ]);
 
             setHistoryRows(histRes as AppointmentRow[]);
             setPharmacyRecords(pharmRes);
+            setBillingRecords(billingRes?.invoices || []);
         } catch {
             // ignore errors silently
         } finally {
@@ -558,6 +562,77 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                         <h4 className="text-lg font-medium text-gray-900">No Pharmacy Activity</h4>
                                         <p className="mt-1 text-sm text-gray-500 max-w-xs">
                                             No pharmacy dispensing records were found for this visit.
+                                        </p>
+                                    </div>
+                                )
+                            )}
+
+                            {/* ── Billing ── */}
+                            {tab === "Billing" && (
+                                billingRecords.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {billingRecords.map((bill, index) => (
+                                            <div key={bill.id || index} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-850 dark:bg-gray-800/40">
+                                                <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 pb-3 dark:border-gray-800">
+                                                    <div>
+                                                        <h4 className="font-bold text-gray-900 dark:text-white">{bill.invoice_number}</h4>
+                                                        <p className="text-xs text-gray-500">Date: {bill.created_at ? new Date(bill.created_at).toLocaleDateString("en-IN") : "—"}</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                                            bill.billing_type === "Pharmacy"
+                                                                ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                                                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                        }`}>
+                                                            {bill.billing_type}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                            bill.payment_status === "Paid"
+                                                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                        }`}>
+                                                            {bill.payment_status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                                                    <div>
+                                                        <span className="block text-gray-500">Subtotal</span>
+                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">₹{Number(bill.subtotal).toFixed(2)}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-gray-500">Tax</span>
+                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">₹{Number(bill.tax_amount).toFixed(2)}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-gray-500">Discount</span>
+                                                        <span className="font-semibold text-red-500">₹{Number(bill.discount_amount).toFixed(2)}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-gray-500">Payable</span>
+                                                        <span className="font-bold text-gray-950 dark:text-white">₹{Number(bill.payable_amount).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                                {(bill.payment_method || bill.transaction_id) && (
+                                                    <div className="mt-3 rounded-lg bg-gray-50 p-2.5 dark:bg-gray-800/40 text-xs">
+                                                        <p className="text-[11px] text-gray-500">
+                                                            Paid via <strong>{bill.payment_method || "—"}</strong> {bill.transaction_id ? `(Ref: ${bill.transaction_id})` : ""}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                                        <div className="mb-4 rounded-full bg-gray-50 p-4">
+                                            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6m-6 4h6m-6 4h3m8-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <h4 className="text-lg font-medium text-gray-900">No Billing Activity</h4>
+                                        <p className="mt-1 text-sm text-gray-500 max-w-xs">
+                                            No billing or invoice records were found for this patient.
                                         </p>
                                     </div>
                                 )

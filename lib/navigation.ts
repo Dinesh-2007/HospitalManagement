@@ -118,6 +118,13 @@ export const navigation: NavigationSection[] = [
       },
     ],
   },
+  {
+    title: "Billing",
+    items: [
+      { title: "Consultation Billing", href: "/billing/consultation-billing" },
+      { title: "Pharmacy Billing", href: "/billing/pharmacy-billing" },
+    ],
+  },
 
   {
     title: "Records",
@@ -138,14 +145,6 @@ export const navigation: NavigationSection[] = [
           { title: "Dispensing", href: "/pharmacy/dispensing" },
           { title: "GRN", href: "/pharmacy/grn" },
           { title: "Supplier", href: "/pharmacy/supplier" },
-        ],
-      },
-      {
-        title: "Billing",
-        items: [
-          { title: "Cash Billing", href: "/billing/cash-billing" },
-          { title: "Insurance Billing", href: "/billing/insurance-billing" },
-          { title: "Claims", href: "/billing/claims" },
         ],
       },
       {

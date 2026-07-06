@@ -109,13 +109,44 @@ function normalizeValue(field: ApiField, rawValue: unknown) {
 async function ensureTable(pool: Pool, tableName: string, fields: ApiField[]) {
   const quotedTable = quoteIdentifier(tableName);
 
-  await pool.query(`
+  let createSql = `
     CREATE TABLE IF NOT EXISTS ${quotedTable} (
       id BIGSERIAL PRIMARY KEY,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
-  `);
+  `;
+
+  if (tableName === "item_category_master") {
+    createSql = `
+      CREATE TABLE IF NOT EXISTS item_category_master (
+        id BIGSERIAL PRIMARY KEY,
+        group_code TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+  } else if (tableName === "manufacturer_master") {
+    createSql = `
+      CREATE TABLE IF NOT EXISTS manufacturer_master (
+        id BIGSERIAL PRIMARY KEY,
+        manufacturer_code TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+  } else if (tableName === "uom_master") {
+    createSql = `
+      CREATE TABLE IF NOT EXISTS uom_master (
+        id BIGSERIAL PRIMARY KEY,
+        uom_code TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+  }
+
+  await pool.query(createSql);
 
   const existingColumnsResult = await pool.query<{ column_name: string }>(
     `
