@@ -93,9 +93,14 @@ export function PharmacyBillingDashboard() {
 
   // Pharmacy invoice billing configuration states
   const [phMedicineLines, setPhMedicineLines] = useState<any[]>([]);
-  const [phTaxPercent, setPhTaxPercent] = useState(18); // Default 18% GST
-  const [phSelectedDiscountId, setPhSelectedDiscountId] = useState<string>("");
+  const [phTaxPercent, setPhTaxPercent] = useState(0); 
+  const [phSelectedDiscountId, setPhSelectedDiscountId] = useState<string>("Custom");
   const [phDiscountWarning, setPhDiscountWarning] = useState("");
+  const [phDiscountType, setPhDiscountType] = useState<"Amount" | "Percent">("Amount");
+  const [phDiscountInput, setPhDiscountInput] = useState(0);
+  const [phAdditionalFee, setPhAdditionalFee] = useState(0);
+  const [phBillingRemarks, setPhBillingRemarks] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Payment gateway input states
   const [paymentMethod, setPaymentMethod] = useState<"Card" | "UPI" | "Cash" | "Insurance">("Cash");
@@ -137,16 +142,21 @@ export function PharmacyBillingDashboard() {
   // Filtered invoices by selected date
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
+      if (searchQuery.trim().length > 0) return true; // Ignore date filter if searching
       const invDate = inv.created_at ? inv.created_at.slice(0, 10) : "";
       return invDate === selectedDate;
     });
-  }, [invoices, selectedDate]);
+  }, [invoices, selectedDate, searchQuery]);
 
   // Open pharmacy bill creation
   const handleOpenBilling = async (d: PendingDispensing) => {
     setActiveCheckout(d);
-    setPhSelectedDiscountId("");
+    setPhSelectedDiscountId("Custom");
     setPhDiscountWarning("");
+    setPhDiscountInput(0);
+    setPhAdditionalFee(0);
+    setPhTaxPercent(0);
+    setPhBillingRemarks("");
     setPaymentMethod("Cash");
     setTransactionId("");
 
@@ -186,47 +196,58 @@ export function PharmacyBillingDashboard() {
       return acc + (qty * price);
     }, 0);
 
-    const taxAmount = Math.round(subtotal * (phTaxPercent / 100));
-
+    const baseForDiscount = subtotal + phAdditionalFee;
     let discount = 0;
-    if (phSelectedDiscountId && !phDiscountWarning) {
-      const schema = discounts.find(ds => String(ds.id) === phSelectedDiscountId);
-      if (schema) {
-        const val = Number(schema.value || 0);
-        const discountTypeNormalized = schema.discountType || schema.discount_type;
-        const applyLevelNormalized = schema.applyLevel || schema.apply_level;
 
-        if (applyLevelNormalized === "Item") {
-          // Apply percentage or flat discount at item level
-          discount = phMedicineLines.reduce((acc, line) => {
-            const qty = Number(line.receivedQty || line.prescribedQty || 0);
-            const price = Number(line.medicineAmount || 0);
-            const lineSub = qty * price;
-            if (discountTypeNormalized === "Percentage") {
-              return acc + (lineSub * (val / 100));
-            } else {
-              return acc + Math.min(val, lineSub);
-            }
-          }, 0);
+    if (!phDiscountWarning) {
+      if (phSelectedDiscountId === "Custom") {
+        if (phDiscountType === "Amount") {
+          discount = phDiscountInput;
         } else {
-          // Apply globally at invoice level
-          if (discountTypeNormalized === "Percentage") {
-            discount = subtotal * (val / 100);
+          discount = (baseForDiscount * phDiscountInput) / 100;
+        }
+      } else if (phSelectedDiscountId) {
+        const schema = discounts.find(ds => String(ds.id) === phSelectedDiscountId);
+        if (schema) {
+          const val = Number(schema.value || 0);
+          const discountTypeNormalized = schema.discountType || schema.discount_type;
+          const applyLevelNormalized = schema.applyLevel || schema.apply_level;
+
+          if (applyLevelNormalized === "Item") {
+            // Apply percentage or flat discount at item level
+            discount = phMedicineLines.reduce((acc, line) => {
+              const qty = Number(line.receivedQty || line.prescribedQty || 0);
+              const price = Number(line.medicineAmount || 0);
+              const lineSub = qty * price;
+              if (discountTypeNormalized === "Percentage") {
+                return acc + (lineSub * (val / 100));
+              } else {
+                return acc + Math.min(val, lineSub);
+              }
+            }, 0);
           } else {
-            discount = Math.min(val, subtotal);
+            // Apply globally at invoice level
+            if (discountTypeNormalized === "Percentage") {
+              discount = baseForDiscount * (val / 100);
+            } else {
+              discount = Math.min(val, baseForDiscount);
+            }
           }
         }
-        discount = Math.round(discount);
       }
     }
+    discount = Math.round(discount * 100) / 100;
+
+    const afterDiscount = Math.max(0, baseForDiscount - discount);
+    const taxAmount = Math.round((afterDiscount * (phTaxPercent / 100)) * 100) / 100;
 
     return {
       subtotal,
       taxAmount,
       discount,
-      payable: Math.max(0, subtotal + taxAmount - discount)
+      payable: Math.max(0, afterDiscount + taxAmount)
     };
-  }, [activeCheckout, phMedicineLines, phTaxPercent, phSelectedDiscountId, discounts, phDiscountWarning]);
+  }, [activeCheckout, phMedicineLines, phTaxPercent, phSelectedDiscountId, discounts, phDiscountWarning, phDiscountInput, phDiscountType, phAdditionalFee]);
 
   // Submit and finalize invoice
   const handleFinalizeInvoice = async (status: "Paid" | "Pending") => {
@@ -249,14 +270,18 @@ export function PharmacyBillingDashboard() {
           subtotal,
           taxAmount,
           discountAmount: discount,
+          registrationFee: phAdditionalFee,
           payableAmount: payable,
           paymentStatus: status,
           paymentMethod: status === "Paid" ? paymentMethod : null,
           transactionId: status === "Paid" ? (transactionId || `TXN-${Date.now().toString().slice(-6)}`) : null,
+          remarks: phBillingRemarks,
           details: {
             medicines: phMedicineLines,
             taxPercent: phTaxPercent,
-            discountSchemaId: phSelectedDiscountId || null,
+            discountSchemaId: phSelectedDiscountId !== "Custom" ? phSelectedDiscountId : null,
+            discountInput: phDiscountInput,
+            discountType: phDiscountType
           },
         }),
       });
@@ -318,6 +343,79 @@ export function PharmacyBillingDashboard() {
   const selectedInvoiceItem = useMemo(() => {
     return invoices.find(i => i.id === selectedInvoiceId) || null;
   }, [invoices, selectedInvoiceId]);
+
+  const handlePrint = (invoice: InvoiceRecord, downloadAsPdf: boolean = false) => {
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+    
+    // HTML string for the invoice
+    const html = `
+      <html>
+        <head>
+          <title>${downloadAsPdf ? 'Download PDF' : 'Print Invoice'} - ${invoice.invoice_number}</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
+            .bold { font-weight: bold; }
+            .total { font-size: 18px; border-top: 2px solid #eee; padding-top: 10px; margin-top: 20px; }
+            .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>PHARMACY INVOICE</h2>
+            <p>${invoice.invoice_number}</p>
+            <p>Date: ${new Date(invoice.created_at).toLocaleString()}</p>
+          </div>
+          
+          <div class="row">
+            <div>
+              <p class="bold">Patient Information:</p>
+              <p>Name: ${invoice.patient_name}</p>
+              <p>Token: ${invoice.token_number}</p>
+              ${invoice.patient_phone ? `<p>Phone: ${invoice.patient_phone}</p>` : ''}
+            </div>
+            <div>
+              <p class="bold">Billing Details:</p>
+              <p>Type: ${invoice.billing_type}</p>
+            </div>
+          </div>
+          
+          <div style="margin-top: 30px;">
+            <p class="bold" style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Charges</p>
+            
+            <div class="row"><span>Subtotal (Medicines)</span> <span>₹${Number(invoice.subtotal).toFixed(2)}</span></div>
+            ${Number((invoice as any).registration_fee) > 0 ? `<div class="row"><span>Additional Fee</span> <span>₹${Number((invoice as any).registration_fee).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.discount_amount) > 0 ? `<div class="row" style="color: red;"><span>Discount</span> <span>-₹${Number(invoice.discount_amount).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.tax_amount) > 0 ? `<div class="row"><span>Tax</span> <span>₹${Number(invoice.tax_amount).toFixed(2)}</span></div>` : ''}
+            
+            <div class="row total bold"><span>Grand Total</span> <span>₹${Number(invoice.payable_amount).toFixed(2)}</span></div>
+          </div>
+
+          <div style="margin-top: 30px; font-size: 12px;">
+            <p class="bold">Payment Information</p>
+            <p>Status: ${invoice.payment_status}</p>
+            <p>Method: ${invoice.payment_method || 'N/A'}</p>
+            <p>Transaction ID: ${invoice.transaction_id || 'N/A'}</p>
+            ${(invoice as any).remarks ? `<p>Remarks: ${(invoice as any).remarks}</p>` : ''}
+          </div>
+          
+          <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #777;">
+            <p>Thank you for visiting.</p>
+            ${downloadAsPdf ? '<p style="margin-top:20px; font-weight:bold; color:#000;">* To save as PDF, select "Save as PDF" in your print dialog.</p>' : ''}
+          </div>
+        </body>
+      </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
 
   return (
     <div className="space-y-6">
@@ -414,40 +512,48 @@ export function PharmacyBillingDashboard() {
 
               {/* Discount Selection */}
               <div className="space-y-2">
-                <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Apply Discount Schema</span>
+                <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Apply Discount</span>
                 {phDiscountWarning ? (
                   <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-400 font-medium">
                     {phDiscountWarning}
                   </div>
                 ) : (
-                  <select
-                    value={phSelectedDiscountId}
-                    onChange={(e) => setPhSelectedDiscountId(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                  >
-                    <option value="">No Discount Schema</option>
-                    {discounts.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.discountType || d.discount_type} - {d.value}{ (d.discountType || d.discount_type) === "Percentage" ? "%" : " Rs"}) [{d.applyLevel || d.apply_level} Level]
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={phSelectedDiscountId}
+                      onChange={(e) => setPhSelectedDiscountId(e.target.value)}
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    >
+                      <option value="Custom">Custom Manual Discount</option>
+                      {discounts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.discountType || d.discount_type} - {d.value}{ (d.discountType || d.discount_type) === "Percentage" ? "%" : " Rs"}) [{d.applyLevel || d.apply_level} Level]
+                        </option>
+                      ))}
+                    </select>
+                    {phSelectedDiscountId === "Custom" && (
+                      <div className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setPhDiscountType("Amount")} className={`flex-1 py-1 text-xs rounded-md border ${phDiscountType === 'Amount' ? 'bg-brand-50 border-brand-500 text-brand-700' : 'border-gray-200'}`}>Amount</button>
+                          <button type="button" onClick={() => setPhDiscountType("Percent")} className={`flex-1 py-1 text-xs rounded-md border ${phDiscountType === 'Percent' ? 'bg-brand-50 border-brand-500 text-brand-700' : 'border-gray-200'}`}>Percent</button>
+                        </div>
+                        <input type="number" min="0" value={phDiscountInput} onChange={(e) => setPhDiscountInput(Number(e.target.value) || 0)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm" placeholder="Enter discount..." />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
               {/* Tax configuration */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Taxes (GST):</span>
-                <select
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Taxes (GST %):</span>
+                <input
+                  type="number"
+                  min="0"
                   value={phTaxPercent}
-                  onChange={(e) => setPhTaxPercent(Number(e.target.value))}
-                  className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                >
-                  <option value={0}>0% (Tax Exempt)</option>
-                  <option value={5}>5% GST</option>
-                  <option value={12}>12% GST</option>
-                  <option value={18}>18% GST (Standard)</option>
-                </select>
+                  onChange={(e) => setPhTaxPercent(Number(e.target.value) || 0)}
+                  className="w-20 h-7 text-right border rounded text-xs px-2 dark:bg-gray-800 dark:border-gray-700"
+                />
               </div>
             </div>
 
@@ -487,11 +593,26 @@ export function PharmacyBillingDashboard() {
                       className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                     />
                   </div>
+
+                  <div>
+                    <span className="block text-xs font-semibold text-gray-500 mb-1">Billing Remarks</span>
+                    <input
+                      type="text"
+                      placeholder="Optional remarks"
+                      value={phBillingRemarks}
+                      onChange={(e) => setPhBillingRemarks(e.target.value)}
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Subtotal summary */}
               <div className="p-4 border-t border-dashed border-slate-200 dark:border-gray-800 space-y-2 text-sm">
+                <div className="flex items-center justify-between text-gray-600 dark:text-gray-400">
+                  <span>Additional Fee:</span>
+                  <input type="number" value={phAdditionalFee} onChange={e => setPhAdditionalFee(Number(e.target.value) || 0)} className="w-24 h-7 text-right border rounded text-xs px-2 dark:bg-gray-800 dark:border-gray-700" />
+                </div>
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
                   <span>Subtotal:</span>
                   <span>₹{billingCalculations.subtotal.toFixed(2)}</span>
@@ -600,17 +721,35 @@ export function PharmacyBillingDashboard() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           {/* Date Picker on top */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-gray-800">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Filter Invoices by Date:</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setSelectedInvoiceId(null);
-                }}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Filter Invoices by Date:</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setSelectedInvoiceId(null);
+                  }}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search Invoice No, Name, Phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadData()}
+                  className="h-10 w-64 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                />
+                <button
+                  onClick={loadData}
+                  className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-bold text-white hover:bg-brand-600 transition"
+                >
+                  Search
+                </button>
+              </div>
             </div>
             
             {/* Top action buttons */}
@@ -805,14 +944,24 @@ export function PharmacyBillingDashboard() {
                   <span>Subtotal:</span>
                   <span>₹{Number(viewInvoiceModal.subtotal).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>Tax:</span>
-                  <span>₹{Number(viewInvoiceModal.tax_amount).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-red-500">
-                  <span>Discount:</span>
-                  <span>-₹{Number(viewInvoiceModal.discount_amount).toFixed(2)}</span>
-                </div>
+                {Number((viewInvoiceModal as any).registration_fee) > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Additional Fee:</span>
+                    <span>₹{Number((viewInvoiceModal as any).registration_fee).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(viewInvoiceModal.discount_amount) > 0 && (
+                  <div className="flex justify-between text-red-500">
+                    <span>Discount:</span>
+                    <span>-₹{Number(viewInvoiceModal.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(viewInvoiceModal.tax_amount) > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Tax:</span>
+                    <span>₹{Number(viewInvoiceModal.tax_amount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-sm pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Amount Paid:</span>
                   <span>₹{Number(viewInvoiceModal.payable_amount).toFixed(2)}</span>
@@ -826,13 +975,28 @@ export function PharmacyBillingDashboard() {
                   <p>Status: <strong className="text-green-600 dark:text-green-400">{viewInvoiceModal.payment_status}</strong></p>
                   <p>Method: {viewInvoiceModal.payment_method || "—"}</p>
                   <p className="col-span-2">Txn ID: {viewInvoiceModal.transaction_id || "—"}</p>
+                  {(viewInvoiceModal as any).remarks && <p className="col-span-2">Remarks: {(viewInvoiceModal as any).remarks}</p>}
                 </div>
               </div>
 
-              <div className="flex justify-end pt-3">
+              <div className="flex justify-between items-center pt-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handlePrint(viewInvoiceModal, false)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
+                  >
+                    Print Invoice
+                  </button>
+                  <button
+                    onClick={() => handlePrint(viewInvoiceModal, true)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
+                  >
+                    Download PDF
+                  </button>
+                </div>
                 <button
                   onClick={() => setViewInvoiceModal(null)}
-                  className="rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600"
+                  className="rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
                 >
                   Close Receipt
                 </button>

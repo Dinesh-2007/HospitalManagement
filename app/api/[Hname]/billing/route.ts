@@ -19,6 +19,7 @@ async function ensureBillingInvoiceTable(pool: Pool): Promise<void> {
       token_number TEXT NOT NULL,
       billing_type TEXT NOT NULL, -- 'Pharmacy' or 'Consultation'
       subtotal NUMERIC NOT NULL,
+      registration_fee NUMERIC DEFAULT 0,
       tax_amount NUMERIC DEFAULT 0,
       discount_amount NUMERIC DEFAULT 0,
       payable_amount NUMERIC NOT NULL,
@@ -27,10 +28,21 @@ async function ensureBillingInvoiceTable(pool: Pool): Promise<void> {
       transaction_id TEXT,
       doctor_name TEXT,
       details TEXT, -- JSON structure of line items
+      remarks TEXT,
+      patient_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(INVOICE_TABLE)} ADD COLUMN IF NOT EXISTS registration_fee NUMERIC DEFAULT 0`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(INVOICE_TABLE)} ADD COLUMN IF NOT EXISTS remarks TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(INVOICE_TABLE)} ADD COLUMN IF NOT EXISTS patient_id TEXT`);
+
+  try {
+    await pool.query(`ALTER TABLE ${quoteIdentifier(CONSULTATION_TABLE)} ADD COLUMN IF NOT EXISTS billing_status TEXT DEFAULT 'Unbilled'`);
+  } catch (err) {
+    // Ignore if table doesn't exist yet
+  }
 }
 
 // Helper to format date into YYYYMMDD
@@ -68,22 +80,27 @@ export async function GET(
     const patientPhone = searchParams.get("patientPhone");
     const patientName = searchParams.get("patientName");
 
+    const search = searchParams.get("search");
+
     // Action 1: Get past billing history for a patient
     if (action === "history") {
-      if (!patientName && !patientPhone) {
-        return NextResponse.json({ error: "Patient name or phone is required for history." }, { status: 400 });
+      let queryStr = `SELECT * FROM ${quoteIdentifier(INVOICE_TABLE)} WHERE 1=1`;
+      let paramsArr: any[] = [];
+      let nextParam = 1;
+
+      if (search) {
+        queryStr += ` AND (LOWER(invoice_number) LIKE LOWER($${nextParam}) OR LOWER(patient_name) LIKE LOWER($${nextParam}) OR patient_phone LIKE $${nextParam} OR LOWER(doctor_name) LIKE LOWER($${nextParam}) OR LOWER(patient_id) LIKE LOWER($${nextParam}))`;
+        paramsArr.push(`%${search}%`);
+        nextParam++;
+      } else if (patientName || patientPhone) {
+        queryStr += ` AND (LOWER(patient_name) = LOWER($${nextParam}) OR patient_phone = $${nextParam + 1})`;
+        paramsArr.push(patientName || "", patientPhone || "");
+        nextParam += 2;
       }
-      
-      const invoices = await pool.query(
-        `
-          SELECT * FROM ${quoteIdentifier(INVOICE_TABLE)}
-          WHERE 
-            LOWER(patient_name) = LOWER($1)
-            OR patient_phone = $2
-          ORDER BY created_at DESC
-        `,
-        [patientName || "", patientPhone || ""]
-      );
+
+      queryStr += ` ORDER BY created_at DESC LIMIT 100`;
+
+      const invoices = await pool.query(queryStr, paramsArr);
 
       return NextResponse.json({ invoices: invoices.rows });
     }
@@ -126,10 +143,11 @@ export async function GET(
       // 3a. Uninvoiced consultations
       const consultations = await pool.query(
         `
-          SELECT c.*
+          SELECT c.*, a.patient_id, a.patient_type as visit_type, a.department, a.appointment_date, a.appointment_time
           FROM ${quoteIdentifier(CONSULTATION_TABLE)} c
+          LEFT JOIN appointments a ON a.id = (CASE WHEN c.token_number ~ '^[0-9]+$' THEN CAST(c.token_number AS BIGINT) ELSE NULL END)
           LEFT JOIN ${quoteIdentifier(INVOICE_TABLE)} b ON b.token_number = c.token_number AND b.billing_type = 'Consultation'
-          WHERE c.status = 'Completed' AND b.id IS NULL
+          WHERE c.status = 'Completed' AND (c.billing_status = 'Unbilled' OR c.billing_status IS NULL) AND b.id IS NULL
           ORDER BY c.created_at DESC
         `
       );
@@ -152,9 +170,24 @@ export async function GET(
     }
 
     // Default action: get all invoices
-    const allInvoices = await pool.query(
-      `SELECT * FROM ${quoteIdentifier(INVOICE_TABLE)} ORDER BY created_at DESC LIMIT 100`
-    );
+    let allInvoices;
+    if (search) {
+      allInvoices = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(INVOICE_TABLE)}
+         WHERE 
+           LOWER(invoice_number) LIKE LOWER($1) OR
+           LOWER(patient_name) LIKE LOWER($1) OR
+           patient_phone LIKE $1 OR
+           LOWER(doctor_name) LIKE LOWER($1) OR
+           LOWER(patient_id) LIKE LOWER($1)
+         ORDER BY created_at DESC LIMIT 100`,
+        [`%${search}%`]
+      );
+    } else {
+      allInvoices = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(INVOICE_TABLE)} ORDER BY created_at DESC LIMIT 100`
+      );
+    }
 
     return NextResponse.json({ invoices: allInvoices.rows });
   } catch (error) {
@@ -179,6 +212,7 @@ export async function POST(
       tokenNumber,
       billingType,
       subtotal,
+      registrationFee,
       taxAmount,
       discountAmount,
       payableAmount,
@@ -187,6 +221,8 @@ export async function POST(
       transactionId,
       doctorName,
       details,
+      remarks,
+      patientId,
     } = body;
 
     if (!patientName || !tokenNumber || !billingType || subtotal === undefined || payableAmount === undefined) {
@@ -221,6 +257,7 @@ export async function POST(
           token_number,
           billing_type,
           subtotal,
+          registration_fee,
           tax_amount,
           discount_amount,
           payable_amount,
@@ -228,9 +265,11 @@ export async function POST(
           payment_method,
           transaction_id,
           doctor_name,
-          details
+          details,
+          remarks,
+          patient_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING *
       `,
       [
@@ -240,6 +279,7 @@ export async function POST(
         tokenNumber,
         billingType,
         subtotal,
+        registrationFee || 0,
         taxAmount || 0,
         discountAmount || 0,
         payableAmount,
@@ -248,12 +288,13 @@ export async function POST(
         transactionId || null,
         doctorName || null,
         typeof details === "object" ? JSON.stringify(details) : details || null,
+        remarks || null,
+        patientId || null,
       ]
     );
 
     const newInvoice = result.rows[0];
 
-    // Sync status: update original pharmacy dispensing record if it's a pharmacy invoice
     if (billingType === "Pharmacy") {
       await pool.query(
         `
@@ -263,6 +304,22 @@ export async function POST(
         `,
         [paymentStatus || "Pending", tokenNumber]
       );
+    }
+    
+    // Sync status: update original doctor_consultation_entry record if it's a Consultation invoice
+    if (billingType === "Consultation") {
+      try {
+        await pool.query(
+          `
+            UPDATE ${quoteIdentifier(CONSULTATION_TABLE)}
+            SET billing_status = $1
+            WHERE token_number = $2
+          `,
+          [paymentStatus === "Paid" ? "Billed" : "Unbilled", tokenNumber]
+        );
+      } catch (err) {
+        console.error("Could not update doctor_consultation_entry billing_status:", err);
+      }
     }
 
     return NextResponse.json({ invoice: newInvoice }, { status: 201 });
@@ -315,7 +372,6 @@ export async function PUT(
 
     const updatedInvoice = result.rows[0];
 
-    // Sync status: update original pharmacy dispensing record if it's a pharmacy invoice
     if (updatedInvoice.billing_type === "Pharmacy") {
       await pool.query(
         `
@@ -325,6 +381,21 @@ export async function PUT(
         `,
         [paymentStatus, updatedInvoice.token_number]
       );
+    }
+
+    if (updatedInvoice.billing_type === "Consultation") {
+      try {
+        await pool.query(
+          `
+            UPDATE ${quoteIdentifier(CONSULTATION_TABLE)}
+            SET billing_status = $1
+            WHERE token_number = $2
+          `,
+          [paymentStatus === "Paid" ? "Billed" : "Unbilled", updatedInvoice.token_number]
+        );
+      } catch (err) {
+        console.error("Could not update doctor_consultation_entry billing_status:", err);
+      }
     }
 
     return NextResponse.json({ invoice: updatedInvoice });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
+import { ConsultationBillingDashboard } from "../../../components/consultation-billing-dashboard";
 
 function normalizeDoctorProfileRow(row: Record<string, unknown> | null) {
   if (!row) return null;
@@ -27,10 +28,10 @@ async function loadDoctorProfile(hname: string, username: string) {
 }
 
 type QueueTab = "Upcoming" | "Draft" | "Completed";
-type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "History";
+type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "Consultation Billing" | "History";
 type PatientType = "OP" | "IP";
 
-const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "History"];
+const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "Consultation Billing", "History"];
 
 type VitalsRow = Record<string, unknown> & {
   vitals_id?: number | null;
@@ -1167,7 +1168,7 @@ export default function DoctorConsultationPage() {
                   key={tab}
                   type="button"
                   onClick={() => setDetailTab(tab)}
-                  className={`pb-3 text-sm font-medium border-b-2 transition-colors ${detailTab === tab ? "border-brand-500 text-brand-500 dark:border-brand-400 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
+                  className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${detailTab === tab ? "border-brand-500 text-brand-500 dark:border-brand-400 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
                 >
                   {tab}
                 </button>
@@ -1252,6 +1253,12 @@ export default function DoctorConsultationPage() {
                   ) : (
                     <div className="text-sm text-gray-500">Please select a patient from the queue to view history.</div>
                   )
+                )}
+
+                {detailTab === "Consultation Billing" && (
+                  <div className="-mx-4 -mt-4">
+                    <ConsultationBillingDashboard />
+                  </div>
                 )}
               </div>
             )}

@@ -101,7 +101,7 @@ export async function POST(
     const pool = await getTenantDB(decodedHname);
 
     const body = await request.json();
-    const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId, appointmentDate, appointmentTime } = body;
+    const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId, appointmentDate, appointmentTime, hasAttendant, attendantName, attendantPhone, attendantGender, attendantRelation } = body;
 
     // Ensure the appointments table has required columns
     await pool.query(`
@@ -122,6 +122,15 @@ export async function POST(
     await pool.query(`
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS queue_id TEXT
+    `);
+
+    await pool.query(`
+      ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
+      ADD COLUMN IF NOT EXISTS has_attendant BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS attendant_name TEXT,
+      ADD COLUMN IF NOT EXISTS attendant_phone TEXT,
+      ADD COLUMN IF NOT EXISTS attendant_gender TEXT,
+      ADD COLUMN IF NOT EXISTS attendant_relation TEXT
     `);
 
     await ensurePatientTable(pool);
@@ -199,9 +208,14 @@ export async function POST(
             check_in_time,
             appointment_number,
             queue_id,
-            status
+            status,
+            has_attendant,
+            attendant_name,
+            attendant_phone,
+            attendant_gender,
+            attendant_relation
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NULL, $10, 'Scheduled')
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NULL, $10, 'Scheduled', $11, $12, $13, $14, $15)
           RETURNING id
         `,
         [
@@ -214,7 +228,12 @@ export async function POST(
           patientPhone || null,
           currentTime,
           "walk-in",
-          queueIdValue
+          queueIdValue,
+          hasAttendant ? true : false,
+          attendantName || null,
+          attendantPhone || null,
+          attendantGender || null,
+          attendantRelation || null
         ]
       );
 
@@ -293,8 +312,8 @@ export async function POST(
 
       // Mark check_in_time and update IDs
       await pool.query(
-        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, appointment_id_display = $3, queue_id = $4, updated_at = NOW() WHERE id = $2`,
-        [apptNum, apptRecord.id, apptIdDisplay, queueIdValue]
+        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, appointment_id_display = $3, queue_id = $4, updated_at = NOW(), has_attendant = $5, attendant_name = $6, attendant_phone = $7, attendant_gender = $8, attendant_relation = $9 WHERE id = $2`,
+        [apptNum, apptRecord.id, apptIdDisplay, queueIdValue, hasAttendant ? true : false, attendantName || null, attendantPhone || null, attendantGender || null, attendantRelation || null]
       );
 
       // Resolve Patient ID — check if already has one

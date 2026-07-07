@@ -11,6 +11,7 @@ type InvoiceRecord = {
   token_number: string;
   billing_type: string;
   subtotal: string | number;
+  registration_fee?: string | number;
   tax_amount: string | number;
   discount_amount: string | number;
   payable_amount: string | number;
@@ -19,6 +20,8 @@ type InvoiceRecord = {
   transaction_id?: string;
   doctor_name?: string;
   details?: string;
+  remarks?: string;
+  patient_id?: string;
   created_at: string;
 };
 
@@ -31,6 +34,10 @@ type PendingConsultation = {
   diagnosis_name?: string;
   consultation_amount?: string | number;
   created_at: string;
+  patient_id?: string;
+  visit_type?: string;
+  appointment_date?: string;
+  appointment_time?: string;
 };
 
 function formatDisplayDate(dateValue: string | Date | undefined, includeTime = false): string {
@@ -79,8 +86,14 @@ export function ConsultationBillingDashboard() {
   const [viewInvoiceModal, setViewInvoiceModal] = useState<InvoiceRecord | null>(null);
 
   // Billing calculation states
-  const [consRateOption, setConsRateOption] = useState<"Full" | "FollowUpFree" | "FollowUpHalf">("Full");
+  const [consRateOption, setConsRateOption] = useState<"Full" | "FollowUpFree" | "FollowUpHalf" | "Custom">("Full");
   const [consFollowUpInfo, setConsFollowUpInfo] = useState<{ isFollowUp: boolean; originalVisitDate: string | null } | null>(null);
+  const [registrationFee, setRegistrationFee] = useState<number>(0);
+  const [taxPercent, setTaxPercent] = useState<number>(0);
+  const [discountInput, setDiscountInput] = useState<number>(0);
+  const [discountType, setDiscountType] = useState<"Amount" | "Percent">("Amount");
+  const [billingRemarks, setBillingRemarks] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   
   // Payment gateway input states
   const [paymentMethod, setPaymentMethod] = useState<"Card" | "UPI" | "Cash" | "Insurance">("Cash");
@@ -96,7 +109,7 @@ export function ConsultationBillingDashboard() {
       if (!pendingRes.ok) throw new Error(pendingData.error || "Failed to load pending lists");
       setPendingConsultations(pendingData.pendingConsultations || []);
 
-      const invRes = await fetch(`/api/${encodeURIComponent(hname)}/billing`);
+      const invRes = await fetch(`/api/${encodeURIComponent(hname)}/billing${searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : ""}`);
       const invData = await invRes.json();
       if (!invRes.ok) throw new Error(invData.error || "Failed to load invoices");
       const consInvoices = (invData.invoices || []).filter((i: InvoiceRecord) => i.billing_type === "Consultation");
@@ -116,10 +129,11 @@ export function ConsultationBillingDashboard() {
   // Filtered invoices by selected date
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
+      if (searchQuery.trim().length > 0) return true; // Ignore date filter if searching
       const invDate = inv.created_at ? inv.created_at.slice(0, 10) : "";
       return invDate === selectedDate;
     });
-  }, [invoices, selectedDate]);
+  }, [invoices, selectedDate, searchQuery]);
 
   // Open checkout for selected unbilled record
   const handleOpenBilling = async (c: PendingConsultation) => {
@@ -128,6 +142,11 @@ export function ConsultationBillingDashboard() {
     setConsFollowUpInfo(null);
     setPaymentMethod("Cash");
     setTransactionId("");
+    setRegistrationFee(0);
+    setTaxPercent(0);
+    setDiscountInput(0);
+    setDiscountType("Amount");
+    setBillingRemarks("");
 
     try {
       const checkUrl = `/api/${encodeURIComponent(hname)}/billing?action=check-followup&patientName=${encodeURIComponent(c.patient_details)}&doctor=${encodeURIComponent(c.doctor)}&diagnosis=${encodeURIComponent(c.diagnosis_name || "")}`;
@@ -157,20 +176,30 @@ export function ConsultationBillingDashboard() {
 
   // Calculations for Consultation Invoice
   const billingCalculations = useMemo(() => {
-    if (!activeCheckout) return { subtotal: 0, discount: 0, payable: 0 };
+    if (!activeCheckout) return { subtotal: 0, registrationFee, discount: 0, tax: 0, payable: 0 };
     const subtotal = Number(activeCheckout.consultation_amount || 0);
     let discount = 0;
     if (consRateOption === "FollowUpFree") {
       discount = subtotal;
     } else if (consRateOption === "FollowUpHalf") {
       discount = Math.round(subtotal * 0.5);
+    } else if (consRateOption === "Custom") {
+      discount = discountType === "Amount" ? discountInput : Math.round((subtotal + registrationFee) * (discountInput / 100));
     }
+    
+    // Tax is applied after discount on (subtotal + registration fee)
+    const afterDiscount = Math.max(0, (subtotal + registrationFee) - discount);
+    const tax = Math.round(afterDiscount * (taxPercent / 100));
+    const payable = afterDiscount + tax;
+
     return {
       subtotal,
+      registrationFee,
       discount,
-      payable: Math.max(0, subtotal - discount)
+      tax,
+      payable
     };
-  }, [activeCheckout, consRateOption]);
+  }, [activeCheckout, consRateOption, registrationFee, taxPercent, discountInput, discountType]);
 
   // Submit and finalize billing
   const handleFinalizeInvoice = async (status: "Paid" | "Pending") => {
@@ -179,7 +208,7 @@ export function ConsultationBillingDashboard() {
     setErrorMsg("");
     setSuccessMsg("");
     
-    const { subtotal, discount, payable } = billingCalculations;
+    const { subtotal, registrationFee, discount, tax, payable } = billingCalculations;
 
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/billing`, {
@@ -187,21 +216,25 @@ export function ConsultationBillingDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientName: activeCheckout.patient_details,
+          patientId: activeCheckout.patient_id,
           tokenNumber: activeCheckout.token_number,
           billingType: "Consultation",
           subtotal,
-          taxAmount: 0,
+          registrationFee,
+          taxAmount: tax,
           discountAmount: discount,
           payableAmount: payable,
           paymentStatus: status,
           paymentMethod: status === "Paid" ? paymentMethod : null,
           transactionId: status === "Paid" ? (transactionId || `TXN-${Date.now().toString().slice(-6)}`) : null,
           doctorName: activeCheckout.doctor,
+          remarks: billingRemarks,
           details: {
             doctor: activeCheckout.doctor,
             department: activeCheckout.department,
             diagnosis: activeCheckout.diagnosis_name,
-            visitType: consRateOption === "Full" ? "First Visit" : "Follow-up Visit",
+            visitType: activeCheckout.visit_type === 'walk-in' ? 'OP' : 'OP', // default to OP
+            pricingTier: consRateOption,
             originalVisitDate: consFollowUpInfo?.originalVisitDate,
           },
         }),
@@ -264,6 +297,81 @@ export function ConsultationBillingDashboard() {
   const selectedInvoiceItem = useMemo(() => {
     return invoices.find(i => i.id === selectedInvoiceId) || null;
   }, [invoices, selectedInvoiceId]);
+
+  const handlePrint = (invoice: InvoiceRecord, downloadAsPdf: boolean = false) => {
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+    
+    // HTML string for the invoice
+    const html = `
+      <html>
+        <head>
+          <title>${downloadAsPdf ? 'Download PDF' : 'Print Invoice'} - ${invoice.invoice_number}</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
+            .bold { font-weight: bold; }
+            .total { font-size: 18px; border-top: 2px solid #eee; padding-top: 10px; margin-top: 20px; }
+            .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>HOSPITAL INVOICE</h2>
+            <p>${invoice.invoice_number}</p>
+            <p>Date: ${new Date(invoice.created_at).toLocaleString()}</p>
+          </div>
+          
+          <div class="row">
+            <div>
+              <p class="bold">Patient Information:</p>
+              <p>Name: ${invoice.patient_name}</p>
+              <p>ID/Token: ${invoice.token_number}</p>
+              ${invoice.patient_id ? `<p>Patient ID: ${invoice.patient_id}</p>` : ''}
+              ${invoice.patient_phone ? `<p>Phone: ${invoice.patient_phone}</p>` : ''}
+            </div>
+            <div>
+              <p class="bold">Consultation Details:</p>
+              <p>Doctor: ${invoice.doctor_name || 'N/A'}</p>
+              <p>Bill Type: ${invoice.billing_type}</p>
+            </div>
+          </div>
+          
+          <div style="margin-top: 30px;">
+            <p class="bold" style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Charges</p>
+            
+            <div class="row"><span>Consultation Fee</span> <span>₹${Number(invoice.subtotal).toFixed(2)}</span></div>
+            ${Number(invoice.registration_fee) > 0 ? `<div class="row"><span>Registration Fee</span> <span>₹${Number(invoice.registration_fee).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.discount_amount) > 0 ? `<div class="row" style="color: red;"><span>Discount</span> <span>-₹${Number(invoice.discount_amount).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.tax_amount) > 0 ? `<div class="row"><span>Tax</span> <span>₹${Number(invoice.tax_amount).toFixed(2)}</span></div>` : ''}
+            
+            <div class="row total bold"><span>Grand Total</span> <span>₹${Number(invoice.payable_amount).toFixed(2)}</span></div>
+          </div>
+
+          <div style="margin-top: 30px; font-size: 12px;">
+            <p class="bold">Payment Information</p>
+            <p>Status: ${invoice.payment_status}</p>
+            <p>Method: ${invoice.payment_method || 'N/A'}</p>
+            <p>Transaction ID: ${invoice.transaction_id || 'N/A'}</p>
+            ${invoice.remarks ? `<p>Remarks: ${invoice.remarks}</p>` : ''}
+          </div>
+          
+          <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #777;">
+            <p>Thank you for visiting.</p>
+            ${downloadAsPdf ? '<p style="margin-top:20px; font-weight:bold; color:#000;">* To save as PDF, select "Save as PDF" in your print dialog.</p>' : ''}
+          </div>
+        </body>
+      </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
 
   return (
     <div className="space-y-6">
@@ -483,11 +591,13 @@ export function ConsultationBillingDashboard() {
                   <tr>
                     <th className="w-12 px-3 py-2 text-left">Select</th>
                     <th className="px-3 py-2 text-left">Patient Details</th>
+                    <th className="px-3 py-2 text-left">Patient ID</th>
                     <th className="px-3 py-2 text-left">Doctor</th>
+                    <th className="px-3 py-2 text-left">Department</th>
                     <th className="px-3 py-2 text-left">Visit Token</th>
-                    <th className="px-3 py-2 text-left">Diagnosis</th>
+                    <th className="px-3 py-2 text-left">Type</th>
                     <th className="px-3 py-2 text-left">Consultation Fee</th>
-                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Date & Time</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-transparent">
@@ -508,11 +618,13 @@ export function ConsultationBillingDashboard() {
                         />
                       </td>
                       <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white">{c.patient_details}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.doctor} ({c.department})</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.patient_id || "—"}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.doctor}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.department}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.token_number}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.diagnosis_name || "—"}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.visit_type === 'walk-in' ? 'OP' : (c.visit_type || 'OP').toUpperCase()}</td>
                       <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">₹{Number(c.consultation_amount).toFixed(2)}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{formatDisplayDate(c.created_at)}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{formatDisplayDate(c.appointment_date || c.created_at)} {c.appointment_time || ''}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -525,17 +637,35 @@ export function ConsultationBillingDashboard() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           {/* Date Picker on top */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-gray-800">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Filter Invoices by Date:</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setSelectedInvoiceId(null);
-                }}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Filter Invoices by Date:</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setSelectedInvoiceId(null);
+                  }}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search Invoice No, Name, Phone, ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadData()}
+                  className="h-10 w-64 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                />
+                <button
+                  onClick={loadData}
+                  className="h-10 rounded-xl bg-brand-500 px-4 text-xs font-bold text-white hover:bg-brand-600 transition"
+                >
+                  Search
+                </button>
+              </div>
             </div>
             
             {/* Top action buttons */}
@@ -726,13 +856,27 @@ export function ConsultationBillingDashboard() {
               {/* Receipt Summary */}
               <div className="border-t border-dashed border-gray-200 pt-3 dark:border-gray-800 text-xs space-y-1.5">
                 <div className="flex justify-between text-gray-500">
-                  <span>Subtotal:</span>
+                  <span>Consultation Fee:</span>
                   <span>₹{Number(viewInvoiceModal.subtotal).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-red-500">
-                  <span>Discount:</span>
-                  <span>-₹{Number(viewInvoiceModal.discount_amount).toFixed(2)}</span>
-                </div>
+                {Number(viewInvoiceModal.registration_fee) > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Registration Fee:</span>
+                    <span>₹{Number(viewInvoiceModal.registration_fee).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(viewInvoiceModal.discount_amount) > 0 && (
+                  <div className="flex justify-between text-red-500">
+                    <span>Discount:</span>
+                    <span>-₹{Number(viewInvoiceModal.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(viewInvoiceModal.tax_amount) > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Tax:</span>
+                    <span>₹{Number(viewInvoiceModal.tax_amount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-sm pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Amount Paid:</span>
                   <span>₹{Number(viewInvoiceModal.payable_amount).toFixed(2)}</span>
@@ -746,13 +890,28 @@ export function ConsultationBillingDashboard() {
                   <p>Status: <strong className="text-green-600 dark:text-green-400">{viewInvoiceModal.payment_status}</strong></p>
                   <p>Method: {viewInvoiceModal.payment_method || "—"}</p>
                   <p className="col-span-2">Txn ID: {viewInvoiceModal.transaction_id || "—"}</p>
+                  {viewInvoiceModal.remarks && <p className="col-span-2">Remarks: {viewInvoiceModal.remarks}</p>}
                 </div>
               </div>
 
-              <div className="flex justify-end pt-3">
+              <div className="flex justify-between items-center pt-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handlePrint(viewInvoiceModal, false)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
+                  >
+                    Print Invoice
+                  </button>
+                  <button
+                    onClick={() => handlePrint(viewInvoiceModal, true)}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
+                  >
+                    Download PDF
+                  </button>
+                </div>
                 <button
                   onClick={() => setViewInvoiceModal(null)}
-                  className="rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600"
+                  className="rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
                 >
                   Close Receipt
                 </button>

@@ -114,6 +114,11 @@ async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenant
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS patient_type TEXT NOT NULL DEFAULT 'scheduled'`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS appointment_id_display TEXT`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS queue_id TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS has_attendant BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS attendant_name TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS attendant_phone TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS attendant_gender TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(APPOINTMENTS_TABLE)} ADD COLUMN IF NOT EXISTS attendant_relation TEXT`);
 }
 
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
@@ -221,6 +226,11 @@ export async function GET(
                 a.appointment_number,
                 a.appointment_id_display,
                 a.queue_id,
+                a.has_attendant,
+                a.attendant_name,
+                a.attendant_phone,
+                a.attendant_gender,
+                a.attendant_relation,
                 p.id AS registration_id,
                 p.patient_id AS registration_patient_id,
                 p.patient_name AS registration_patient_name,
@@ -312,6 +322,11 @@ export async function GET(
             a.appointment_number,
             a.appointment_id_display,
             a.queue_id,
+            a.has_attendant,
+            a.attendant_name,
+            a.attendant_phone,
+            a.attendant_gender,
+            a.attendant_relation,
             p.id AS registration_id,
             p.patient_id AS registration_patient_id,
             p.patient_name AS registration_patient_name,

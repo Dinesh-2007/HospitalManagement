@@ -74,6 +74,21 @@ export default function CheckInPage() {
   const [walkInError, setWalkInError] = useState("");
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
 
+  // Attendant state for scheduled check-in
+  const [attendantCheckInRow, setAttendantCheckInRow] = useState<VitalsRow | null>(null);
+  const [hasAttendant, setHasAttendant] = useState<"yes" | "no" | "">("");
+  const [attendantName, setAttendantName] = useState("");
+  const [attendantPhone, setAttendantPhone] = useState("");
+  const [attendantGender, setAttendantGender] = useState("");
+  const [attendantRelation, setAttendantRelation] = useState("");
+
+  // Attendant state for walk-in check-in
+  const [walkInHasAttendant, setWalkInHasAttendant] = useState<"yes" | "no" | "">("");
+  const [walkInAttendantName, setWalkInAttendantName] = useState("");
+  const [walkInAttendantPhone, setWalkInAttendantPhone] = useState("");
+  const [walkInAttendantGender, setWalkInAttendantGender] = useState("");
+  const [walkInAttendantRelation, setWalkInAttendantRelation] = useState("");
+
   const [countries] = useState(() => Country.getAllCountries());
   const [states, setStates] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
@@ -178,6 +193,10 @@ export default function CheckInPage() {
       setWalkInError("Please select both department and doctor.");
       return;
     }
+    if (walkInHasAttendant === "yes" && (!walkInAttendantName || !walkInAttendantPhone || !walkInAttendantGender || !walkInAttendantRelation)) {
+      setWalkInError("Please fill in all attendant details.");
+      return;
+    }
     setWalkInSubmitting(true);
     try {
       let patientId = walkInRegForm.patientId;
@@ -212,6 +231,11 @@ export default function CheckInPage() {
           patientId: patientId || internalId,
           appointmentDate: date,
           appointmentTime: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+          hasAttendant: walkInHasAttendant === "yes",
+          attendantName: walkInAttendantName,
+          attendantPhone: walkInAttendantPhone,
+          attendantGender: walkInAttendantGender,
+          attendantRelation: walkInAttendantRelation,
         }),
       });
       const checkInData = await checkInRes.json();
@@ -230,6 +254,11 @@ export default function CheckInPage() {
       setWalkInDept("");
       setWalkInDoctor("");
       setWalkInStep("phone");
+      setWalkInHasAttendant("");
+      setWalkInAttendantName("");
+      setWalkInAttendantPhone("");
+      setWalkInAttendantGender("");
+      setWalkInAttendantRelation("");
 
       await loadPatients();
     } catch (err: any) {
@@ -373,7 +402,7 @@ export default function CheckInPage() {
     return result;
   }, [rows, searchQuery, selectedDepartment, selectedDoctor]);
 
-  const handleCheckIn = async (row: VitalsRow) => {
+  const handleCheckIn = async (row: VitalsRow, attendantDetails?: { hasAttendant: boolean; attendantName: string; attendantPhone: string; attendantGender: string; attendantRelation: string }) => {
     const patientName = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
     const doctor = text(row, ["doctor"]);
     const department = text(row, ["department"]);
@@ -395,6 +424,11 @@ export default function CheckInPage() {
           doctor,
           appointmentId: id,
           appointmentDate: text(row, ["appointment_date"]) || date,
+          hasAttendant: attendantDetails?.hasAttendant,
+          attendantName: attendantDetails?.attendantName,
+          attendantPhone: attendantDetails?.attendantPhone,
+          attendantGender: attendantDetails?.attendantGender,
+          attendantRelation: attendantDetails?.attendantRelation,
         }),
       });
 
@@ -413,6 +447,7 @@ export default function CheckInPage() {
         });
       }
 
+      setAttendantCheckInRow(null);
       await loadPatients();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -507,6 +542,7 @@ export default function CheckInPage() {
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3 text-left">Time</th>
                   <th className="px-4 py-3 text-left">Slot</th>
+                  <th className="px-4 py-3 text-left">Attendant</th>
                   <th className="px-4 py-3 text-left">Status</th>
                 </tr>
               </thead>
@@ -553,6 +589,7 @@ export default function CheckInPage() {
                           : "-"}
                       </td>
                       <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
+                      <td className="px-4 py-3 text-gray-600 font-medium">{isCheckedIn ? (row.has_attendant ? "Yes" : "No") : "-"}</td>
                       <td className="px-4 py-3">
                         {isCheckedIn ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-4 py-1.5 text-sm font-medium text-success-700">
@@ -562,7 +599,14 @@ export default function CheckInPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleCheckIn(row)}
+                            onClick={() => {
+                              setAttendantCheckInRow(row);
+                              setHasAttendant("");
+                              setAttendantName("");
+                              setAttendantPhone("");
+                              setAttendantGender("");
+                              setAttendantRelation("");
+                            }}
                             disabled={isRowCheckingIn}
                             className="rounded-full border border-brand-300 bg-brand-50 px-4 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-50"
                           >
@@ -578,6 +622,81 @@ export default function CheckInPage() {
           </div>
         </div>
       </div>
+      {/* Attendant Check-in Modal */}
+      {attendantCheckInRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90 mb-4">Attendant Information</h3>
+            <div className="mb-4 text-sm text-gray-600">
+              Is an attendant accompanying the patient?
+              <div className="flex items-center gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="hasAttendant" value="yes" checked={hasAttendant === "yes"} onChange={(e) => setHasAttendant(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> Yes
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="hasAttendant" value="no" checked={hasAttendant === "no"} onChange={(e) => setHasAttendant(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> No
+                </label>
+              </div>
+            </div>
+            
+            {hasAttendant === "yes" && (
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Attendant Name <span className="text-red-500">*</span></label>
+                  <input type="text" value={attendantName} onChange={(e) => setAttendantName(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number <span className="text-red-500">*</span></label>
+                  <input type="tel" value={attendantPhone} onChange={(e) => setAttendantPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Gender <span className="text-red-500">*</span></label>
+                  <select value={attendantGender} onChange={(e) => setAttendantGender(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm">
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relation <span className="text-red-500">*</span></label>
+                  <input type="text" value={attendantRelation} onChange={(e) => setAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 dark:border-gray-800">
+              <button type="button" onClick={() => setAttendantCheckInRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasAttendant === "") {
+                    setError("Please select whether there is an attendant.");
+                    return;
+                  }
+                  if (hasAttendant === "yes" && (!attendantName || !attendantPhone || !attendantGender || !attendantRelation)) {
+                    setError("Please fill in all attendant details.");
+                    return;
+                  }
+                  handleCheckIn(attendantCheckInRow, {
+                    hasAttendant: hasAttendant === "yes",
+                    attendantName,
+                    attendantPhone,
+                    attendantGender,
+                    attendantRelation
+                  });
+                }}
+                disabled={hasAttendant === "" || checkingIn === attendantCheckInRow.appointment_id}
+                className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
+              >
+                {checkingIn === attendantCheckInRow.appointment_id ? "Checking..." : "Complete Check-in"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Walk-in Modal */}
       {showWalkInModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
@@ -904,6 +1023,45 @@ export default function CheckInPage() {
                     ) : (
                       <div className="text-sm text-gray-500 py-2 border border-dashed border-gray-200 rounded-lg text-center bg-gray-50">
                         Please select a department first to view available doctors.
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-4 border-t border-gray-100">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-3">Attendant Information</h4>
+                    <div className="mb-4 text-sm text-gray-600">
+                      Is an attendant accompanying the patient?
+                      <div className="flex items-center gap-4 mt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="walkInHasAttendant" value="yes" checked={walkInHasAttendant === "yes"} onChange={(e) => setWalkInHasAttendant(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> Yes
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="walkInHasAttendant" value="no" checked={walkInHasAttendant === "no"} onChange={(e) => setWalkInHasAttendant(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> No
+                        </label>
+                      </div>
+                    </div>
+                    {walkInHasAttendant === "yes" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700">Attendant Name <span className="text-red-500">*</span></label>
+                          <input type="text" value={walkInAttendantName} onChange={(e) => setWalkInAttendantName(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number <span className="text-red-500">*</span></label>
+                          <input type="tel" value={walkInAttendantPhone} onChange={(e) => setWalkInAttendantPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700">Gender <span className="text-red-500">*</span></label>
+                          <select value={walkInAttendantGender} onChange={(e) => setWalkInAttendantGender(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm">
+                            <option value="">Select</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700">Relation <span className="text-red-500">*</span></label>
+                          <input type="text" value={walkInAttendantRelation} onChange={(e) => setWalkInAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                        </div>
                       </div>
                     )}
                   </div>
