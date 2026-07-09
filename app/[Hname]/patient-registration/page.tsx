@@ -15,7 +15,6 @@ export default function PatientRegistrationPage() {
   const mode = searchParams?.get("mode");
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
-  const [patientTypeOptions, setPatientTypeOptions] = useState<string[]>([]);
   const [localName, setLocalName] = useState("");
   const [localPhone, setLocalPhone] = useState("");
 
@@ -24,48 +23,7 @@ export default function PatientRegistrationPage() {
       setLocalName(window.localStorage.getItem("patientName") ?? "");
       setLocalPhone(window.localStorage.getItem("patientPhone")?.replace(/\D/g, "") ?? "");
     } catch {}
-    async function loadPatientTypes() {
-      if (!hname) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/${hname}/forms/patient_type`, {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as {
-          rows?: Array<Record<string, unknown>>;
-        };
-
-        if (response.ok) {
-          const types = (data.rows ?? [])
-            .map((row) => {
-              const typeCode = String(row.type_code ?? row.typeCode ?? "").trim();
-              const description = String(row.description ?? "").trim();
-
-              if (!typeCode) {
-                return "";
-              }
-
-              return description ? `${typeCode} - ${description}` : typeCode;
-            })
-            .filter(Boolean);
-
-          setPatientTypeOptions(types);
-        }
-      } catch (error) {
-        console.error("Failed to fetch patient types", error);
-      }
-    }
-
-    void loadPatientTypes();
-  }, [hname]);
+  }, []);
 
   const countries = Country.getAllCountries();
   const states = selectedCountryCode ? State.getStatesOfCountry(selectedCountryCode) : [];
@@ -128,32 +86,7 @@ export default function PatientRegistrationPage() {
       { id: "phoneResi", label: "Phone - Resi", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
       { id: "mobile", label: "Mobile", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small", defaultValue: mode === "edit" ? localPhone : undefined },
       { id: "hnNumber", label: "HN Number", type: "text", maxLength: 50, size: "small" },
-      {
-        id: "numberOfVisits",
-        label: "Number of Visits till now",
-        type: "number",
-        min: 0,
-        size: "small",
-      },
-      {
-        id: "lastVisitDateTime",
-        label: "Last Visit Date & Time",
-        type: "datetime-local",
-      },
-      {
-        id: "lastVisitDoctorName",
-        label: "Last visit doctor name",
-        type: "text",
-        maxLength: 255,
-        size: "medium",
-      },
       { id: "profession", label: "Profession", type: "text", maxLength: 255, size: "medium" },
-      {
-        id: "patientType",
-        label: "Patient Type",
-        type: "select",
-        options: patientTypeOptions,
-      },
       {
         id: "preferredPaymentType",
         label: "Preferred Payment Type",
@@ -194,7 +127,7 @@ export default function PatientRegistrationPage() {
         fullWidth: true,
       },
     ],
-    [cities, countries, patientTypeOptions, states, mode, localName, localPhone],
+    [cities, countries, states, mode, localName, localPhone],
   );
 
   return (
@@ -206,6 +139,7 @@ export default function PatientRegistrationPage() {
       backButtonText="Back to Check-in"
       backHref={`/${hname}/checkin`}
       profileLayoutTab={mode === "edit" ? "edit" : undefined}
+      enableViewEditToggle={mode === "edit"}
     />
   );
 }

@@ -71,6 +71,7 @@ type MastersFormPageProps = {
   columns?: 1 | 2 | 3;
   profileLayoutTab?: "edit" | "history" | "family" | "appointments";
   children?: React.ReactNode | ((props: MastersFormPageRenderProps) => React.ReactNode);
+  enableViewEditToggle?: boolean;
 };
 
 type SavedRecord = Record<string, unknown>;
@@ -174,6 +175,7 @@ export function MastersFormPage({
   columns,
   profileLayoutTab,
   children,
+  enableViewEditToggle,
 }: MastersFormPageProps) {
 
   const [records, setRecords] = useState<SavedRecord[]>([]);
@@ -187,6 +189,12 @@ export function MastersFormPage({
   const [formValues, setFormValues] = useState<Record<string, FormValue>>(() =>
     buildInitialFormValues(fields),
   );
+  const [isEditingMode, setIsEditingMode] = useState(() => {
+    if (enableViewEditToggle) {
+      return false;
+    }
+    return true;
+  });
 
   const tableName = tableNameFromCardTitle(cardTitle);
   const params = useParams();
@@ -249,9 +257,18 @@ export function MastersFormPage({
         setEditingRecordId(Number(matching.id));
         setFormStateVersion((current) => current + 1);
         setIsShowingForm(true);
+        if (enableViewEditToggle) {
+          setIsEditingMode(false);
+        }
+      } else {
+        if (enableViewEditToggle) {
+          setIsEditingMode(true);
+        }
       }
+    } else if (profileLayoutTab === "edit" && !isLoadingRecords && records.length === 0 && enableViewEditToggle) {
+      setIsEditingMode(true);
     }
-  }, [records, profileLayoutTab, fields, editingRecordId]);
+  }, [records, profileLayoutTab, fields, editingRecordId, isLoadingRecords, enableViewEditToggle]);
 
   // Avoid synchronously calling setState inside effects; form state is reset
   // via resetFormState or during editRecord.
@@ -261,7 +278,10 @@ export function MastersFormPage({
     setFormValues(buildInitialFormValues(fields));
     setEditingRecordId(null);
     setFormStateVersion((current) => current + 1);
-  }, [fields]);
+    if (enableViewEditToggle) {
+      setIsEditingMode(true);
+    }
+  }, [fields, enableViewEditToggle]);
 
   const updateFieldValue = useCallback(
     (field: MastersFormField, value: FormValue) => {
@@ -306,8 +326,11 @@ export function MastersFormPage({
       setSubmitError(null);
       setSubmitMessage(null);
       setIsShowingForm(true);
+      if (enableViewEditToggle) {
+        setIsEditingMode(true);
+      }
     },
-    [fields],
+    [fields, enableViewEditToggle],
   );
 
   const handleDeleteRecord = useCallback(
@@ -380,6 +403,9 @@ export function MastersFormPage({
         resetFormState();
         setIsShowingForm(mode === "saveNext");
       }
+      if (enableViewEditToggle) {
+        setIsEditingMode(false);
+      }
       setSubmitMessage(
         editingRecordId
           ? `Updated successfully in ${tableName}.`
@@ -434,15 +460,30 @@ export function MastersFormPage({
             </p>
           </div>
 
-          {!isShowingForm && profileLayoutTab !== "edit" ? (
-            <button
-              type="button"
-              onClick={() => setIsShowingForm(true)}
-              className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
-            >
-              {addButtonLabel}
-            </button>
-          ) : null}
+          <div className="flex items-center gap-3">
+            {enableViewEditToggle && !isEditingMode && isShowingForm ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingMode(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-brand-300 text-brand-600 transition hover:bg-brand-50 px-4 py-2.5 text-sm font-medium dark:border-brand-800 dark:text-brand-300 dark:hover:bg-brand-500/10 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                title="Edit Details"
+                aria-label="Edit Details"
+              >
+                <PencilIcon className="h-4 w-4" />
+                Edit Details
+              </button>
+            ) : null}
+
+            {!isShowingForm && profileLayoutTab !== "edit" ? (
+              <button
+                type="button"
+                onClick={() => setIsShowingForm(true)}
+                className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+              >
+                {addButtonLabel}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="p-4 sm:p-6">
@@ -475,7 +516,17 @@ export function MastersFormPage({
                         {field.label}
                       </label>
 
-                      {field.type === "select" ? (
+                      {!isEditingMode ? (
+                        <div className="flex min-h-[2.75rem] w-full items-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-xs dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
+                          {(() => {
+                            const val = formValues[field.id];
+                            if (Array.isArray(val)) {
+                              return val.filter(Boolean).join(", ") || "—";
+                            }
+                            return val || "—";
+                          })()}
+                        </div>
+                      ) : field.type === "select" ? (
                         <select
                           id={field.id}
                           name={field.id}
@@ -623,37 +674,62 @@ export function MastersFormPage({
                   </Link>
                 ) : <div />}
 
-                <div className="flex flex-wrap justify-end gap-3">
-                  {profileLayoutTab !== "edit" ? (
-                    <>
+                {isEditingMode ? (
+                  <div className="flex flex-wrap justify-end gap-3">
+                    {enableViewEditToggle ? (
                       <button
                         type="button"
                         onClick={() => {
-                          resetFormState();
-                          setIsShowingForm(false);
+                          if (editingRecordId) {
+                            const record = records.find(r => Number(r.id) === editingRecordId);
+                            if (record) {
+                              const nextValues = buildInitialFormValues(fields);
+                              for (const field of fields) {
+                                const recordValue = record[field.id] ?? record[columnNameFromFieldId(field.id)];
+                                nextValues[field.id] = normalizeRecordValue(recordValue, field);
+                              }
+                              setFormValues(nextValues);
+                            }
+                          } else {
+                            resetFormState();
+                          }
+                          setIsEditingMode(false);
                         }}
                         className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                       >
                         Cancel
                       </button>
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => void saveForm("saveNext")}
-                        className="inline-flex items-center justify-center rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 transition hover:bg-brand-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                      >
-                        {isSubmitting ? "Saving..." : "Save Next"}
-                      </button>
-                    </>
-                  ) : null}
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
-                  >
-                    {isSubmitting ? "Saving..." : "Save"}
-                  </button>
-                </div>
+                    ) : profileLayoutTab !== "edit" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetFormState();
+                            setIsShowingForm(false);
+                          }}
+                          className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => void saveForm("saveNext")}
+                          className="inline-flex items-center justify-center rounded-lg border border-brand-500 px-4 py-2.5 text-sm font-medium text-brand-500 transition hover:bg-brand-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                        >
+                          {isSubmitting ? "Saving..." : "Save Next"}
+                        </button>
+                      </>
+                    ) : null}
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                    >
+                      {isSubmitting ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               {submitMessage ? (

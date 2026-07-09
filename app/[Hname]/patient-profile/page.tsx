@@ -20,11 +20,7 @@ type ProfileFormValues = {
   phoneResi: string;
   mobile: string;
   hnNumber: string;
-  numberOfVisits: string;
-  lastVisitDateTime: string;
-  lastVisitDoctorName: string;
   profession: string;
-  patientType: string;
   preferredPaymentType: string;
   mediclaimPolicyAvailable: string;
   policyDetails: string;
@@ -37,8 +33,7 @@ type ProfileFormValues = {
 
 const EMPTY_VALUES: ProfileFormValues = {
   patientId: "", patientName: "", dob: "", gender: "", address: "", country: "", state: "", city: "",
-  zipCode: "", email: "", phoneOffice: "", phoneResi: "", mobile: "", hnNumber: "", numberOfVisits: "",
-  lastVisitDateTime: "", lastVisitDoctorName: "", profession: "", patientType: "", preferredPaymentType: "",
+  zipCode: "", email: "", phoneOffice: "", phoneResi: "", mobile: "", hnNumber: "", profession: "", preferredPaymentType: "",
   mediclaimPolicyAvailable: "", policyDetails: "", linkedPatientId: "", relationshipShipLinkedPatient: "",
   activeFrom: "", inactiveFrom: "", inactiveReason: "",
 };
@@ -59,11 +54,7 @@ function fromRow(row: Record<string, unknown>): ProfileFormValues {
     phoneResi: String(row.phone_resi ?? ""),
     mobile: String(row.mobile ?? ""),
     hnNumber: String(row.hn_number ?? ""),
-    numberOfVisits: String(row.number_of_visits ?? ""),
-    lastVisitDateTime: String(row.last_visit_date_time ?? "").slice(0, 16),
-    lastVisitDoctorName: String(row.last_visit_doctor_name ?? ""),
     profession: String(row.profession ?? ""),
-    patientType: String(row.patient_type ?? ""),
     preferredPaymentType: String(row.preferred_payment_type ?? ""),
     mediclaimPolicyAvailable: String(row.mediclaim_policy_available ?? ""),
     policyDetails: String(row.policy_details ?? ""),
@@ -316,10 +307,6 @@ export default function PatientProfilePage() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Patient Type</label>
-                  <input value={patientData.patientType} onChange={e => updateField("patientType", e.target.value)} className={inputCls} />
-                </div>
-                <div>
                   <label className={labelCls}>Profession</label>
                   <input value={patientData.profession} onChange={e => updateField("profession", e.target.value)} className={inputCls} />
                 </div>
@@ -443,9 +430,7 @@ export default function PatientProfilePage() {
                 <InfoItem label="Name" value={patientData.patientName} />
                 <InfoItem label="Birth Date" value={patientData.dob} />
                 <InfoItem label="Gender" value={patientData.gender} />
-                <InfoItem label="Patient Type" value={patientData.patientType} />
                 <InfoItem label="Profession" value={patientData.profession} />
-                <InfoItem label="Visits" value={patientData.numberOfVisits} />
               </div>
             </div>
 
@@ -481,8 +466,6 @@ export default function PatientProfilePage() {
                 <InfoItem label="HN Number" value={patientData.hnNumber} />
                 <InfoItem label="Preferred Payment" value={patientData.preferredPaymentType} />
                 <InfoItem label="Mediclaim" value={patientData.mediclaimPolicyAvailable} />
-                <InfoItem label="Last Visit Doctor" value={patientData.lastVisitDoctorName} />
-                <InfoItem label="Last Visit Date" value={patientData.lastVisitDateTime} />
                 {patientData.mediclaimPolicyAvailable === "Yes" && (
                   <div className="sm:col-span-2 lg:col-span-3">
                     <InfoItem label="Policy Details" value={patientData.policyDetails} />
