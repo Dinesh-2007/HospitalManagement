@@ -70,6 +70,15 @@ function formatTimeRange(start: string, end?: string | null) {
   return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
+function calculateAge(dob: string) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const diff = Date.now() - birth.getTime();
+  const age = new Date(diff).getUTCFullYear() - 1970;
+  return isFinite(age) && age >= 0 ? age : null;
+}
+
 function isCompleted(row: VitalsRow) {
   return Boolean(row.vitals_id || row.vitals_status);
 }
@@ -304,7 +313,15 @@ export default function PatientVitalsPage() {
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
                   const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
                   const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
-                  const appointmentNum = row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-";
+                  const pType = text(row, ["patient_type"]) || (row.appointment_id ? "Appointment" : "Walk in");
+                  const isWalkInPatient = String(pType).toLowerCase() === "walk-in" || String(pType).toLowerCase() === "walk in";
+                  const apptDate = text(row, ["appointment_date"]);
+                  const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
+                  const appointmentNum = row.appointment_number
+                    ? (isWalkInPatient
+                      ? (dateCompact ? `WK-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `WK-${String(row.appointment_number).padStart(4, "0")}`)
+                      : (dateCompact ? `APT-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `APT-${String(row.appointment_number).padStart(4, "0")}`))
+                    : "-";
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
                       <td className="px-4 py-3">
@@ -396,7 +413,16 @@ export default function PatientVitalsPage() {
                       ) : null}
                       {selectedRow?.appointment_id ? (
                         <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-600">
-                          {selectedRow.appointment_number ? `APT-${String(selectedRow.appointment_number).padStart(4, "0")}` : "-"}
+                          {selectedRow.appointment_number
+                            ? (() => {
+                              const apptDate = text(selectedRow, ["appointment_date"]);
+                              const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
+                              const isWalkIn = String(text(selectedRow, ["patient_type"])).toLowerCase() === "walk-in" || String(text(selectedRow, ["patient_type"])).toLowerCase() === "walk in";
+                              return isWalkIn
+                                ? (dateCompact ? `WK-${dateCompact}-${String(selectedRow.appointment_number).padStart(4, "0")}` : `WK-${String(selectedRow.appointment_number).padStart(4, "0")}`)
+                                : (dateCompact ? `APT-${dateCompact}-${String(selectedRow.appointment_number).padStart(4, "0")}` : `APT-${String(selectedRow.appointment_number).padStart(4, "0")}`);
+                            })()
+                            : "-"}
                         </span>
                       ) : null}
                     </div>
@@ -448,7 +474,7 @@ export default function PatientVitalsPage() {
                         try {
                           const [y, m, d] = value.split("-");
                           if (y && m && d) value = `${d}-${m}-${y}`;
-                        } catch {}
+                        } catch { }
                       }
                       return (
                         <div key={key} className={`rounded-xl border border-gray-100 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-white/[0.02] ${key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}`}>
@@ -487,7 +513,7 @@ export default function PatientVitalsPage() {
                       ["remarks", "Remarks", "textarea", ""],
                       ["status", "Status", "select", ""],
                     ].map(([key, label, type, placeholder]) => {
-                      const isDemographic = ["patientId", "patientName", "mobile", "dob", "age", "gender"].includes(key);
+                      const isDemographic = ["patientId", "patientName", "mobile", "age", "gender"].includes(key);
                       return (
                         <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
                           <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -525,7 +551,19 @@ export default function PatientVitalsPage() {
                             <input
                               type={type}
                               value={form[key as keyof FormState]}
-                              onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((current) => {
+                                  const updated = { ...current, [key]: val };
+                                  if (key === "dob") {
+                                    const computedAge = calculateAge(val);
+                                    if (computedAge !== null) {
+                                      updated.age = String(computedAge);
+                                    }
+                                  }
+                                  return updated;
+                                });
+                              }}
                               placeholder={placeholder}
                               disabled={isDemographic}
                               className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-default dark:disabled:bg-gray-800/30 dark:disabled:text-gray-500 transition"

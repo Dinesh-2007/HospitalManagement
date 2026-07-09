@@ -19,7 +19,15 @@ async function generatePatientId(pool: Awaited<ReturnType<typeof getTenantDB>>):
 
 async function generateAppointmentNumber(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<number> {
   const result = await pool.query(
-    `SELECT MAX(appointment_number) AS max_num FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1`,
+    `SELECT MAX(appointment_number) AS max_num FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND (patient_type IS NULL OR patient_type <> 'walk-in')`,
+    [targetDate]
+  );
+  return (Number(result.rows[0]?.max_num) || 0) + 1;
+}
+
+async function generateWalkInNumber(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT MAX(appointment_number) AS max_num FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND patient_type = 'walk-in'`,
     [targetDate]
   );
   return (Number(result.rows[0]?.max_num) || 0) + 1;
@@ -108,7 +116,7 @@ export async function POST(
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMPTZ
     `);
-    
+
     await pool.query(`
       ALTER TABLE ${quoteIdentifier(TABLE_NAME)}
       ADD COLUMN IF NOT EXISTS appointment_number INTEGER
@@ -189,8 +197,12 @@ export async function POST(
       const today = appointmentDate || new Date().toISOString().split("T")[0];
       const dayName = new Date(today).toLocaleDateString("en-US", { weekday: "long" });
       const currentTime = appointmentTime || new Date().toTimeString().split(" ")[0];
-      
-      // Walk-in patients do NOT get an Appointment ID or Appt Number — only a Queue ID
+
+      // Generate walk-in numbering (WK-YYYYMMDD-XXXX format)
+      const walkInNum = await generateWalkInNumber(pool, today);
+      const dateCompact = today.replace(/-/g, "");
+      const walkInDisplayId = `WK-${dateCompact}-${String(walkInNum).padStart(4, "0")}`;
+
       const queueIdValue = await generateQueueId(pool, today);
 
       const apptResult = await pool.query(
@@ -207,6 +219,7 @@ export async function POST(
             patient_type,
             check_in_time,
             appointment_number,
+            appointment_id_display,
             queue_id,
             status,
             has_attendant,
@@ -215,7 +228,7 @@ export async function POST(
             attendant_gender,
             attendant_relation
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NULL, $10, 'Scheduled', $11, $12, $13, $14, $15)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, 'Scheduled', $13, $14, $15, $16, $17)
           RETURNING id
         `,
         [
@@ -228,6 +241,8 @@ export async function POST(
           patientPhone || null,
           currentTime,
           "walk-in",
+          walkInNum,
+          walkInDisplayId,
           queueIdValue,
           hasAttendant ? true : false,
           attendantName || null,
@@ -242,7 +257,7 @@ export async function POST(
         success: true,
         patientId: resolvedPatientId,
         appointmentId: apptId,
-        appointmentNumber: "",
+        appointmentNumber: walkInDisplayId,
         queueId: queueIdValue,
       });
     }

@@ -780,7 +780,17 @@ export default function DoctorConsultationPage() {
     const pid = (rawPid.toLowerCase() === pName.toLowerCase()) ? "" : rawPid;
     return [
       ["Patient ID", pid],
-      ["Appointment Number", text(selectedPatientRow, ["appointment_number"]) ? `APT-${String(text(selectedPatientRow, ["appointment_number"])).padStart(4, "0")}` : ""],
+      ["Appointment Number", (() => {
+        const num = text(selectedPatientRow, ["appointment_number"]);
+        if (!num) return "";
+        const pType = text(selectedPatientRow, ["patient_type"]) || (selectedPatientRow?.appointment_id ? "Appointment" : "Walk in");
+        const isWalkInPatient = String(pType).toLowerCase() === "walk-in" || String(pType).toLowerCase() === "walk in";
+        const apptDate = text(selectedPatientRow, ["appointment_date"]) || new Date().toISOString().slice(0, 10);
+        const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
+        return isWalkInPatient
+          ? (dateCompact ? `WK-${dateCompact}-${String(num).padStart(4, "0")}` : `WK-${String(num).padStart(4, "0")}`)
+          : (dateCompact ? `APT-${dateCompact}-${String(num).padStart(4, "0")}` : `APT-${String(num).padStart(4, "0")}`);
+      })()],
       ["Patient Name", pName],
       ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
       ["Age", text(selectedPatientRow, ["registration_age", "age"]) ? `${text(selectedPatientRow, ["registration_age", "age"])} Yrs` : ""],

@@ -52,6 +52,7 @@ export default function CheckInPage() {
   const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [walkInStep, setWalkInStep] = useState<"phone" | "register" | "consultation">("phone");
   const [walkInPhone, setWalkInPhone] = useState("");
+  const [showWalkInOtp, setShowWalkInOtp] = useState(false);
   const [walkInRegForm, setWalkInRegForm] = useState<any>({
     patientName: "",
     dob: "",
@@ -251,6 +252,7 @@ export default function CheckInPage() {
       setShowWalkInModal(false);
       // Reset state
       setWalkInPhone("");
+      setShowWalkInOtp(false);
       setWalkInDept("");
       setWalkInDoctor("");
       setWalkInStep("phone");
@@ -468,6 +470,7 @@ export default function CheckInPage() {
             onClick={() => {
               setWalkInError("");
               setWalkInPhone("");
+              setShowWalkInOtp(false);
               setWalkInDept("");
               setWalkInDoctor("");
               setWalkInStep("phone");
@@ -522,7 +525,7 @@ export default function CheckInPage() {
                 <span className="font-semibold">Check-in successful!</span>
                 {" "}{checkInResult.patientName && <span>Patient: <span className="font-medium">{checkInResult.patientName}</span> — </span>}
                 Patient ID: <span className="font-mono font-semibold">{checkInResult.patientId}</span>
-                {checkInResult.appointmentNumber && <> &nbsp;·&nbsp; Appt. No.: <span className="font-mono font-semibold">{checkInResult.appointmentNumber}</span></>}
+                {checkInResult.appointmentNumber && <> &nbsp;·&nbsp; Ref. No.: <span className="font-mono font-semibold">{checkInResult.appointmentNumber}</span></>}
                 {checkInResult.queueId && <> &nbsp;·&nbsp; Queue ID: <span className="font-mono font-semibold">{checkInResult.queueId}</span></>}
               </div>
               <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
@@ -535,7 +538,7 @@ export default function CheckInPage() {
                 <tr>
                   <th className="px-4 py-3 text-left">Patient</th>
                   <th className="px-4 py-3 text-left">Patient ID</th>
-                  <th className="px-4 py-3 text-left">Appt. No.</th>
+                  <th className="px-4 py-3 text-left">Ref. No.</th>
                   <th className="px-4 py-3 text-left">Queue ID</th>
                   <th className="px-4 py-3 text-left">Doctor</th>
                   <th className="px-4 py-3 text-left">Type</th>
@@ -559,7 +562,11 @@ export default function CheckInPage() {
                   const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
                   const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
                   const pType = text(row, ["patient_type"]) || "scheduled";
-                  const appointmentIdDisplay = pType === "walk-in" ? "-" : (text(row, ["appointment_id_display"]) || (row.appointment_number ? `APT-${String(row.appointment_number).padStart(4, "0")}` : "-"));
+                  const apptDate = text(row, ["appointment_date"]);
+                  const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
+                  const appointmentIdDisplay = pType === "walk-in"
+                    ? (text(row, ["appointment_id_display"]) || (row.appointment_number ? (dateCompact ? `WK-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `WK-${String(row.appointment_number).padStart(4, "0")}`) : "-"))
+                    : (text(row, ["appointment_id_display"]) || (row.appointment_number ? (dateCompact ? `APT-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `APT-${String(row.appointment_number).padStart(4, "0")}`) : "-"));
                   const queueIdDisplay = text(row, ["queue_id"]) || "-";
 
                   return (
@@ -638,7 +645,7 @@ export default function CheckInPage() {
                 </label>
               </div>
             </div>
-            
+
             {hasAttendant === "yes" && (
               <div className="space-y-4 mb-4">
                 <div>
@@ -733,16 +740,47 @@ export default function CheckInPage() {
             {/* Step 1: Phone number lookup */}
             {walkInStep === "phone" && (
               <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mobile Number</label>
-                  <input
-                    type="tel"
-                    required
-                    value={walkInPhone}
-                    onChange={(e) => setWalkInPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    placeholder="Enter 10-digit mobile number"
-                    className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mobile Number</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        required
+                        value={walkInPhone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          setWalkInPhone(val);
+                          if (val.length < 10) {
+                            setShowWalkInOtp(false);
+                          }
+                        }}
+                        placeholder="Enter 10-digit mobile number"
+                        className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
+                      />
+                      {walkInPhone.length === 10 && !showWalkInOtp && (
+                        <button
+                          type="button"
+                          onClick={() => setShowWalkInOtp(true)}
+                          className="h-11 rounded-lg border border-brand-300 bg-brand-50 px-4 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition whitespace-nowrap"
+                        >
+                          Send OTP
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {showWalkInOtp && (
+                    <div className="animate-fadeIn">
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Enter OTP</label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP code"
+                        className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500 bg-brand-50/10 placeholder-brand-300 font-mono tracking-widest"
+                      />
+                      <p className="mt-1 text-xs text-brand-500">OTP sent successfully! (Placeholder)</p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
                   <button

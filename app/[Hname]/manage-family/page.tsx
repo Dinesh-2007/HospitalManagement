@@ -118,6 +118,7 @@ export default function HospitalManageFamilyPage() {
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [formValues, setFormValues] = useState<FamilyFormValues>(EMPTY_VALUES);
+  const [showOtp, setShowOtp] = useState(false);
 
   const countries = useMemo(() => Country.getAllCountries(), []);
   const states = useMemo(
@@ -161,6 +162,7 @@ export default function HospitalManageFamilyPage() {
     setFormValues(fromRow(member));
     setSelectedCountryCode("");
     setSelectedStateCode("");
+    setShowOtp(false);
     setShowForm(true);
   };
 
@@ -209,6 +211,7 @@ export default function HospitalManageFamilyPage() {
       setSelectedCountryCode("");
       setSelectedStateCode("");
       setEditingId(null);
+      setShowOtp(false);
       await loadFamilyMembers();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to add family member.");
@@ -253,7 +256,7 @@ export default function HospitalManageFamilyPage() {
           </div>
           <button
             type="button"
-            onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setSelectedCountryCode(""); setSelectedStateCode(""); setShowForm(true); }}
+            onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setSelectedCountryCode(""); setSelectedStateCode(""); setShowOtp(false); setShowForm(true); }}
             className="inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-500/30 hover:bg-brand-600 transition-all active:scale-95"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -297,7 +300,7 @@ export default function HospitalManageFamilyPage() {
             <p className="mt-2 max-w-xs text-sm text-gray-400">Add your family members to book appointments for them easily.</p>
             <button
               type="button"
-              onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setShowForm(true); }}
+              onClick={() => { setEditingId(null); setFormValues(EMPTY_VALUES); setShowOtp(false); setShowForm(true); }}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 transition"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -428,7 +431,7 @@ export default function HospitalManageFamilyPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setShowForm(false); setEditingId(null); }}
+                  onClick={() => { setShowForm(false); setEditingId(null); setShowOtp(false); }}
                   className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 transition"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -444,7 +447,59 @@ export default function HospitalManageFamilyPage() {
                 {[
                   { key: "patientName", label: "Patient Name", type: "text" },
                   { key: "dob", label: "Date of Birth", type: "date" },
-                  { key: "mobile", label: "Mobile", type: "tel" },
+                ].map(({ key, label, type }) => (
+                  <div key={key}>
+                    <label className={labelCls}>{label}</label>
+                    <input
+                      type={type}
+                      value={formValues[key as keyof FamilyFormValues]}
+                      onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                ))}
+
+                {/* Mobile and OTP field */}
+                <div>
+                  <label className={labelCls}>Mobile</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={formValues.mobile}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        updateField("mobile", val);
+                        if (val.length < 10) {
+                          setShowOtp(false);
+                        }
+                      }}
+                      className={inputCls}
+                    />
+                    {formValues.mobile.length === 10 && !showOtp && (
+                      <button
+                        type="button"
+                        onClick={() => setShowOtp(true)}
+                        className="h-11 rounded-xl border border-brand-300 bg-brand-50 px-4 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition whitespace-nowrap"
+                      >
+                        Send OTP
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {showOtp && (
+                  <div className="animate-fadeIn">
+                    <label className={labelCls}>Enter OTP</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Enter 6-digit OTP code"
+                      className="h-11 w-full rounded-xl border border-brand-200 bg-white px-4 text-sm text-gray-900 shadow-sm transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white bg-brand-50/10 placeholder-brand-300 font-mono tracking-widest"
+                    />
+                  </div>
+                )}
+
+                {[
                   { key: "email", label: "Email", type: "email" },
                   { key: "hnNumber", label: "HN Number", type: "text" },
                   { key: "profession", label: "Profession", type: "text" },
@@ -551,7 +606,7 @@ export default function HospitalManageFamilyPage() {
               <div className="mt-8 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => { setShowForm(false); setEditingId(null); }}
+                  onClick={() => { setShowForm(false); setEditingId(null); setShowOtp(false); }}
                   className="rounded-xl border border-gray-200 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
                 >
                   Cancel

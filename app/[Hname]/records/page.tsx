@@ -347,7 +347,15 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                             {tab === "Patient Details" && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                     <InfoField label="Patient Name" value={row.patientDetails} />
-                                    <InfoField label="Appointment / Token" value={row.tokenNumber ? `APT-${String(row.tokenNumber).padStart(4, "0")}` : undefined} />
+                                    <InfoField label="Appointment / Token" value={(() => {
+                                        if (!row.tokenNumber) return undefined;
+                                        const isWalkInPatient = String(row.patientType).toLowerCase() === "walk-in" || String(row.patientType).toLowerCase() === "walk in" || String(row.patientType).toLowerCase() === "walk-id";
+                                        const d = row.updatedAt || row.createdAt || (row as any).appointment_date;
+                                        const dateCompact = d ? String(d).slice(0, 10).replace(/-/g, "") : "";
+                                        return isWalkInPatient
+                                            ? (dateCompact ? `WK-${dateCompact}-${String(row.tokenNumber).padStart(4, "0")}` : `WK-${String(row.tokenNumber).padStart(4, "0")}`)
+                                            : (dateCompact ? `APT-${dateCompact}-${String(row.tokenNumber).padStart(4, "0")}` : `APT-${String(row.tokenNumber).padStart(4, "0")}`);
+                                    })()} />
                                     <InfoField label="Doctor" value={row.doctor} />
                                     <InfoField label="Department" value={row.department} />
                                     <InfoField label="Patient Type" value={row.patientType === "IP" ? "IP — Inpatient" : "OP — Outpatient"} />
@@ -397,7 +405,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                         {(row.labInvestigations || (row.screeningImaging && row.screeningImaging !== "[]")) && (
                                             <div className="rounded-xl border border-gray-150 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-900/30 space-y-4">
                                                 <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-100 pb-2 dark:border-gray-850">Investigations</h4>
-                                                
+
                                                 {row.labInvestigations && (
                                                     <div className="space-y-1">
                                                         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Investigations</span>
@@ -427,7 +435,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                                                 });
                                                                 return mapped.filter((item): item is { name: string; notes: string; fileName?: string; fileData?: string } => item !== null);
                                                             }
-                                                        } catch {}
+                                                        } catch { }
                                                         return [];
                                                     })();
 
@@ -579,18 +587,16 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                                         <p className="text-xs text-gray-500">Date: {bill.created_at ? new Date(bill.created_at).toLocaleDateString("en-IN") : "—"}</p>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                                            bill.billing_type === "Pharmacy"
-                                                                ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
-                                                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-                                                        }`}>
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${bill.billing_type === "Pharmacy"
+                                                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                                                            : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                            }`}>
                                                             {bill.billing_type}
                                                         </span>
-                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                            bill.payment_status === "Paid"
-                                                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                                                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                                                        }`}>
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${bill.payment_status === "Paid"
+                                                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                            }`}>
                                                             {bill.payment_status}
                                                         </span>
                                                     </div>
