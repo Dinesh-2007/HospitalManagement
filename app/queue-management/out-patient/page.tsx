@@ -17,7 +17,32 @@ type ConsultationRow = {
   patientType?: string;
   created_at?: string;
   updated_at?: string;
+  check_in_time?: string;
 };
+
+function getTimingHistory(row: ConsultationRow) {
+  const checkIn = row.check_in_time;
+  if (!checkIn) return "—";
+  
+  const start = new Date(checkIn);
+  const end = row.status === "Completed" ? new Date(row.updated_at || row.created_at || "") : new Date();
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "—";
+  
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs < 0) return "—";
+  
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  
+  const durationStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  
+  if (row.status !== "Completed") {
+    return `${durationStr} (Elap.)`;
+  }
+  return durationStr;
+}
 
 function text(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -213,6 +238,7 @@ export default function OutPatientPage() {
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Diagnosis</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">OP</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status / Exit</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Timing History</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Last Updated</th>
                 </tr>
               </thead>
@@ -257,6 +283,9 @@ export default function OutPatientPage() {
                             In Progress
                           </span>
                         )}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
+                        {getTimingHistory(row)}
                       </td>
                       <td className="px-5 py-4 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {formatDate(text(row as Record<string, unknown>, ["updated_at"]) || text(row as Record<string, unknown>, ["created_at"]))}

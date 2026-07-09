@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
-import { CheckCircleIcon } from "../../../components/icons";
+import { CheckCircleIcon, PencilIcon } from "../../../components/icons";
 
 type DoctorRow = { doctor?: string; first_time?: string | null; total?: number };
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null };
@@ -86,6 +86,7 @@ export default function PatientVitalsPage() {
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<VitalsRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [isEditing, setIsEditing] = useState(false);
   const [departments, setDepartments] = useState<string[]>([]);
   const [doctorsList, setDoctorsList] = useState<{ name: string, department: string }[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
@@ -343,6 +344,7 @@ export default function PatientVitalsPage() {
                             type="button"
                             onClick={() => {
                               setSelectedRow(row);
+                              setIsEditing(!done);
                               setForm({
                                 patientId: text(row, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
                                 patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
@@ -365,7 +367,7 @@ export default function PatientVitalsPage() {
                             }}
                             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
                           >
-                            {done ? "View / Update" : "Enter Vitals"}
+                            {done ? "View" : "Enter Vitals"}
                           </button>
                           {done ? <CheckCircleIcon className="h-5 w-5 text-success-500" /> : null}
                         </div>
@@ -399,83 +401,179 @@ export default function PatientVitalsPage() {
                       ) : null}
                     </div>
                   </div>
-                  <button type="button" onClick={() => setSelectedRow(null)} className="text-gray-500 hover:text-gray-700">
-                    <span className="sr-only">Close</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  {[
-                    ["patientId", "Patient ID", "text", "Leave blank to auto-generate"],
-                    ["patientName", "Patient Name", "text", ""],
-                    ["mobile", "Mobile Number", "text", ""],
-                    ["dob", "DOB", "date", ""],
-                    ["age", "Age", "text", ""],
-                    ["gender", "Gender", "select", ""],
-                    ["heightCm", "Height (cm)", "text", ""],
-                    ["weightKg", "Weight (kg)", "text", ""],
-                    ["temperature", "Temperature (F/C)", "text", ""],
-                    ["pulseRate", "Pulse Rate (beats/min)", "text", ""],
-                    ["respiratoryRate", "Respiratory Rate (breaths/min)", "text", ""],
-                    ["systolicBp", "Systolic BP", "text", ""],
-                    ["diastolicBp", "Diastolic BP", "text", ""],
-                    ["spo2", "SpO2 (%)", "text", ""],
-                    ["bloodSugar", "Blood Sugar (Optional)", "text", ""],
-                    ["remarks", "Remarks", "textarea", ""],
-                    ["status", "Status", "select", ""],
-                  ].map(([key, label, type, placeholder]) => (
-                    <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-                      {type === "select" ? (
-                        <select
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        >
-                          {key === "gender"
-                            ? ["", "Male", "Female", "Other"].map((option) => (
-                              <option key={option} value={option}>
-                                {option || "Select Gender"}
-                              </option>
-                            ))
-                            : ["Active", "Inactive"].map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                        </select>
-                      ) : type === "textarea" ? (
-                        <textarea
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          rows={4}
-                          placeholder={placeholder}
-                          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        />
-                      ) : (
-                        <input
-                          type={type}
-                          value={form[key as keyof FormState]}
-                          onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
-                          placeholder={placeholder}
-                          className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800"
-                        />
-                      )}
-                    </div>
-                  ))}
-
-                  <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4">
-                    <button type="submit" disabled={saving} className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition">
-                      {saving ? "Saving..." : "Save Vitals"}
-                    </button>
-                    <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                      Cancel
+                  <div className="flex items-center gap-2">
+                    {selectedSummary?.completed && !isEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(true)}
+                        className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white transition"
+                        title="Edit Vitals"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white transition">
+                      <span className="sr-only">Close</span>
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
                   </div>
-                </form>
+                </div>
+
+                {!isEditing ? (
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      ["patientId", "Patient ID"],
+                      ["patientName", "Patient Name"],
+                      ["mobile", "Mobile Number"],
+                      ["dob", "DOB"],
+                      ["age", "Age"],
+                      ["gender", "Gender"],
+                      ["heightCm", "Height (cm)"],
+                      ["weightKg", "Weight (kg)"],
+                      ["temperature", "Temperature (F/C)"],
+                      ["pulseRate", "Pulse Rate (beats/min)"],
+                      ["respiratoryRate", "Respiratory Rate (breaths/min)"],
+                      ["systolicBp", "Systolic BP"],
+                      ["diastolicBp", "Diastolic BP"],
+                      ["spo2", "SpO2 (%)"],
+                      ["bloodSugar", "Blood Sugar (Optional)"],
+                      ["remarks", "Remarks"],
+                      ["status", "Status"],
+                    ].map(([key, label]) => {
+                      let value = form[key as keyof FormState];
+                      // Format date nicely if it's DOB
+                      if (key === "dob" && value) {
+                        try {
+                          const [y, m, d] = value.split("-");
+                          if (y && m && d) value = `${d}-${m}-${y}`;
+                        } catch {}
+                      }
+                      return (
+                        <div key={key} className={`rounded-xl border border-gray-100 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-white/[0.02] ${key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}`}>
+                          <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{label}</div>
+                          <div className="mt-1.5 text-sm font-semibold text-gray-800 dark:text-white/90">
+                            {value || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4 border-t border-gray-100 pt-5 dark:border-gray-800">
+                      <button type="button" onClick={() => setSelectedRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={saveVitals} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      ["patientId", "Patient ID", "text", "Leave blank to auto-generate"],
+                      ["patientName", "Patient Name", "text", ""],
+                      ["mobile", "Mobile Number", "text", ""],
+                      ["dob", "DOB", "date", ""],
+                      ["age", "Age", "text", ""],
+                      ["gender", "Gender", "select", ""],
+                      ["heightCm", "Height (cm)", "text", ""],
+                      ["weightKg", "Weight (kg)", "text", ""],
+                      ["temperature", "Temperature (F/C)", "text", ""],
+                      ["pulseRate", "Pulse Rate (beats/min)", "text", ""],
+                      ["respiratoryRate", "Respiratory Rate (breaths/min)", "text", ""],
+                      ["systolicBp", "Systolic BP", "text", ""],
+                      ["diastolicBp", "Diastolic BP", "text", ""],
+                      ["spo2", "SpO2 (%)", "text", ""],
+                      ["bloodSugar", "Blood Sugar (Optional)", "text", ""],
+                      ["remarks", "Remarks", "textarea", ""],
+                      ["status", "Status", "select", ""],
+                    ].map(([key, label, type, placeholder]) => {
+                      const isDemographic = ["patientId", "patientName", "mobile", "dob", "age", "gender"].includes(key);
+                      return (
+                        <div key={key} className={key === "remarks" ? "md:col-span-2 xl:col-span-3" : ""}>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {label}
+                          </label>
+                          {type === "select" ? (
+                            <select
+                              value={form[key as keyof FormState]}
+                              onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                              disabled={isDemographic}
+                              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-default dark:disabled:bg-gray-800/30 dark:disabled:text-gray-500 transition"
+                            >
+                              {key === "gender"
+                                ? ["", "Male", "Female", "Other"].map((option) => (
+                                  <option key={option} value={option}>
+                                    {option || "Select Gender"}
+                                  </option>
+                                ))
+                                : ["Active", "Inactive"].map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                            </select>
+                          ) : type === "textarea" ? (
+                            <textarea
+                              value={form[key as keyof FormState]}
+                              onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                              rows={4}
+                              placeholder={placeholder}
+                              disabled={isDemographic}
+                              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-default dark:disabled:bg-gray-800/30 dark:disabled:text-gray-500 transition"
+                            />
+                          ) : (
+                            <input
+                              type={type}
+                              value={form[key as keyof FormState]}
+                              onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                              placeholder={placeholder}
+                              disabled={isDemographic}
+                              className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-default dark:disabled:bg-gray-800/30 dark:disabled:text-gray-500 transition"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="md:col-span-2 xl:col-span-3 flex gap-3 pt-4 border-t border-gray-100 pt-5 dark:border-gray-800">
+                      <button type="submit" disabled={saving} className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50">
+                        {saving ? "Saving..." : "Save Vitals"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedSummary?.completed) {
+                            setForm({
+                              patientId: text(selectedRow!, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
+                              patientName: text(selectedRow!, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
+                              mobile: text(selectedRow!, ["mobile", "patient_phone"]),
+                              dob: text(selectedRow!, ["registration_dob", "dob"]).slice(0, 10),
+                              age: text(selectedRow!, ["age"]),
+                              gender: text(selectedRow!, ["gender"]),
+                              heightCm: text(selectedRow!, ["height_cm"]),
+                              weightKg: text(selectedRow!, ["weight_kg"]),
+                              temperature: text(selectedRow!, ["temperature"]),
+                              pulseRate: text(selectedRow!, ["pulse_rate"]),
+                              respiratoryRate: text(selectedRow!, ["respiratory_rate"]),
+                              systolicBp: text(selectedRow!, ["systolic_bp"]),
+                              diastolicBp: text(selectedRow!, ["diastolic_bp"]),
+                              spo2: text(selectedRow!, ["spo2"]),
+                              bloodSugar: text(selectedRow!, ["blood_sugar"]),
+                              remarks: text(selectedRow!, ["remarks"]),
+                              status: text(selectedRow!, ["vitals_status"]) || "Active",
+                            });
+                            setIsEditing(false);
+                          } else {
+                            setSelectedRow(null);
+                          }
+                        }}
+                        className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           ) : null}

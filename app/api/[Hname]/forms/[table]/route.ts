@@ -235,10 +235,27 @@ export async function GET(
       ? `WHERE ${filterClauses.join(" AND ")}`
       : "";
 
-    const rowsResult = await pool.query(
-      `SELECT * FROM ${quoteIdentifier(tableName)} ${whereClause} ORDER BY id DESC LIMIT 100`,
-      filterValues
-    );
+    let rowsResult;
+    if (tableName === "doctor_consultation_entry") {
+      const prefixedFilterClauses = filterClauses.map(clause => `dce.${clause}`);
+      const dceWhereClause = prefixedFilterClauses.length > 0
+        ? `WHERE ${prefixedFilterClauses.join(" AND ")}`
+        : "";
+
+      rowsResult = await pool.query(
+        `SELECT dce.*, appt.check_in_time 
+         FROM doctor_consultation_entry dce
+         LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+         ${dceWhereClause}
+         ORDER BY dce.id DESC LIMIT 100`,
+        filterValues
+      );
+    } else {
+      rowsResult = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(tableName)} ${whereClause} ORDER BY id DESC LIMIT 100`,
+        filterValues
+      );
+    }
 
     return NextResponse.json({ rows: rowsResult.rows });
   } catch (error) {
