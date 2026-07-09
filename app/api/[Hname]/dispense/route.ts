@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
+import { getHospitalTimezone, getDateCompactInTimezone } from "../../../../lib/timezone";
 
 export const runtime = "nodejs";
 
@@ -68,9 +69,8 @@ async function ensurePatientTable(pool: Pool): Promise<void> {
 }
 
 /** Generate a PH-YYYYMMDD-XXXX token for pharmacy-only bills */
-async function generatePharmacyToken(pool: Pool): Promise<string> {
-  const today = new Date();
-  const dateCompact = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+async function generatePharmacyToken(pool: Pool, timezone: string): Promise<string> {
+  const dateCompact = getDateCompactInTimezone(timezone);
   const likePrefix = `PH-${dateCompact}-%`;
 
   const result = await pool.query<{ cnt: string }>(
@@ -158,7 +158,9 @@ export async function POST(
 ) {
   try {
     const { Hname } = await params;
-    const pool = await getTenantDB(decodeURIComponent(Hname));
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    const tz = await getHospitalTimezone(decodedHname);
     const body = (await request.json()) as PostBody;
 
     const patientName = normalizeText(body.patientName);
@@ -201,8 +203,8 @@ export async function POST(
       }
     }
 
-    // 2. Auto-generate pharmacy token
-    const tokenNumber = await generatePharmacyToken(pool);
+    // 2. Auto-generate pharmacy token (using hospital timezone for correct date prefix)
+    const tokenNumber = await generatePharmacyToken(pool, tz);
 
     // 3. Insert pharmacy_dispensing record with pharmacy_only flag
     const insertResult = await pool.query(

@@ -11,6 +11,8 @@ export async function createAccountAction(formData: FormData) {
   const creatorName = String(formData.get("creatorName") ?? "").trim();
   const siteName = String(formData.get("siteName") ?? "").trim();
   const phoneNumber = String(formData.get("phoneNumber") ?? "").trim();
+  const country = String(formData.get("country") ?? "").trim();
+  const timezone = String(formData.get("timezone") ?? "Asia/Kolkata").trim() || "Asia/Kolkata";
 
   if (!hospitalName || !siteName) {
     throw new Error("Hospital name and site name are required.");
@@ -29,16 +31,22 @@ export async function createAccountAction(formData: FormData) {
       creator_name VARCHAR(255) NOT NULL,
       site_name VARCHAR(255) UNIQUE NOT NULL,
       phone_number VARCHAR(100) NOT NULL,
+      country VARCHAR(255),
+      timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
+  // Ensure new columns exist for existing databases
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS country VARCHAR(255)`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata'`);
+
   // Insert hospital details into main DB
   await pool.query(`
-    INSERT INTO hospitals (hospital_name, admin_mail, creator_name, site_name, phone_number)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO hospitals (hospital_name, admin_mail, creator_name, site_name, phone_number, country, timezone)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (site_name) DO NOTHING
-  `, [hospitalName, adminMail, creatorName, siteName, phoneNumber]);
+  `, [hospitalName, adminMail, creatorName, siteName, phoneNumber, country || null, timezone]);
 
   // Generate DB based on siteName safely
   await createTenantDbIfNotExists(siteName);

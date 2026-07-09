@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
+import { getHospitalTimezone, getTodayInTimezone, getNowTimeShortInTimezone } from "../../../../lib/timezone";
 
 export const runtime = "nodejs";
 
@@ -107,6 +108,7 @@ export async function POST(
     const { Hname } = await params;
     const decodedHname = decodeURIComponent(Hname);
     const pool = await getTenantDB(decodedHname);
+    const tz = await getHospitalTimezone(decodedHname);
 
     const body = await request.json();
     const { patientName, patientPhone, department, doctor, patientId: bodyPatientId, isWalkIn, appointmentId: bodyAppointmentId, appointmentDate, appointmentTime, hasAttendant, attendantName, attendantPhone, attendantGender, attendantRelation } = body;
@@ -194,9 +196,9 @@ export async function POST(
         }
       }
 
-      const today = appointmentDate || new Date().toISOString().split("T")[0];
+      const today = appointmentDate || getTodayInTimezone(tz);
       const dayName = new Date(today).toLocaleDateString("en-US", { weekday: "long" });
-      const currentTime = appointmentTime || new Date().toTimeString().split(" ")[0];
+      const currentTime = appointmentTime || getNowTimeShortInTimezone(tz);
 
       // Generate walk-in numbering (WK-YYYYMMDD-XXXX format)
       const walkInNum = await generateWalkInNumber(pool, today);
@@ -270,7 +272,7 @@ export async function POST(
       );
     }
 
-    const today = appointmentDate || new Date().toISOString().split("T")[0];
+    const today = appointmentDate || getTodayInTimezone(tz);
 
     type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null; appointment_id_display: string | null; queue_id: string | null };
     // If we have the direct appointment ID, use it

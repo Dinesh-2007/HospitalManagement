@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
+import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null, appointment_check_in_time?: string | null };
 
@@ -31,11 +32,8 @@ export default function CheckInPage() {
   const params = useParams();
   const router = useRouter();
   const hname = params?.Hname as string;
-  const [date, setDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    return new Date(today.getTime() - offset).toISOString().split("T")[0];
-  });
+  const { todayDate, timezone } = useHospitalTimezone();
+  const [date, setDate] = useState(() => todayDate);
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
@@ -231,7 +229,7 @@ export default function CheckInPage() {
           isWalkIn: true,
           patientId: patientId || internalId,
           appointmentDate: date,
-          appointmentTime: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+          appointmentTime: new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date()),
           hasAttendant: walkInHasAttendant === "yes",
           attendantName: walkInAttendantName,
           attendantPhone: walkInAttendantPhone,
@@ -316,8 +314,8 @@ export default function CheckInPage() {
         const deps = (depData.rows || []).map((r: any) => String(r.department_type || r.departmentType || r.department_name || r.name || r.code || "")).filter(Boolean);
         setDepartments(Array.from(new Set(deps)) as string[]);
 
-        const todayStr = new Date().toISOString().split("T")[0];
-        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+        const todayStr = todayDate;
+        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: timezone }).format(new Date());
 
         const readDays = (value: any) => {
           if (Array.isArray(value)) return value.map(String).filter(Boolean);

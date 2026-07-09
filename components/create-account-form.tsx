@@ -8,11 +8,75 @@ import { InputField } from "./ui/input-field";
 import { Button } from "./ui/button";
 import { createAccountAction } from "../app/actions/tenant";
 
+// A lightweight country → timezone(s) lookup.
+// Covers the most common countries; falls back to "UTC" for unknowns.
+const COUNTRY_TIMEZONES: Record<string, string[]> = {
+  India: ["Asia/Kolkata"],
+  "United States": ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"],
+  "United Kingdom": ["Europe/London"],
+  Australia: ["Australia/Sydney", "Australia/Melbourne", "Australia/Brisbane", "Australia/Perth", "Australia/Adelaide", "Australia/Darwin"],
+  Canada: ["America/Toronto", "America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Halifax", "America/St_Johns"],
+  Germany: ["Europe/Berlin"],
+  France: ["Europe/Paris"],
+  Japan: ["Asia/Tokyo"],
+  China: ["Asia/Shanghai"],
+  Singapore: ["Asia/Singapore"],
+  "United Arab Emirates": ["Asia/Dubai"],
+  "Saudi Arabia": ["Asia/Riyadh"],
+  Pakistan: ["Asia/Karachi"],
+  Bangladesh: ["Asia/Dhaka"],
+  Nepal: ["Asia/Kathmandu"],
+  "Sri Lanka": ["Asia/Colombo"],
+  Malaysia: ["Asia/Kuala_Lumpur"],
+  Indonesia: ["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"],
+  Philippines: ["Asia/Manila"],
+  Thailand: ["Asia/Bangkok"],
+  Vietnam: ["Asia/Ho_Chi_Minh"],
+  "South Africa": ["Africa/Johannesburg"],
+  Nigeria: ["Africa/Lagos"],
+  Kenya: ["Africa/Nairobi"],
+  Egypt: ["Africa/Cairo"],
+  Brazil: ["America/Sao_Paulo", "America/Manaus", "America/Belem", "America/Fortaleza"],
+  Mexico: ["America/Mexico_City", "America/Cancun", "America/Tijuana"],
+  Argentina: ["America/Argentina/Buenos_Aires"],
+  "New Zealand": ["Pacific/Auckland"],
+  Russia: ["Europe/Moscow", "Asia/Yekaterinburg", "Asia/Novosibirsk", "Asia/Krasnoyarsk", "Asia/Irkutsk", "Asia/Yakutsk", "Asia/Vladivostok"],
+  Turkey: ["Europe/Istanbul"],
+  Iran: ["Asia/Tehran"],
+  Israel: ["Asia/Jerusalem"],
+  "South Korea": ["Asia/Seoul"],
+  "Hong Kong": ["Asia/Hong_Kong"],
+  Taiwan: ["Asia/Taipei"],
+  Ukraine: ["Europe/Kiev"],
+  Poland: ["Europe/Warsaw"],
+  Italy: ["Europe/Rome"],
+  Spain: ["Europe/Madrid"],
+  Netherlands: ["Europe/Amsterdam"],
+  Switzerland: ["Europe/Zurich"],
+  Sweden: ["Europe/Stockholm"],
+  Norway: ["Europe/Oslo"],
+  Denmark: ["Europe/Copenhagen"],
+  Finland: ["Europe/Helsinki"],
+  Portugal: ["Europe/Lisbon"],
+  Greece: ["Europe/Athens"],
+  "Czech Republic": ["Europe/Prague"],
+  Romania: ["Europe/Bucharest"],
+  Hungary: ["Europe/Budapest"],
+  Austria: ["Europe/Vienna"],
+  Belgium: ["Europe/Brussels"],
+};
+
+const ALL_COUNTRIES = Object.keys(COUNTRY_TIMEZONES).sort();
+
 export function CreateAccountForm() {
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
   const [siteNameVal, setSiteNameVal] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedTimezone, setSelectedTimezone] = useState("");
+
+  const availableTimezones = selectedCountry ? (COUNTRY_TIMEZONES[selectedCountry] ?? []) : [];
 
   // OTP modal and display states
   const [modalOpen, setModalOpen] = useState(false);
@@ -302,6 +366,76 @@ export function CreateAccountForm() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Section 3: Location & Timezone */}
+            <div className="space-y-4 pt-4">
+              <div className="flex items-center gap-2 pb-1 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm font-semibold text-gray-400 dark:text-gray-500">03</span>
+                <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                  Location &amp; Timezone
+                </h2>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="country">Country <span className="text-error-500">*</span></Label>
+                  <select
+                    id="country"
+                    name="country"
+                    required
+                    value={selectedCountry}
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setSelectedCountry(c);
+                      const tzList = COUNTRY_TIMEZONES[c] ?? [];
+                      setSelectedTimezone(tzList.length === 1 ? tzList[0] : "");
+                    }}
+                    className="mt-1.5 h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  >
+                    <option value="">Select country...</option>
+                    {ALL_COUNTRIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="timezone">Timezone <span className="text-error-500">*</span></Label>
+                  {availableTimezones.length === 1 ? (
+                    <>
+                      <input type="hidden" name="timezone" value={availableTimezones[0]} />
+                      <div className="mt-1.5 h-11 w-full flex items-center rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800 px-4 text-sm text-gray-500 dark:text-gray-400">
+                        {availableTimezones[0]}
+                      </div>
+                    </>
+                  ) : (
+                    <select
+                      id="timezone"
+                      name="timezone"
+                      required
+                      value={selectedTimezone}
+                      onChange={(e) => setSelectedTimezone(e.target.value)}
+                      disabled={availableTimezones.length === 0}
+                      className="mt-1.5 h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 focus:border-brand-500 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-400"
+                    >
+                      <option value="">{selectedCountry ? "Select timezone..." : "Select a country first"}</option>
+                      {availableTimezones.map((tz) => (
+                        <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {selectedCountry && selectedTimezone && (
+                <div className="flex items-center gap-2 rounded-xl bg-brand-50/50 dark:bg-brand-950/10 border border-brand-100 dark:border-brand-900/30 px-4 py-3 text-sm text-brand-700 dark:text-brand-400">
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  All dates and times will use <strong className="ml-1">{selectedTimezone.replace(/_/g, " ")}</strong>
+                </div>
+              )}
             </div>
 
             {/* Submissions Action Area */}

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
 import { ConsultationBillingDashboard } from "../../../components/consultation-billing-dashboard";
+import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 
 function normalizeDoctorProfileRow(row: Record<string, unknown> | null) {
   if (!row) return null;
@@ -577,6 +578,12 @@ export default function DoctorConsultationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
 
+  // Hospital-timezone-aware "today" — fixes UTC vs local date mismatch
+  const { todayDate: todayDateFromCtx } = useHospitalTimezone();
+  // Use a ref so loadData (which is called in a useEffect) always reads the latest value
+  const todayDateRef = useRef(todayDateFromCtx);
+  useEffect(() => { todayDateRef.current = todayDateFromCtx; }, [todayDateFromCtx]);
+
   const [queueTab, setQueueTab] = useState<QueueTab>("Upcoming");
   const [detailTab, setDetailTab] = useState<DetailTab>("Patient Details");
   const [doctorsList, setDoctorsList] = useState<{ name: string }[]>([]);
@@ -693,7 +700,7 @@ export default function DoctorConsultationPage() {
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const todayDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const todayDate = todayDateRef.current; // timezone-aware YYYY-MM-DD
       const vUrl = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
       vUrl.searchParams.set("doctor", selectedDoctor || "all");
       vUrl.searchParams.set("date", todayDate);
@@ -785,7 +792,7 @@ export default function DoctorConsultationPage() {
         if (!num) return "";
         const pType = text(selectedPatientRow, ["patient_type"]) || (selectedPatientRow?.appointment_id ? "Appointment" : "Walk in");
         const isWalkInPatient = String(pType).toLowerCase() === "walk-in" || String(pType).toLowerCase() === "walk in";
-        const apptDate = text(selectedPatientRow, ["appointment_date"]) || new Date().toISOString().slice(0, 10);
+        const apptDate = text(selectedPatientRow, ["appointment_date"]) || todayDateRef.current;
         const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
         return isWalkInPatient
           ? (dateCompact ? `WK-${dateCompact}-${String(num).padStart(4, "0")}` : `WK-${String(num).padStart(4, "0")}`)

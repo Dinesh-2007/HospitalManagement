@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
 import type { Pool } from "pg";
+import { getHospitalTimezone, getDateCompactInTimezone } from "../../../../lib/timezone";
 
 export const runtime = "nodejs";
 
@@ -45,17 +46,13 @@ async function ensureBillingInvoiceTable(pool: Pool): Promise<void> {
   }
 }
 
-// Helper to format date into YYYYMMDD
-function getFormattedDateCompact(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}${month}${day}`;
+// Helper to format date into YYYYMMDD in the hospital's timezone
+function getFormattedDateCompact(timezone: string): string {
+  return getDateCompactInTimezone(timezone);
 }
 
-async function generateInvoiceNumber(pool: Pool): Promise<string> {
-  const dateStr = getFormattedDateCompact();
+async function generateInvoiceNumber(pool: Pool, timezone: string): Promise<string> {
+  const dateStr = getFormattedDateCompact(timezone);
   const likePattern = `INV-${dateStr}-%`;
   const result = await pool.query<{ cnt: string }>(
     `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(INVOICE_TABLE)} WHERE invoice_number LIKE $1`,
@@ -203,7 +200,9 @@ export async function POST(
 ) {
   try {
     const { Hname } = await params;
-    const pool = await getTenantDB(decodeURIComponent(Hname));
+    const decodedHname = decodeURIComponent(Hname);
+    const pool = await getTenantDB(decodedHname);
+    const tz = await getHospitalTimezone(decodedHname);
     const body = await request.json();
 
     const {
@@ -245,8 +244,8 @@ export async function POST(
       }
     }
 
-    // Generate invoice number
-    const invoiceNumber = await generateInvoiceNumber(pool);
+    // Generate invoice number (uses hospital timezone so date prefix is local, not UTC)
+    const invoiceNumber = await generateInvoiceNumber(pool, tz);
 
     const result = await pool.query(
       `

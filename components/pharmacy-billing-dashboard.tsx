@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useHospitalTimezone } from "./context/HospitalTimezoneContext";
 
 type InvoiceRecord = {
   id: number;
@@ -70,6 +71,8 @@ export function PharmacyBillingDashboard() {
   const params = useParams();
   const hname = decodeURIComponent(params?.Hname as string || "HSMS");
 
+  const { todayDate } = useHospitalTimezone();
+
   const [pendingDispensings, setPendingDispensings] = useState<PendingDispensing[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [discounts, setDiscounts] = useState<DiscountSchema[]>([]);
@@ -80,7 +83,7 @@ export function PharmacyBillingDashboard() {
 
   // Views & filters
   const [activeTab, setActiveTab] = useState<"unbilled" | "invoices">("unbilled");
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(() => todayDate);
 
   // Selection states
   const [selectedPendingId, setSelectedPendingId] = useState<number | null>(null);

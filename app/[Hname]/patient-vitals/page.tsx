@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { CheckCircleIcon, PencilIcon } from "../../../components/icons";
+import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 
 type DoctorRow = { doctor?: string; first_time?: string | null; total?: number };
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null };
@@ -86,11 +87,8 @@ function isCompleted(row: VitalsRow) {
 export default function PatientVitalsPage() {
   const params = useParams();
   const hname = params?.Hname as string;
-  const [date, setDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset() * 60000;
-    return new Date(today.getTime() - offset).toISOString().split("T")[0];
-  });
+  const { todayDate } = useHospitalTimezone();
+  const [date, setDate] = useState(() => todayDate);
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [selectedRow, setSelectedRow] = useState<VitalsRow | null>(null);
