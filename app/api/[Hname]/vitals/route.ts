@@ -25,6 +25,7 @@ type VitalsBody = {
   bloodSugar?: string | number;
   remarks?: string;
   status?: string;
+  appointmentId?: string | number;
 };
 
 function normalizeText(value: unknown) {
@@ -180,32 +181,32 @@ export async function GET(
     if (!doctor) {
       const doctors = date
         ? await pool.query(
-            `
+          `
               SELECT doctor, MIN(appointment_time) AS first_time, COUNT(*)::int AS total
               FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
               WHERE appointment_date = $1
-                AND status IN ('Scheduled', 'Rescheduled')
+                AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
               GROUP BY doctor
               ORDER BY MIN(appointment_time) NULLS LAST, doctor ASC
             `,
-            [date],
-          )
+          [date],
+        )
         : await pool.query(
-            `
+          `
               SELECT doctor, MIN(appointment_time) AS first_time, COUNT(*)::int AS total
               FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
-              WHERE status IN ('Scheduled', 'Rescheduled')
+              WHERE status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
               GROUP BY doctor
               ORDER BY MIN(appointment_time) NULLS LAST, doctor ASC
             `,
-          );
+        );
 
       return NextResponse.json({ rows: doctors.rows });
     }
 
     const result = date
       ? await pool.query(
-          `
+        `
             WITH appointment_rows AS (
               SELECT
                 a.id AS appointment_id,
@@ -293,15 +294,15 @@ export async function GET(
                 )
               WHERE a.appointment_date = $1
                 AND ($2 = 'all' OR a.doctor = $2)
-                AND a.status IN ('Scheduled', 'Rescheduled')
+                AND a.status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
               ORDER BY a.appointment_time NULLS LAST, a.created_at DESC
             )
             SELECT * FROM appointment_rows
           `,
-          [date, doctor],
-        )
+        [date, doctor],
+      )
       : await pool.query(
-          `
+        `
             WITH appointment_rows AS (
           SELECT
             a.id AS appointment_id,
@@ -388,13 +389,13 @@ export async function GET(
               NULLIF(p.id::text, '')
             )
           WHERE ($1 = 'all' OR a.doctor = $1)
-            AND a.status IN ('Scheduled', 'Rescheduled')
+            AND a.status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
           ORDER BY a.appointment_date DESC, a.appointment_time NULLS LAST, a.created_at DESC
         )
         SELECT * FROM appointment_rows
       `,
-          [doctor],
-        );
+        [doctor],
+      );
 
     return NextResponse.json({ rows: result.rows });
   } catch (error) {
@@ -452,6 +453,14 @@ export async function POST(
         );
       }
       patientId = generatedId;
+    }
+
+    const appointmentId = normalizeNumber(body.appointmentId);
+    if (appointmentId) {
+      await pool.query(
+        `UPDATE ${quoteIdentifier(APPOINTMENTS_TABLE)} SET status = 'Vitals', updated_at = NOW() WHERE id = $1`,
+        [appointmentId]
+      );
     }
 
     const bmi = calculateBmi(heightCm, weightKg);

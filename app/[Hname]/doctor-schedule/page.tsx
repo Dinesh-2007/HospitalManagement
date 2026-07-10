@@ -839,9 +839,7 @@ export default function DoctorSchedulePage() {
                             className="font-medium text-gray-800 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {withSalutation(appointment.patient_name ?? "-", appointment.patient_gender ?? "")}
-                          </button>
-                          <p className="text-xs text-gray-500">{appointment.patient_phone ?? ""}</p>
-                        </td>
+                          </button>                        </td>
                         <td className="px-4 py-3 text-gray-600">{appointment.status ?? "-"}</td>
                         {!isPastAdminView && (
                           <td className="px-4 py-3">

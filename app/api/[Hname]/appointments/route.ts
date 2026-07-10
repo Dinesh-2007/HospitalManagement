@@ -266,10 +266,12 @@ async function ensureAppointmentsTable(pool: Pool | PoolClient) {
     await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(column)} ${type}`);
   }
 
+  // Re-create the unique index to support new clinic stages and prevent double booking
+  await pool.query(`DROP INDEX IF EXISTS appointments_unique_slot_idx`);
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS appointments_unique_slot_idx
     ON ${quoteIdentifier(TABLE_NAME)} (appointment_date, department, doctor, appointment_time)
-    WHERE status IN ('Scheduled', 'Rescheduled')
+    WHERE status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
   `);
 }
 
@@ -411,7 +413,7 @@ async function getAvailableTransferDoctors(pool: Pool | PoolClient, appointmentI
     `
       SELECT *
       FROM ${quoteIdentifier(TABLE_NAME)}
-      WHERE id = $1 AND status IN ('Scheduled', 'Rescheduled')
+      WHERE id = $1 AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
       LIMIT 1
     `,
     [appointmentId],
@@ -427,7 +429,7 @@ async function getAvailableTransferDoctors(pool: Pool | PoolClient, appointmentI
       SELECT doctor, appointment_time
       FROM ${quoteIdentifier(TABLE_NAME)}
       WHERE appointment_date = $1
-        AND status IN ('Scheduled', 'Rescheduled')
+        AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         AND appointment_time IS NOT NULL
     `,
     [appointmentDate],
@@ -621,7 +623,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
     if (patientId && (department || requestedDoctorNames.length > 0)) {
       const filters = [
         `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))`,
-        `status IN ('Scheduled', 'Rescheduled')`
+        `status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')`
       ];
       const values: unknown[] = [patientId];
       let index = 2;
@@ -666,7 +668,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
       filters.push(`LOWER(doctor) = ANY($${index})`);
       values.push(requestedDoctorNames.map((value) => value.toLowerCase()));
     }
-    filters.push(`status IN ('Scheduled', 'Rescheduled')`);
+    filters.push(`status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')`);
 
     const result = await pool.query(
       `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE ${filters.join(" AND ")} ORDER BY appointment_date, appointment_time NULLS LAST, created_at DESC`,
@@ -730,7 +732,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ Hna
       `
         SELECT id FROM ${quoteIdentifier(TABLE_NAME)}
         WHERE appointment_date = $1 AND department = $2 AND doctor = $3 AND appointment_time = $4
-          AND status IN ('Scheduled', 'Rescheduled')
+          AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         LIMIT 1
       `,
       [appointmentDate, department, doctor, appointmentTime],
@@ -816,7 +818,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ Hn
       `
         SELECT *
         FROM ${quoteIdentifier(TABLE_NAME)}
-        WHERE id = $1 AND status IN ('Scheduled', 'Rescheduled')
+        WHERE id = $1 AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         FOR UPDATE
       `,
       [appointmentId],
@@ -834,7 +836,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ Hn
       `
         SELECT id FROM ${quoteIdentifier(TABLE_NAME)}
         WHERE appointment_date = $1 AND department = $2 AND doctor = $3 AND appointment_time = $4::time
-          AND id <> $5 AND status IN ('Scheduled', 'Rescheduled')
+          AND id <> $5 AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         LIMIT 1
       `,
       [current.appointment_date, current.department, transferToDoctor, nextSlot.start, appointmentId],
@@ -941,8 +943,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ Hnam
     const { Hname } = await params;
     const pool = await getTenantDB(decodeURIComponent(Hname));
     await ensureAll(pool);
-    const body = (await request.json()) as AppointmentRecord;
-    const appointmentId = Number(body.appointmentId ?? 0);
+    const body = (await request.json()) as AppointmentRecord & { id?: number; status?: string };
+    const appointmentId = Number(body.appointmentId ?? body.id ?? 0);
     const appointmentDate = String(body.appointmentDate ?? "").trim();
     const appointmentDay = String(body.appointmentDay ?? "").trim();
     const department = String(body.department ?? "").trim();
@@ -956,6 +958,21 @@ export async function PUT(request: Request, { params }: { params: Promise<{ Hnam
     const reason = String(body.reason ?? "").trim();
 
     if (!Number.isInteger(appointmentId) || appointmentId <= 0) return NextResponse.json({ error: "Appointment id is required." }, { status: 400 });
+
+    // Support direct status-only updates (e.g. Vitals, Doctor Completed, Pharmacy dispensed status updates)
+    if (body.status && !appointmentDate && !department && !doctor) {
+      const allowedStatuses = ["Scheduled", "Rescheduled", "Checked In", "Vitals", "Conslt", "Lab", "Pharmacy", "Completed"];
+      if (!allowedStatuses.includes(body.status)) {
+        return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+      }
+      const updated = await pool.query(
+        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [body.status, appointmentId]
+      );
+      if (updated.rowCount === 0) return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
+      return NextResponse.json({ row: updated.rows[0] });
+    }
+
     if (!appointmentDate || !department || !doctor || !patientName || !appointmentTime) return NextResponse.json({ error: "Appointment date, department, doctor, patient name and appointment time are required." }, { status: 400 });
     if (!isValidDate(appointmentDate)) return NextResponse.json({ error: "Invalid appointment date." }, { status: 400 });
     if (!isValidTime(appointmentTime)) return NextResponse.json({ error: "Invalid appointment time." }, { status: 400 });
@@ -982,7 +999,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ Hnam
       `
         SELECT id FROM ${quoteIdentifier(TABLE_NAME)}
         WHERE appointment_date = $1 AND department = $2 AND doctor = $3 AND appointment_time = $4::time AND id <> $5
-          AND status IN ('Scheduled', 'Rescheduled')
+          AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         LIMIT 1
       `,
       [appointmentDate, department, doctor, appointmentTime, appointmentId],
@@ -1071,7 +1088,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ H
           FROM ${quoteIdentifier(TABLE_NAME)}
           WHERE appointment_date = $1
             AND LOWER(doctor) = ANY($2)
-            AND status IN ('Scheduled', 'Rescheduled')
+            AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
         `,
         [cancelAllDate, requestedDoctorNames.map(val => val.toLowerCase())]
       );
@@ -1124,7 +1141,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ H
       const existing = await pool.query(
         `
           SELECT id FROM ${quoteIdentifier(TABLE_NAME)}
-          WHERE patient_id = $1 AND department = $2 AND doctor = $3 AND status IN ('Scheduled', 'Rescheduled')
+          WHERE patient_id = $1 AND department = $2 AND doctor = $3 AND status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
           ORDER BY updated_at DESC, created_at DESC LIMIT 1
         `,
         [patientId, department, doctor],

@@ -359,6 +359,17 @@ export async function POST(
       `, [username, hashedPassword, role]);
     }
 
+    // Update appointment status to 'Pharmacy' if a dispensing record is created
+    if (tableName === "pharmacy_dispensing" && values.tokenNumber) {
+      const apptId = Number(values.tokenNumber);
+      if (Number.isInteger(apptId) && apptId > 0) {
+        await pool.query(
+          `UPDATE appointments SET status = 'Pharmacy', updated_at = NOW() WHERE id = $1`,
+          [apptId]
+        );
+      }
+    }
+
     return NextResponse.json({
       row: insertResult.rows[0],
       tableName,

@@ -944,7 +944,7 @@ export default function DoctorConsultationPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               id: formValues.tokenNumber,
-              status: "Completed",
+              status: "Conslt",
             }),
           });
         } catch (e) {

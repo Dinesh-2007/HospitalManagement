@@ -207,7 +207,7 @@ export default function PatientVitalsPage() {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/vitals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, appointmentId: selectedRow?.appointment_id }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Failed to save vitals.");

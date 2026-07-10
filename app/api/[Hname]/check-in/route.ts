@@ -230,7 +230,7 @@ export async function POST(
             attendant_gender,
             attendant_relation
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, 'Scheduled', $13, $14, $15, $16, $17)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, 'Checked In', $13, $14, $15, $16, $17)
           RETURNING id
         `,
         [
@@ -329,7 +329,7 @@ export async function POST(
 
       // Mark check_in_time and update IDs
       await pool.query(
-        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), appointment_number = $1, appointment_id_display = $3, queue_id = $4, updated_at = NOW(), has_attendant = $5, attendant_name = $6, attendant_phone = $7, attendant_gender = $8, attendant_relation = $9 WHERE id = $2`,
+        `UPDATE ${quoteIdentifier(TABLE_NAME)} SET check_in_time = NOW(), status = 'Checked In', appointment_number = $1, appointment_id_display = $3, queue_id = $4, updated_at = NOW(), has_attendant = $5, attendant_name = $6, attendant_phone = $7, attendant_gender = $8, attendant_relation = $9 WHERE id = $2`,
         [apptNum, apptRecord.id, apptIdDisplay, queueIdValue, hasAttendant ? true : false, attendantName || null, attendantPhone || null, attendantGender || null, attendantRelation || null]
       );
 
