@@ -750,53 +750,59 @@ export default function AppointmentCalendarPage() {
                   </div>
                 ) : null}
 
-                <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50">
-                  <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white px-4 py-3 text-sm font-semibold text-brand-700 shadow-sm">
-                    <span>Selected Slot Details</span>
-                  </div>
-
-                  <div className="space-y-3 rounded-xl bg-white/50 p-4 border border-brand-100">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Date</p>
-                        <p className="mt-1 font-medium text-gray-800">{effectiveSelectedDate ? formatDay(effectiveSelectedDate) : "Not selected"}</p>
+                <div id="booking-panel" className="rounded-2xl border border-brand-200 bg-brand-50/80 p-4 shadow-sm shadow-brand-100/50 space-y-4">
+                  {/* Current Booking Panel (Top) */}
+                  {patientAppointment ? (
+                    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                      <div className="font-bold text-orange-900 flex items-center gap-2">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Current booking
                       </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Slot Time</p>
-                        <p className="mt-1 font-medium text-gray-800">{selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}</p>
+                      <div className="mt-1 grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-orange-600 text-xs uppercase font-semibold">Date:</span>
+                          <div className="font-medium">{patientAppointment.appointment_date ? formatDay(new Date(patientAppointment.appointment_date)) : "-"}</div>
+                        </div>
+                        <div>
+                          <span className="text-orange-600 text-xs uppercase font-semibold">Time:</span>
+                          <div className="font-medium">{patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 text-xs">Reschedules: <span className="font-bold">{patientAppointment.reschedule_count ?? 0}/3</span></div>
+                    </div>
+                  ) : null}
+
+                  {/* Selected Slot Details Panel (Middle) */}
+                  {(!patientAppointment || isRescheduling) ? (
+                    <div className="rounded-xl border border-brand-200 bg-white shadow-sm overflow-hidden">
+                      <div className="border-b border-brand-100 px-4 py-3 text-sm font-semibold text-brand-700 bg-brand-50/50">
+                        Selected Slot Details
+                      </div>
+                      <div className="p-4 bg-white/50">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Date</p>
+                            <p className="mt-1 font-medium text-gray-800">{effectiveSelectedDate ? formatDay(effectiveSelectedDate) : "Not selected"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Slot Time</p>
+                            <p className="mt-1 font-medium text-gray-800">{selectedSlot ? formatTimeRange(selectedSlot, addMinutes(selectedSlot, activeStep)) : "Not selected"}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  ) : null}
 
-                    {patientAppointment ? (
-                      <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
-                        <div className="font-bold text-orange-900 flex items-center gap-2">
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Current booking
-                        </div>
-                        <div className="mt-1 grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-orange-600 text-xs uppercase font-semibold">Date:</span>
-                            <div className="font-medium">{patientAppointment.appointment_date ? formatDay(new Date(patientAppointment.appointment_date)) : "-"}</div>
-                          </div>
-                          <div>
-                            <span className="text-orange-600 text-xs uppercase font-semibold">Time:</span>
-                            <div className="font-medium">{patientAppointment.appointment_time ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time) : "-"}</div>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 text-xs">Reschedules: <span className="font-bold">{patientAppointment.reschedule_count ?? 0}/3</span></div>
-                      </div>
-                    ) : null}
-                  </div>
-
+                  {/* Action Buttons (Bottom) */}
                   {!patientAppointment ? (
                     <div className="mt-4 flex gap-3">
                       <button
                         type="button"
                         disabled={!selectedSlot}
                         onClick={showBookConfirmation}
-                        className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="flex-1 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Book Appointment
                       </button>

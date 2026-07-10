@@ -845,6 +845,69 @@ export default function BookAppointmentPage() {
                   );
                 })}
               </div>
+
+              {/* Auto-scrolling Doctors Section */}
+              <div className="mt-10 overflow-hidden">
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Our Specialists</h4>
+                </div>
+                {doctorOptions.length > 0 ? (
+                  <div className="overflow-hidden group relative flex" style={{ maskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)", WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)" }}>
+                    {/* Track 1 */}
+                    <div className="flex shrink-0 animate-marquee pause-marquee items-center justify-around gap-4 min-w-full pr-4 py-2">
+                      {[...doctorOptions, ...doctorOptions, ...doctorOptions].map((doctor, index) => (
+                        <button
+                          key={`t1-${doctor.doctorId}-${index}`}
+                          type="button"
+                          onClick={() => directBookDoctor(doctor)}
+                          className="flex flex-col items-center justify-center p-4 w-[160px] rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer flex-shrink-0"
+                        >
+                          <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
+                            {doctor.profilePhoto ? (
+                              <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
+                            ) : (
+                              <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{doctor.name}</span>
+                          {doctor.department && (
+                            <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-1">{doctor.department}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Track 2 */}
+                    <div className="flex shrink-0 animate-marquee pause-marquee items-center justify-around gap-4 min-w-full pr-4 py-2" aria-hidden="true">
+                      {[...doctorOptions, ...doctorOptions, ...doctorOptions].map((doctor, index) => (
+                        <button
+                          key={`t2-${doctor.doctorId}-${index}`}
+                          type="button"
+                          onClick={() => directBookDoctor(doctor)}
+                          className="flex flex-col items-center justify-center p-4 w-[160px] rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer flex-shrink-0"
+                        >
+                          <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
+                            {doctor.profilePhoto ? (
+                              <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
+                            ) : (
+                              <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{doctor.name}</span>
+                          {doctor.department && (
+                            <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-1">{doctor.department}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 py-4">No doctors available.</div>
+                )}
+              </div>
             </div>
           ) : (
             <div id="doctor-selection-section" className="mb-6 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
