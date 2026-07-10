@@ -7,6 +7,7 @@ import { ComponentCard } from "../../../components/component-card";
 import { InputField } from "../../../components/ui/input-field";
 import { Label } from "../../../components/ui/label";
 import { Button } from "../../../components/ui/button";
+import { PhoneInputField } from "../../../components/ui/phone-input";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
 
 /* ── types ── */
@@ -65,7 +66,7 @@ function storageKey(hname: string) {
 }
 
 function normalizePhone(value: string) {
-  return value.replace(/\D/g, "").trim();
+  return value.trim();
 }
 
 async function fetchPatientRows(hname: string): Promise<PatientRow[]> {
@@ -310,12 +311,12 @@ export default function PatientLoginPage() {
 
                 <div>
                   <Label htmlFor="reg-mobile">Mobile</Label>
-                  <input
-                    id="reg-mobile"
-                    value={regForm.mobile}
-                    readOnly
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-500 shadow-theme-xs"
-                  />
+                  <div className="pointer-events-none opacity-70">
+                    <PhoneInputField
+                      value={regForm.mobile}
+                      onChange={() => {}}
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -447,15 +448,9 @@ export default function PatientLoginPage() {
 
                 <div>
                   <Label htmlFor="reg-phone-office">Phone (Office)</Label>
-                  <input
-                    id="reg-phone-office"
+                  <PhoneInputField
                     value={regForm.phoneOffice}
-                    onChange={(e) =>
-                      updateReg("phoneOffice", e.target.value.replace(/\D/g, "").slice(0, 10))
-                    }
-                    inputMode="numeric"
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    placeholder="Office phone"
+                    onChange={(val) => updateReg("phoneOffice", val)}
                   />
                 </div>
               </div>
@@ -489,20 +484,16 @@ export default function PatientLoginPage() {
 
             <div>
               <Label htmlFor="phone">Mobile Number</Label>
-              <InputField
-                id="phone"
-                name="phone"
-                type="tel"
-                placeholder="Enter 10-digit mobile number"
-                value={phone}
-                readOnly={showOtpField}
-                onChange={(e) => {
-                  if (showOtpField) return;
-                  setPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
-                  setError(null);
-                }}
-                required
-              />
+              <div className={showOtpField ? "pointer-events-none opacity-70" : ""}>
+                <PhoneInputField
+                  value={phone}
+                  onChange={(val) => {
+                    if (showOtpField) return;
+                    setPhone(val);
+                    setError(null);
+                  }}
+                />
+              </div>
             </div>
 
             {/* OTP is hidden on initial screen */}

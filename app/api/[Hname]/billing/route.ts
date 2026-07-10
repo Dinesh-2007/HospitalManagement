@@ -245,7 +245,7 @@ export async function POST(
     }
 
     // Generate invoice number (uses hospital timezone so date prefix is local, not UTC)
-    const invoiceNumber = await generateInvoiceNumber(pool, tz);
+    const invoiceNumber = await generateInvoiceNumber(pool, tz.timezone);
 
     const result = await pool.query(
       `

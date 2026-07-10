@@ -14,6 +14,11 @@ export async function createAccountAction(formData: FormData) {
   const country = String(formData.get("country") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "Asia/Kolkata").trim() || "Asia/Kolkata";
 
+  // Currency fields — defaults to INR if not provided (backwards compatible)
+  const currencyCode   = String(formData.get("currency_code")   ?? "INR").trim()           || "INR";
+  const currencyName   = String(formData.get("currency_name")   ?? "Indian Rupee").trim()   || "Indian Rupee";
+  const currencySymbol = String(formData.get("currency_symbol") ?? "₹").trim()             || "₹";
+
   if (!hospitalName || !siteName) {
     throw new Error("Hospital name and site name are required.");
   }
@@ -33,20 +38,26 @@ export async function createAccountAction(formData: FormData) {
       phone_number VARCHAR(100) NOT NULL,
       country VARCHAR(255),
       timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+      currency_code   VARCHAR(10)  NOT NULL DEFAULT 'INR',
+      currency_name   VARCHAR(255) NOT NULL DEFAULT 'Indian Rupee',
+      currency_symbol VARCHAR(10)  NOT NULL DEFAULT '₹',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  // Ensure new columns exist for existing databases
+  // Ensure all columns exist for existing databases (idempotent migrations)
   await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS country VARCHAR(255)`);
   await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata'`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS currency_code   VARCHAR(10)  NOT NULL DEFAULT 'INR'`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS currency_name   VARCHAR(255) NOT NULL DEFAULT 'Indian Rupee'`);
+  await pool.query(`ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS currency_symbol VARCHAR(10)  NOT NULL DEFAULT '₹'`);
 
   // Insert hospital details into main DB
   await pool.query(`
-    INSERT INTO hospitals (hospital_name, admin_mail, creator_name, site_name, phone_number, country, timezone)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO hospitals (hospital_name, admin_mail, creator_name, site_name, phone_number, country, timezone, currency_code, currency_name, currency_symbol)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT (site_name) DO NOTHING
-  `, [hospitalName, adminMail, creatorName, siteName, phoneNumber, country || null, timezone]);
+  `, [hospitalName, adminMail, creatorName, siteName, phoneNumber, country || null, timezone, currencyCode, currencyName, currencySymbol]);
 
   // Generate DB based on siteName safely
   await createTenantDbIfNotExists(siteName);

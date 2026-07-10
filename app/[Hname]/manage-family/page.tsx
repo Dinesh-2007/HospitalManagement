@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
 import { PatientProfileLayout } from "../../../components/patient-profile-layout";
+import { PhoneInputField } from "../../../components/ui/phone-input";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 type FamilyFormValues = {
   patientId: string;
@@ -187,6 +189,11 @@ export default function HospitalManageFamilyPage() {
     setSaving(true);
     setError(null);
     setMessage(null);
+    if (!isValidPhoneNumber(formValues.mobile)) {
+      setError("Please enter a valid mobile number with country code.");
+      setSaving(false);
+      return;
+    }
     try {
       const parentPhone = typeof window === "undefined" ? "" : window.localStorage.getItem("patientPhone") ?? "";
       const parentName = typeof window === "undefined" ? "" : window.localStorage.getItem("patientName") ?? "";
@@ -462,20 +469,17 @@ export default function HospitalManageFamilyPage() {
                 {/* Mobile and OTP field */}
                 <div>
                   <label className={labelCls}>Mobile</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="tel"
-                      value={formValues.mobile}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                        updateField("mobile", val);
-                        if (val.length < 10) {
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <PhoneInputField
+                        value={formValues.mobile}
+                        onChange={(val) => {
+                          updateField("mobile", val);
                           setShowOtp(false);
-                        }
-                      }}
-                      className={inputCls}
-                    />
-                    {formValues.mobile.length === 10 && !showOtp && (
+                        }}
+                      />
+                    </div>
+                    {isValidPhoneNumber(formValues.mobile) && !showOtp && (
                       <button
                         type="button"
                         onClick={() => setShowOtp(true)}
@@ -508,12 +512,19 @@ export default function HospitalManageFamilyPage() {
                 ].map(({ key, label, type }) => (
                   <div key={key}>
                     <label className={labelCls}>{label}</label>
-                    <input
-                      type={type}
-                      value={formValues[key as keyof FamilyFormValues]}
-                      onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
-                      className={inputCls}
-                    />
+                    {type === "tel" ? (
+                      <PhoneInputField
+                        value={formValues[key as keyof FamilyFormValues]}
+                        onChange={(val) => updateField(key as keyof FamilyFormValues, val)}
+                      />
+                    ) : (
+                      <input
+                        type={type}
+                        value={formValues[key as keyof FamilyFormValues]}
+                        onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
+                        className={inputCls}
+                      />
+                    )}
                   </div>
                 ))}
 

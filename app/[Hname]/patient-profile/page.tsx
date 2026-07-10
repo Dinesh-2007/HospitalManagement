@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
 import { PatientProfileLayout } from "../../../components/patient-profile-layout";
+import { PhoneInputField } from "../../../components/ui/phone-input";
 
 type ProfileFormValues = {
   patientId: string;
@@ -319,7 +320,9 @@ export default function PatientProfilePage() {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className={labelCls}>Mobile Number</label>
-                  <input readOnly value={patientData.mobile} className={`${inputCls} bg-gray-50 opacity-70`} />
+                  <div className="pointer-events-none opacity-70">
+                    <PhoneInputField value={patientData.mobile} onChange={() => {}} />
+                  </div>
                 </div>
                 <div>
                   <label className={labelCls}>Email Address</label>
@@ -327,7 +330,7 @@ export default function PatientProfilePage() {
                 </div>
                 <div>
                   <label className={labelCls}>Phone (Office)</label>
-                  <input type="tel" value={patientData.phoneOffice} onChange={e => updateField("phoneOffice", e.target.value)} className={inputCls} />
+                  <PhoneInputField value={patientData.phoneOffice} onChange={val => updateField("phoneOffice", val)} />
                 </div>
               </div>
             </div>

@@ -12,7 +12,10 @@ type TimezoneContextType = {
    * Today's date as YYYY-MM-DD calculated in the hospital timezone.
    * Use this everywhere instead of `new Date().toISOString().slice(0,10)`.
    */
+  /** Today's date as YYYY-MM-DD calculated in the hospital timezone. */
   todayDate: string;
+  /** The hospital's registered country name, e.g. "India" or "United States" */
+  country: string;
   /** Whether the timezone has been loaded from the server */
   isLoaded: boolean;
 };
@@ -42,6 +45,7 @@ function computeTodayInTimezone(tz: string): string {
 const HospitalTimezoneContext = createContext<TimezoneContextType>({
   timezone: DEFAULT_TIMEZONE,
   todayDate: computeTodayInTimezone(DEFAULT_TIMEZONE),
+  country: "India",
   isLoaded: false,
 });
 
@@ -55,6 +59,7 @@ type ProviderProps = {
 export function HospitalTimezoneProvider({ hname, children }: ProviderProps) {
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [todayDate, setTodayDate] = useState(() => computeTodayInTimezone(DEFAULT_TIMEZONE));
+  const [country, setCountry] = useState("India");
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -63,9 +68,10 @@ export function HospitalTimezoneProvider({ hname, children }: ProviderProps) {
     async function fetchTimezone() {
       try {
         const res = await fetch(`/api/${encodeURIComponent(hname)}/timezone`, { cache: "force-cache" });
-        const data = await res.json() as { timezone?: string };
+        const data = await res.json() as { timezone?: string; country?: string };
         const tz = data.timezone || DEFAULT_TIMEZONE;
         setTimezone(tz);
+        setCountry(data.country || "India");
         setTodayDate(computeTodayInTimezone(tz));
       } catch {
         // Keep default on failure — don't break the app
@@ -78,7 +84,7 @@ export function HospitalTimezoneProvider({ hname, children }: ProviderProps) {
   }, [hname]);
 
   return (
-    <HospitalTimezoneContext.Provider value={{ timezone, todayDate, isLoaded }}>
+    <HospitalTimezoneContext.Provider value={{ timezone, todayDate, country, isLoaded }}>
       {children}
     </HospitalTimezoneContext.Provider>
   );

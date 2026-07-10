@@ -13,6 +13,7 @@ import { ChevronDownIcon } from "../icons";
 import { Button } from "../ui/button";
 import { InputField } from "../ui/input-field";
 import { Label } from "../ui/label";
+import { PhoneInputField } from "../ui/phone-input";
 
 type EmergencyContact = {
   name: string;
@@ -488,7 +489,7 @@ export function HeaderUserDropdown() {
       nextValue = sanitizeDigits(value, config.maxLength);
     } else if (key === "profilePhoto") {
       nextValue = value.slice(0, 255);
-    } else if (key === "mobileNumber" || key === "alternateMobileNumber" || key === "pincode" || key === "accountNumber" || key === "aadhaarNumber") {
+    } else if (key === "pincode" || key === "accountNumber" || key === "aadhaarNumber") {
       nextValue = sanitizeDigits(value, config.maxLength);
     } else if (key === "ifscCode" || key === "panNumber" || key === "doctorId" || key === "doctorCode" || key === "registrationNumber" || key === "licenseNumber") {
       nextValue = sanitizeAlphaNumeric(value.toUpperCase(), config.maxLength);
@@ -863,14 +864,22 @@ export function HeaderUserDropdown() {
                       ].map(([key, label]) => (
                         <div key={key}>
                           <Label htmlFor={key}>{label}</Label>
-                          <InputField
-                            id={key}
-                            name={key}
-                            type={key.includes("Email") ? "email" : "text"}
-                            value={profileForm[key as ProfileFieldKey]}
-                            onChange={(event) => updateField(key as ProfileFieldKey, event.target.value)}
-                            maxLength={key.includes("Email") ? 255 : 10}
-                          />
+                          {key.includes("Mobile") ? (
+                            <PhoneInputField
+                              id={key}
+                              value={profileForm[key as ProfileFieldKey]}
+                              onChange={(val) => updateField(key as ProfileFieldKey, val)}
+                            />
+                          ) : (
+                            <InputField
+                              id={key}
+                              name={key}
+                              type={key.includes("Email") ? "email" : "text"}
+                              value={profileForm[key as ProfileFieldKey]}
+                              onChange={(event) => updateField(key as ProfileFieldKey, event.target.value)}
+                              maxLength={key.includes("Email") ? 255 : 10}
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -912,16 +921,14 @@ export function HeaderUserDropdown() {
                             />
                           </div>
                           <div className="flex items-center gap-2">
-                            <InputField
-                              id={`emergency-phone-${index}`}
-                              name={`emergency-phone-${index}`}
-                              type="text"
-                              value={contact.phone}
-                              onChange={(event) => updateEmergencyContact(index, "phone", event.target.value)}
-                              inputMode="tel"
-                              maxLength={10}
-                              placeholder="Phone"
-                            />
+                            <div className="flex-1">
+                              <PhoneInputField
+                                id={`emergency-phone-${index}`}
+                                value={contact.phone}
+                                onChange={(val) => updateEmergencyContact(index, "phone", val)}
+                                placeholder="Phone"
+                              />
+                            </div>
                             {profileForm.emergencyContacts.length > 1 ? (
                               <button type="button" className="text-sm text-red-600" onClick={() => removeEmergencyContact(index)}>
                                 Remove

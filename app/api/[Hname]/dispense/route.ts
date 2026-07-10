@@ -204,7 +204,7 @@ export async function POST(
     }
 
     // 2. Auto-generate pharmacy token (using hospital timezone for correct date prefix)
-    const tokenNumber = await generatePharmacyToken(pool, tz);
+    const tokenNumber = await generatePharmacyToken(pool, tz.timezone);
 
     // 3. Insert pharmacy_dispensing record with pharmacy_only flag
     const insertResult = await pool.query(

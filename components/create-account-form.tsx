@@ -1,12 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { PageBreadcrumb } from "./ui/page-breadcrumb";
 import { Label } from "./ui/label";
 import { InputField } from "./ui/input-field";
 import { Button } from "./ui/button";
+import { PhoneInputField } from "./ui/phone-input";
+import { isValidPhoneNumber } from "libphonenumber-js";
 import { createAccountAction } from "../app/actions/tenant";
+import getSymbolFromCurrency from "currency-symbol-map";
+import currencyCodes from "currency-codes";
+
+// ─── Build the full world-currency list ───────────────────────────────────────
+type CurrencyOption = { code: string; name: string; symbol: string };
+
+const ALL_CURRENCIES: CurrencyOption[] = (() => {
+  const all = currencyCodes.codes();
+  return all
+    .map((code) => {
+      const data   = currencyCodes.code(code);
+      const symbol = getSymbolFromCurrency(code) ?? code;
+      return {
+        code,
+        name:   data?.currency ?? code,
+        symbol,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+})();
 
 // A lightweight country → timezone(s) lookup.
 // Covers the most common countries; falls back to "UTC" for unknowns.
@@ -75,6 +97,33 @@ export function CreateAccountForm() {
   const [siteNameVal, setSiteNameVal] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedTimezone, setSelectedTimezone] = useState("");
+  const [phoneVal, setPhoneVal] = useState("");
+
+  // Currency search combobox state
+  const [currencySearch, setCurrencySearch] = useState("");
+  const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyOption | null>(null);
+  const currencyRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (currencyRef.current && !currencyRef.current.contains(e.target as Node)) {
+        setCurrencyOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredCurrencies = currencySearch.trim()
+    ? ALL_CURRENCIES.filter(
+        (c) =>
+          c.code.toLowerCase().includes(currencySearch.toLowerCase()) ||
+          c.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+          c.symbol.toLowerCase().includes(currencySearch.toLowerCase()),
+      )
+    : ALL_CURRENCIES;
 
   const availableTimezones = selectedCountry ? (COUNTRY_TIMEZONES[selectedCountry] ?? []) : [];
 
@@ -85,17 +134,25 @@ export function CreateAccountForm() {
   const [showMailOtp, setShowMailOtp] = useState(false);
   const [showPhoneOtp, setShowPhoneOtp] = useState(false);
 
-  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 10);
-  };
-
   const handleSendOtpClick = (fieldId: "adminMail" | "phoneNumber") => {
-    const input = document.getElementById(fieldId) as HTMLInputElement | null;
-    const value = input?.value || "";
+    let value = "";
+    if (fieldId === "adminMail") {
+      const input = document.getElementById(fieldId) as HTMLInputElement | null;
+      value = input?.value || "";
+    } else {
+      value = phoneVal;
+    }
+    
     if (!value.trim()) {
       alert(`Please enter a valid ${fieldId === "adminMail" ? "email address" : "phone number"} first.`);
       return;
     }
+    
+    if (fieldId === "phoneNumber" && !isValidPhoneNumber(value)) {
+      alert("Please enter a valid phone number including country code.");
+      return;
+    }
+
     setModalType(fieldId === "adminMail" ? "mail" : "phone");
     setModalValue(value);
     setModalOpen(true);
@@ -144,10 +201,10 @@ export function CreateAccountForm() {
       <PageBreadcrumb pageTitle="Create Account" />
 
       {/* Main Registration Card */}
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-800 transition-all duration-300">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 transition-all duration-300">
 
         {/* Dynamic Premium Header with Gradient Mesh and Glowing Shapes */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-700 px-8 py-10 text-white">
+        <div className="relative overflow-hidden rounded-t-3xl bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-700 px-8 py-10 text-white">
           {/* Decorative Glow Elements */}
           <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 blur-3xl rounded-full" />
           <div className="absolute bottom-[-30px] left-[-30px] w-64 h-64 bg-indigo-500/20 blur-3xl rounded-full" />
@@ -330,14 +387,11 @@ export function CreateAccountForm() {
                     Admin Phone Number <span className="text-error-500">*</span>
                   </Label>
                   <div className="relative flex items-center">
-                    <InputField
+                    <PhoneInputField
                       id="phoneNumber"
                       name="phoneNumber"
-                      type="tel"
-                      placeholder="Enter 10-digit phone"
-                      maxLength={10}
-                      pattern="[0-9]{10}"
-                      onChange={handlePhoneChange}
+                      value={phoneVal}
+                      onChange={setPhoneVal}
                       required
                       className="pr-24"
                     />
@@ -434,6 +488,114 @@ export function CreateAccountForm() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   All dates and times will use <strong className="ml-1">{selectedTimezone.replace(/_/g, " ")}</strong>
+                </div>
+              )}
+            </div>
+
+            {/* Section 4: Financial Configuration */}
+            <div className="space-y-4 pt-4">
+              <div className="flex items-center gap-2 pb-1 border-b border-gray-100 dark:border-gray-800">
+                <span className="text-sm font-semibold text-gray-400 dark:text-gray-500">04</span>
+                <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                  Financial Configuration
+                </h2>
+              </div>
+
+              {/* Hidden inputs that carry the three values into FormData */}
+              {selectedCurrency && (
+                <>
+                  <input type="hidden" name="currency_code"   value={selectedCurrency.code} />
+                  <input type="hidden" name="currency_name"   value={selectedCurrency.name} />
+                  <input type="hidden" name="currency_symbol" value={selectedCurrency.symbol} />
+                </>
+              )}
+
+              <div>
+                <Label htmlFor="currency-search">Hospital Currency <span className="text-error-500">*</span></Label>
+                <div ref={currencyRef} className="relative mt-1.5">
+                  {/* Trigger button */}
+                  <button
+                    id="currency-search"
+                    type="button"
+                    onClick={() => setCurrencyOpen((o) => !o)}
+                    className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 hover:border-brand-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
+                  >
+                    {selectedCurrency ? (
+                      <span className="flex items-center gap-2 font-medium">
+                        <span className="text-lg w-7 text-center">{selectedCurrency.symbol}</span>
+                        <span>{selectedCurrency.name}</span>
+                        <span className="ml-1 text-xs text-gray-400 font-normal">({selectedCurrency.code})</span>
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">Search currency (e.g. INR, USD, AED)...</span>
+                    )}
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${currencyOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown panel */}
+                  {currencyOpen && (
+                    <div className="absolute z-50 mt-1.5 w-full rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 animate-in fade-in slide-in-from-top-1 duration-150">
+                      {/* Search input */}
+                      <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                        <div className="relative">
+                          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Search by name, code or symbol..."
+                            value={currencySearch}
+                            onChange={(e) => setCurrencySearch(e.target.value)}
+                            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Options list */}
+                      <ul className="max-h-64 overflow-y-auto py-1" role="listbox">
+                        {filteredCurrencies.length === 0 ? (
+                          <li className="px-4 py-3 text-sm text-gray-400 text-center">No currencies found</li>
+                        ) : (
+                          filteredCurrencies.map((c) => (
+                            <li
+                              key={c.code}
+                              role="option"
+                              aria-selected={selectedCurrency?.code === c.code}
+                              onClick={() => {
+                                setSelectedCurrency(c);
+                                setCurrencyOpen(false);
+                                setCurrencySearch("");
+                              }}
+                              className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition hover:bg-brand-50 dark:hover:bg-brand-950/20 ${
+                                selectedCurrency?.code === c.code
+                                  ? "bg-brand-50/70 dark:bg-brand-950/10 font-semibold text-brand-700 dark:text-brand-400"
+                                  : "text-gray-800 dark:text-gray-200"
+                              }`}
+                            >
+                              <span className="w-8 shrink-0 text-center text-base font-bold text-gray-500 dark:text-gray-400">{c.symbol}</span>
+                              <span className="flex-1">{c.name}</span>
+                              <span className="ml-auto text-xs text-gray-400 font-mono">{c.code}</span>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Preview banner */}
+              {selectedCurrency && (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 animate-fade-in">
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  All monetary values will display as{" "}
+                  <strong className="mx-1">{selectedCurrency.symbol}</strong>
+                  ({selectedCurrency.code} — {selectedCurrency.name})
                 </div>
               )}
             </div>

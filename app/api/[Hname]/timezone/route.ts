@@ -15,8 +15,8 @@ export async function GET(
   try {
     const { Hname } = await params;
     const hname = decodeURIComponent(Hname);
-    const timezone = await getHospitalTimezone(hname);
-    return NextResponse.json({ timezone }, {
+    const { timezone, country } = await getHospitalTimezone(hname);
+    return NextResponse.json({ timezone, country }, {
       headers: {
         // Cache for 5 minutes on CDN/browser
         "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
@@ -24,7 +24,7 @@ export async function GET(
     });
   } catch (error) {
     return NextResponse.json(
-      { timezone: "Asia/Kolkata", error: error instanceof Error ? error.message : "Failed." },
+      { timezone: "Asia/Kolkata", country: "India", error: error instanceof Error ? error.message : "Failed." },
       { status: 200 }, // always return a usable timezone even on error
     );
   }

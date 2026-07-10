@@ -21,7 +21,7 @@ export default function PatientRegistrationPage() {
   useEffect(() => {
     try {
       setLocalName(window.localStorage.getItem("patientName") ?? "");
-      setLocalPhone(window.localStorage.getItem("patientPhone")?.replace(/\D/g, "") ?? "");
+      setLocalPhone(window.localStorage.getItem("patientPhone") ?? "");
     } catch {}
   }, []);
 
@@ -82,9 +82,9 @@ export default function PatientRegistrationPage() {
       },
       { id: "zipCode", label: "ZIP Code", type: "text", maxLength: 6, pattern: "[0-9]{6}", inputMode: "numeric", size: "small" },
       { id: "email", label: "eMail", type: "text", maxLength: 255, size: "medium" },
-      { id: "phoneOffice", label: "Phone - Office", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
-      { id: "phoneResi", label: "Phone - Resi", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small" },
-      { id: "mobile", label: "Mobile", type: mode === "edit" ? "display" : "text", maxLength: 10, pattern: "[0-9]{10}", inputMode: "tel", size: "small", defaultValue: mode === "edit" ? localPhone : undefined },
+      { id: "phoneOffice", label: "Phone - Office", type: mode === "edit" ? "display" : "phone", size: "small" },
+      { id: "phoneResi", label: "Phone - Resi", type: mode === "edit" ? "display" : "phone", size: "small" },
+      { id: "mobile", label: "Mobile", type: mode === "edit" ? "display" : "phone", size: "small", defaultValue: mode === "edit" ? localPhone : undefined },
       { id: "hnNumber", label: "HN Number", type: "text", maxLength: 50, size: "small" },
       { id: "profession", label: "Profession", type: "text", maxLength: 255, size: "medium" },
       {

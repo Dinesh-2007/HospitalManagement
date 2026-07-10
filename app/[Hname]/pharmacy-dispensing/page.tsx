@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
+import { PhoneInputField } from "../../../components/ui/phone-input";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -369,9 +371,9 @@ export default function PharmacyDispensingPage() {
   const handleAddDispensePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddDispenseError("");
-    const phone = addDispensePhone.replace(/\D/g, "");
-    if (phone.length < 10) {
-      setAddDispenseError("Please enter a valid 10-digit mobile number.");
+    const phone = addDispensePhone;
+    if (!isValidPhoneNumber(phone)) {
+      setAddDispenseError("Please enter a valid mobile number with country code.");
       return;
     }
     setAddDispenseLoading(true);
@@ -408,7 +410,7 @@ export default function PharmacyDispensingPage() {
     const prefill = parsePrescriptionLines(bill.medicine_lines);
     openPharmacyOnlyForm(
       normalizeText(bill.patient_name ?? foundPatient?.patient_name),
-      addDispensePhone.replace(/\D/g, ""),
+      addDispensePhone,
       addDispenseDob,
       prefill
     );
@@ -611,14 +613,12 @@ export default function PharmacyDispensingPage() {
                         <p className="mb-3 text-xs text-slate-400 dark:text-gray-500">
                           Enter the customer's 10-digit mobile number to check if they are an existing patient.
                         </p>
-                        <input
+                        <PhoneInputField
                           id="add-dispense-phone"
-                          type="tel"
-                          required
                           value={addDispensePhone}
-                          onChange={(e) => setAddDispensePhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                          placeholder="e.g. 9876543210"
-                          className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-theme-xs focus:border-emerald-400 focus:outline-hidden focus:ring-3 focus:ring-emerald-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                          onChange={setAddDispensePhone}
+                          required
+                          placeholder="e.g. +1 234 567 8900"
                         />
                       </div>
                       <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-gray-700">
@@ -631,7 +631,7 @@ export default function PharmacyDispensingPage() {
                         </button>
                         <button
                           type="submit"
-                          disabled={addDispenseLoading || addDispensePhone.replace(/\D/g, "").length < 10}
+                          disabled={addDispenseLoading || !isValidPhoneNumber(addDispensePhone)}
                           className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-600 focus:outline-hidden focus:ring-3 focus:ring-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {addDispenseLoading ? "Searching…" : "Search Customer"}
@@ -706,7 +706,7 @@ export default function PharmacyDispensingPage() {
                             }
                             openPharmacyOnlyForm(
                               addDispenseName.trim(),
-                              addDispensePhone.replace(/\D/g, ""),
+                              addDispensePhone,
                               addDispenseDob
                             );
                           }}
@@ -745,7 +745,7 @@ export default function PharmacyDispensingPage() {
                           type="button"
                           onClick={() => openPharmacyOnlyForm(
                             normalizeText(foundPatient.patient_name),
-                            addDispensePhone.replace(/\D/g, ""),
+                            addDispensePhone,
                             addDispenseDob
                           )}
                           className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-emerald-600"

@@ -5,6 +5,7 @@ import { ComponentCard } from "../../components/component-card";
 import { InputField } from "../../components/ui/input-field";
 import { Label } from "../../components/ui/label";
 import { Button } from "../../components/ui/button";
+import { PhoneInputField } from "../../components/ui/phone-input";
 import { useRouter } from "next/navigation";
 
 const MOCK_PHONE = "1234567890";
@@ -24,7 +25,9 @@ export default function PatientLoginPage() {
 
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    if (phone === MOCK_PHONE && otp === MOCK_OTP) {
+    // Extract just digits from E.164 phone for mock comparison
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.endsWith(MOCK_PHONE) && otp === MOCK_OTP) {
       // Store mock patient name and navigate to dashboard
       try {
         localStorage.setItem("patientName", "John Doe");
@@ -52,14 +55,10 @@ export default function PatientLoginPage() {
 
             <div>
               <Label htmlFor="phone">Phone number</Label>
-              <InputField
+              <PhoneInputField
                 id="phone"
-                name="phone"
-                type="tel"
-                placeholder="Enter phone number"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
+                onChange={(val) => setPhone(val)}
               />
             </div>
 

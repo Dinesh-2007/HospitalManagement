@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
+import { PhoneInputField } from "../../../components/ui/phone-input";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null, appointment_check_in_time?: string | null };
 
@@ -35,6 +37,7 @@ export default function CheckInPage() {
   const { todayDate, timezone } = useHospitalTimezone();
   const [date, setDate] = useState(() => todayDate);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentTime, setCurrentTime] = useState("");
   const [rows, setRows] = useState<VitalsRow[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [doctorsList, setDoctorsList] = useState<{ name: string, department: string, isAvailableToday?: boolean }[]>([]);
@@ -113,8 +116,8 @@ export default function CheckInPage() {
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setWalkInError("");
-    if (walkInPhone.length < 10) {
-      setWalkInError("Please enter a valid 10-digit mobile number.");
+    if (!isValidPhoneNumber(walkInPhone)) {
+      setWalkInError("Please enter a valid mobile number with country code.");
       return;
     }
     setWalkInSubmitting(true);
@@ -299,6 +302,23 @@ export default function CheckInPage() {
   }, [loadPatients]);
 
   useEffect(() => {
+    if (!timezone) return;
+    const updateTime = () => {
+      const timeStr = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true
+      }).format(new Date());
+      setCurrentTime(timeStr);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [timezone]);
+
+  useEffect(() => {
     async function loadOptions() {
       if (!hname) return;
       try {
@@ -463,7 +483,11 @@ export default function CheckInPage() {
           <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Check-in Portal</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">View scheduled patients and mark their check-in status.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <div className="hidden flex-col items-end sm:flex bg-gray-50 px-4 py-1.5 rounded-lg border border-gray-200 shadow-theme-xs">
+            <span className="text-sm font-semibold text-gray-800">{dateLabel}</span>
+            {currentTime && <span className="text-xs text-brand-600 font-bold font-mono tracking-tight">{currentTime}</span>}
+          </div>
           <button
             onClick={() => {
               setWalkInError("");
@@ -566,11 +590,17 @@ export default function CheckInPage() {
                     ? (text(row, ["appointment_id_display"]) || (row.appointment_number ? (dateCompact ? `WK-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `WK-${String(row.appointment_number).padStart(4, "0")}`) : "-"))
                     : (text(row, ["appointment_id_display"]) || (row.appointment_number ? (dateCompact ? `APT-${dateCompact}-${String(row.appointment_number).padStart(4, "0")}` : `APT-${String(row.appointment_number).padStart(4, "0")}`) : "-"));
                   const queueIdDisplay = text(row, ["queue_id"]) || "-";
+                  const visits = Number(row.number_of_visits || 0);
 
                   return (
                     <tr key={String(row.appointment_id ?? row.registration_id ?? name)}>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800">{name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-800">{name}</span>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${visits > 1 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                            {visits > 1 ? "Old" : "New"}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {displayPatientId
@@ -653,7 +683,7 @@ export default function CheckInPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number <span className="text-red-500">*</span></label>
-                  <input type="tel" value={attendantPhone} onChange={(e) => setAttendantPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                  <PhoneInputField value={attendantPhone} onChange={setAttendantPhone} required />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Gender <span className="text-red-500">*</span></label>
@@ -742,22 +772,19 @@ export default function CheckInPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mobile Number</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="tel"
-                        required
-                        value={walkInPhone}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                          setWalkInPhone(val);
-                          if (val.length < 10) {
+                    <div className="flex gap-2 items-center">
+                      <div className="flex-1">
+                        <PhoneInputField
+                          value={walkInPhone}
+                          onChange={(val) => {
+                            setWalkInPhone(val);
                             setShowWalkInOtp(false);
-                          }
-                        }}
-                        placeholder="Enter 10-digit mobile number"
-                        className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm focus:border-brand-500 focus:ring-brand-500"
-                      />
-                      {walkInPhone.length === 10 && !showWalkInOtp && (
+                          }}
+                          required
+                          placeholder="Enter mobile number"
+                        />
+                      </div>
+                      {isValidPhoneNumber(walkInPhone) && !showWalkInOtp && (
                         <button
                           type="button"
                           onClick={() => setShowWalkInOtp(true)}
@@ -929,22 +956,16 @@ export default function CheckInPage() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Phone (Office)</label>
-                    <input
-                      type="text"
+                    <PhoneInputField
                       value={walkInRegForm.phoneOffice}
-                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, phoneOffice: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
-                      placeholder="Office phone"
-                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                      onChange={(val) => setWalkInRegForm((prev: any) => ({ ...prev, phoneOffice: val }))}
                     />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Phone (Resi)</label>
-                    <input
-                      type="text"
+                    <PhoneInputField
                       value={walkInRegForm.phoneResi}
-                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, phoneResi: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
-                      placeholder="Residence phone"
-                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
+                      onChange={(val) => setWalkInRegForm((prev: any) => ({ ...prev, phoneResi: val }))}
                     />
                   </div>
                   <div>
@@ -1084,7 +1105,7 @@ export default function CheckInPage() {
                         </div>
                         <div>
                           <label className="mb-1.5 block text-sm font-medium text-gray-700">Phone Number <span className="text-red-500">*</span></label>
-                          <input type="tel" value={walkInAttendantPhone} onChange={(e) => setWalkInAttendantPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                          <PhoneInputField value={walkInAttendantPhone} onChange={setWalkInAttendantPhone} required />
                         </div>
                         <div>
                           <label className="mb-1.5 block text-sm font-medium text-gray-700">Gender <span className="text-red-500">*</span></label>

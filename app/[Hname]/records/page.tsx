@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { getCurrentUserRole } from "../../actions/user";
 import { DatePicker } from "../../../components/date-picker";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
+import { useHospitalCurrency } from "../../../components/context/HospitalCurrencyContext";
 
 type RawRow = Record<string, unknown>;
 type ConsultationRow = {
@@ -229,6 +230,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
     const [pharmacyRecords, setPharmacyRecords] = useState<any[]>([]);
     const [billingRecords, setBillingRecords] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const { formatCurrency } = useHospitalCurrency();
 
     const appointmentId = row.id;
     const patientIdentifier = row.patientId || row.patientDetails;
@@ -359,7 +361,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                     <InfoField label="Doctor" value={row.doctor} />
                                     <InfoField label="Department" value={row.department} />
                                     <InfoField label="Patient Type" value={row.patientType === "IP" ? "IP — Inpatient" : "OP — Outpatient"} />
-                                    <InfoField label="Consultation Amount" value={row.consultationAmount ? `₹${row.consultationAmount}` : undefined} />
+                                    <InfoField label="Consultation Amount" value={row.consultationAmount ? formatCurrency(Number(row.consultationAmount)) : undefined} />
                                     <InfoField label="Follow-up Days" value={row.followUpDays ? `${row.followUpDays} day(s)` : undefined} />
                                     <InfoField label="Date" value={row.updatedAt ? formatDisplayDate(row.updatedAt.slice(0, 10)) : undefined} />
                                     {/* Additional info from vitals record */}
@@ -512,7 +514,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                             <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                                                 <div className="text-xs font-medium text-gray-500 uppercase">Total Amount</div>
                                                 <div className="mt-1 text-lg font-bold text-gray-900 dark:text-white">
-                                                    Rs. {pharmacyRecords.reduce((sum, r) => sum + Number(r.billing_amount || 0), 0).toFixed(2)}
+                                                    {formatCurrency(pharmacyRecords.reduce((sum, r) => sum + Number(r.billing_amount || 0), 0))}
                                                 </div>
                                             </div>
                                             <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -545,7 +547,7 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
-                                                                    Rs. {Number(r.billing_amount || 0).toFixed(2)}
+                                                                    {formatCurrency(Number(r.billing_amount || 0))}
                                                                 </td>
                                                                 <td className="px-4 py-3">
                                                                     <span className={`inline-flex rounded-full px-2 text-[10px] font-semibold leading-5 ${r.payment_status === "Paid" ? "bg-emerald-100 text-emerald-800" : "bg-brand-100 text-brand-800"
@@ -604,19 +606,19 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                                 <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                                                     <div>
                                                         <span className="block text-gray-500">Subtotal</span>
-                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">₹{Number(bill.subtotal).toFixed(2)}</span>
+                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(Number(bill.subtotal))}</span>
                                                     </div>
                                                     <div>
                                                         <span className="block text-gray-500">Tax</span>
-                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">₹{Number(bill.tax_amount).toFixed(2)}</span>
+                                                        <span className="font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(Number(bill.tax_amount))}</span>
                                                     </div>
                                                     <div>
                                                         <span className="block text-gray-500">Discount</span>
-                                                        <span className="font-semibold text-red-500">₹{Number(bill.discount_amount).toFixed(2)}</span>
+                                                        <span className="font-semibold text-red-500">{formatCurrency(Number(bill.discount_amount))}</span>
                                                     </div>
                                                     <div>
                                                         <span className="block text-gray-500">Payable</span>
-                                                        <span className="font-bold text-gray-950 dark:text-white">₹{Number(bill.payable_amount).toFixed(2)}</span>
+                                                        <span className="font-bold text-gray-950 dark:text-white">{formatCurrency(Number(bill.payable_amount))}</span>
                                                     </div>
                                                 </div>
                                                 {(bill.payment_method || bill.transaction_id) && (

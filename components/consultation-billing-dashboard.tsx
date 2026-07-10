@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useHospitalTimezone } from "./context/HospitalTimezoneContext";
+import { useHospitalCurrency } from "./context/HospitalCurrencyContext";
 
 type InvoiceRecord = {
   id: number;
@@ -68,6 +69,7 @@ export function ConsultationBillingDashboard() {
   const hname = decodeURIComponent(params?.Hname as string || "HSMS");
 
   const { todayDate } = useHospitalTimezone();
+  const { formatCurrency, currencySymbol } = useHospitalCurrency();
 
   const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -344,12 +346,12 @@ export function ConsultationBillingDashboard() {
           <div style="margin-top: 30px;">
             <p class="bold" style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Charges</p>
             
-            <div class="row"><span>Consultation Fee</span> <span>₹${Number(invoice.subtotal).toFixed(2)}</span></div>
-            ${Number(invoice.registration_fee) > 0 ? `<div class="row"><span>Registration Fee</span> <span>₹${Number(invoice.registration_fee).toFixed(2)}</span></div>` : ''}
-            ${Number(invoice.discount_amount) > 0 ? `<div class="row" style="color: red;"><span>Discount</span> <span>-₹${Number(invoice.discount_amount).toFixed(2)}</span></div>` : ''}
-            ${Number(invoice.tax_amount) > 0 ? `<div class="row"><span>Tax</span> <span>₹${Number(invoice.tax_amount).toFixed(2)}</span></div>` : ''}
+            <div class="row"><span>Consultation Fee</span> <span>${currencySymbol}${Number(invoice.subtotal).toFixed(2)}</span></div>
+            ${Number(invoice.registration_fee) > 0 ? `<div class="row"><span>Registration Fee</span> <span>${currencySymbol}${Number(invoice.registration_fee).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.discount_amount) > 0 ? `<div class="row" style="color: red;"><span>Discount</span> <span>-${currencySymbol}${Number(invoice.discount_amount).toFixed(2)}</span></div>` : ''}
+            ${Number(invoice.tax_amount) > 0 ? `<div class="row"><span>Tax</span> <span>${currencySymbol}${Number(invoice.tax_amount).toFixed(2)}</span></div>` : ''}
             
-            <div class="row total bold"><span>Grand Total</span> <span>₹${Number(invoice.payable_amount).toFixed(2)}</span></div>
+            <div class="row total bold"><span>Grand Total</span> <span>${currencySymbol}${Number(invoice.payable_amount).toFixed(2)}</span></div>
           </div>
 
           <div style="margin-top: 30px; font-size: 12px;">
@@ -464,7 +466,7 @@ export function ConsultationBillingDashboard() {
                         checked={consRateOption === "Full"}
                         onChange={() => setConsRateOption("Full")}
                       />
-                      Standard First Visit Rate (₹{activeCheckout.consultation_amount})
+                      Standard First Visit Rate ({formatCurrency(Number(activeCheckout.consultation_amount))})
                     </label>
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                       <input
@@ -473,7 +475,7 @@ export function ConsultationBillingDashboard() {
                         checked={consRateOption === "FollowUpFree"}
                         onChange={() => setConsRateOption("FollowUpFree")}
                       />
-                      Follow-up visit rate (Free / ₹0.00)
+                      Follow-up visit rate (Free / {formatCurrency(0)})
                     </label>
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                       <input
@@ -532,17 +534,17 @@ export function ConsultationBillingDashboard() {
               <div className="p-4 border-t border-dashed border-slate-200 dark:border-gray-800 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
                   <span>Consultation Fee:</span>
-                  <span>₹{billingCalculations.subtotal.toFixed(2)}</span>
+                  <span>{formatCurrency(billingCalculations.subtotal)}</span>
                 </div>
                 {billingCalculations.discount > 0 && (
                   <div className="flex justify-between text-red-600 font-medium">
                     <span>Discount Applied:</span>
-                    <span>-₹{billingCalculations.discount.toFixed(2)}</span>
+                    <span>-{formatCurrency(billingCalculations.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-lg pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Payable:</span>
-                  <span>₹{billingCalculations.payable.toFixed(2)}</span>
+                  <span>{formatCurrency(billingCalculations.payable)}</span>
                 </div>
               </div>
 
@@ -626,7 +628,7 @@ export function ConsultationBillingDashboard() {
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.department}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.token_number}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.visit_type === 'walk-in' ? 'OP' : (c.visit_type || 'OP').toUpperCase()}</td>
-                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">₹{Number(c.consultation_amount).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">{formatCurrency(Number(c.consultation_amount))}</td>
                       <td className="px-3 py-2.5 text-slate-500">{formatDisplayDate(c.appointment_date || c.created_at)} {c.appointment_time || ''}</td>
                     </tr>
                   ))}
@@ -730,7 +732,7 @@ export function ConsultationBillingDashboard() {
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.patient_name}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.doctor_name || "—"}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.token_number}</td>
-                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">₹{Number(inv.payable_amount).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">{formatCurrency(Number(inv.payable_amount))}</td>
                       <td className="px-3 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                           inv.payment_status === "Paid" 
@@ -762,7 +764,7 @@ export function ConsultationBillingDashboard() {
               <div className="text-center bg-slate-50 p-4 rounded-2xl dark:bg-slate-900/60">
                 <p className="text-xs text-gray-500">Patient: {payingDraft.patient_name}</p>
                 <p className="text-3xl font-extrabold text-brand-600 dark:text-brand-400 mt-1">
-                  ₹{Number(payingDraft.payable_amount).toFixed(2)}
+                  {formatCurrency(Number(payingDraft.payable_amount))}
                 </p>
               </div>
 
@@ -839,7 +841,7 @@ export function ConsultationBillingDashboard() {
                 <div>
                   <div className="flex justify-between">
                     <span>Doctor Consultation Fee</span>
-                    <span>₹{Number(viewInvoiceModal.subtotal).toFixed(2)}</span>
+                    <span>{formatCurrency(Number(viewInvoiceModal.subtotal))}</span>
                   </div>
                   {(() => {
                     try {
@@ -860,29 +862,29 @@ export function ConsultationBillingDashboard() {
               <div className="border-t border-dashed border-gray-200 pt-3 dark:border-gray-800 text-xs space-y-1.5">
                 <div className="flex justify-between text-gray-500">
                   <span>Consultation Fee:</span>
-                  <span>₹{Number(viewInvoiceModal.subtotal).toFixed(2)}</span>
+                  <span>{formatCurrency(Number(viewInvoiceModal.subtotal))}</span>
                 </div>
                 {Number(viewInvoiceModal.registration_fee) > 0 && (
                   <div className="flex justify-between text-gray-500">
                     <span>Registration Fee:</span>
-                    <span>₹{Number(viewInvoiceModal.registration_fee).toFixed(2)}</span>
+                    <span>{formatCurrency(Number(viewInvoiceModal.registration_fee))}</span>
                   </div>
                 )}
                 {Number(viewInvoiceModal.discount_amount) > 0 && (
                   <div className="flex justify-between text-red-500">
                     <span>Discount:</span>
-                    <span>-₹{Number(viewInvoiceModal.discount_amount).toFixed(2)}</span>
+                    <span>-{formatCurrency(Number(viewInvoiceModal.discount_amount))}</span>
                   </div>
                 )}
                 {Number(viewInvoiceModal.tax_amount) > 0 && (
                   <div className="flex justify-between text-gray-500">
                     <span>Tax:</span>
-                    <span>₹{Number(viewInvoiceModal.tax_amount).toFixed(2)}</span>
+                    <span>{formatCurrency(Number(viewInvoiceModal.tax_amount))}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-sm pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Amount Paid:</span>
-                  <span>₹{Number(viewInvoiceModal.payable_amount).toFixed(2)}</span>
+                  <span>{formatCurrency(Number(viewInvoiceModal.payable_amount))}</span>
                 </div>
               </div>
 

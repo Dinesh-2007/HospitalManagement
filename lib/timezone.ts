@@ -73,7 +73,7 @@ export function getDayNameInTimezone(timezone: string): string {
 const DEFAULT_TIMEZONE = "Asia/Kolkata";
 
 /** In-memory cache so we don't query the DB on every request */
-const timezoneCache = new Map<string, { value: string; expiresAt: number }>();
+const timezoneCache = new Map<string, { value: { timezone: string; country: string }; expiresAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -82,7 +82,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  *
  * @param hname - The site_name / Hname identifier (decoded, lowercase)
  */
-export async function getHospitalTimezone(hname: string): Promise<string> {
+export async function getHospitalTimezone(hname: string): Promise<{ timezone: string; country: string }> {
   const key = hname.toLowerCase();
   const cached = timezoneCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
@@ -95,16 +95,19 @@ export async function getHospitalTimezone(hname: string): Promise<string> {
       `ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT '${DEFAULT_TIMEZONE}'`
     );
 
-    const result = await pool.query<{ timezone: string }>(
-      `SELECT timezone FROM hospitals WHERE LOWER(site_name) = LOWER($1) LIMIT 1`,
+    const result = await pool.query<{ timezone: string; country: string }>(
+      `SELECT timezone, country FROM hospitals WHERE LOWER(site_name) = LOWER($1) LIMIT 1`,
       [hname]
     );
 
-    const tz = result.rows[0]?.timezone || DEFAULT_TIMEZONE;
-    timezoneCache.set(key, { value: tz, expiresAt: Date.now() + CACHE_TTL_MS });
-    return tz;
+    const row = result.rows[0];
+    const tz = row?.timezone || DEFAULT_TIMEZONE;
+    const country = row?.country || "India";
+    const data = { timezone: tz, country };
+    timezoneCache.set(key, { value: data, expiresAt: Date.now() + CACHE_TTL_MS });
+    return data;
   } catch {
-    return DEFAULT_TIMEZONE;
+    return { timezone: DEFAULT_TIMEZONE, country: "India" };
   }
 }
 

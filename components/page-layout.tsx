@@ -5,6 +5,7 @@ import { usePathname, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { mastersData } from "../lib/navigation";
 import { HospitalTimezoneProvider } from "./context/HospitalTimezoneContext";
+import { HospitalCurrencyProvider } from "./context/HospitalCurrencyContext";
 
 type PageLayoutProps = {
   title: string;
@@ -62,6 +63,7 @@ export function PageLayout({ title, children }: PageLayoutProps) {
 
   return (
     <HospitalTimezoneProvider hname={hname}>
+      <HospitalCurrencyProvider hname={hname}>
       <main className="min-h-full bg-[#f3f4f6] dark:bg-transparent px-4 py-5 sm:px-6 lg:px-8">
       <h1 className="sr-only">{title}</h1>
       <div className="space-y-6">
@@ -134,6 +136,7 @@ export function PageLayout({ title, children }: PageLayoutProps) {
         {children ? <div>{children}</div> : null}
       </div>
     </main>
+      </HospitalCurrencyProvider>
     </HospitalTimezoneProvider>
   );
 }

@@ -196,9 +196,9 @@ export async function POST(
         }
       }
 
-      const today = appointmentDate || getTodayInTimezone(tz);
+      const today = appointmentDate || getTodayInTimezone(tz.timezone);
       const dayName = new Date(today).toLocaleDateString("en-US", { weekday: "long" });
-      const currentTime = appointmentTime || getNowTimeShortInTimezone(tz);
+      const currentTime = appointmentTime || getNowTimeShortInTimezone(tz.timezone);
 
       // Generate walk-in numbering (WK-YYYYMMDD-XXXX format)
       const walkInNum = await generateWalkInNumber(pool, today);
@@ -272,7 +272,7 @@ export async function POST(
       );
     }
 
-    const today = appointmentDate || getTodayInTimezone(tz);
+    const today = appointmentDate || getTodayInTimezone(tz.timezone);
 
     type ApptRecordType = { id: number; patient_id: string | null; patient_name: string; patient_phone: string | null; appointment_number: number | null; appointment_id_display: string | null; queue_id: string | null };
     // If we have the direct appointment ID, use it

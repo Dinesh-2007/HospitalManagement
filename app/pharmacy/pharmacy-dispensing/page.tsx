@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { PageLayout } from "../../../components/page-layout";
+import { useHospitalCurrency } from "../../../components/context/HospitalCurrencyContext";
 
 type MedicineRow = {
   id: number;
@@ -20,6 +21,7 @@ export default function PharmacyDispensingPage() {
     { id: 1, medicineName: "", prescribedQty: "0", receivedQty: "0" },
   ]);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const { currencySymbol } = useHospitalCurrency();
 
   const medicineQtyTotals = useMemo(() => {
     return medicineRows.reduce(
@@ -88,7 +90,7 @@ export default function PharmacyDispensingPage() {
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">Billing Amount</label>
                 <div className="flex items-center rounded-lg border border-slate-300 bg-transparent shadow-theme-xs focus-within:border-brand-300 focus-within:ring-3 focus-within:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900">
-                  <span className="px-4 text-sm text-slate-500 dark:text-gray-400">₹</span>
+                  <span className="px-4 text-sm text-slate-500 dark:text-gray-400">{currencySymbol}</span>
                   <input
                     type="number"
                     min="0"

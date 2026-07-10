@@ -7,6 +7,8 @@ import { PageLayout } from "./page-layout";
 import { columnNameFromFieldId, tableNameFromCardTitle } from "../lib/master-form-table";
 import { PatientProfileLayout } from "./patient-profile-layout";
 import { PencilIcon, TrashBinIcon } from "./icons";
+import { PhoneInputField } from "./ui/phone-input";
+import { comparePhoneNumbers } from "../lib/phone";
 
 const HIDDEN_FIELD_NOTES = new Set([
   "character",
@@ -37,7 +39,8 @@ export type MastersFormField = {
     | "datetime-local"
     | "date"
     | "time"
-    | "textarea";
+    | "textarea"
+    | "phone";
   placeholder?: string;
   hint?: string;
   maxLength?: number;
@@ -238,13 +241,13 @@ export function MastersFormPage({
   // Auto-load matching patient record in edit mode
   useEffect(() => {
     if (profileLayoutTab === "edit" && records.length > 0 && !editingRecordId) {
-      const phone = window.localStorage.getItem("patientPhone")?.replace(/\D/g, "");
+      const phone = window.localStorage.getItem("patientPhone");
       const name = window.localStorage.getItem("patientName")?.trim()?.toLowerCase();
       
       const matching = records.find(r => {
-        const rMobile = String(r.mobile ?? "").replace(/\D/g, "");
+        const rMobile = String(r.mobile ?? "");
         const rName = String(r.patient_name ?? "").trim().toLowerCase();
-        return (phone && rMobile === phone) || (name && rName === name);
+        return (phone && comparePhoneNumbers(phone, rMobile)) || (name && rName === name);
       });
 
       if (matching) {
@@ -604,6 +607,15 @@ export function MastersFormPage({
                           value={typeof formValues[field.id] === "string" ? formValues[field.id] : ""}
                           onChange={(e) => updateFieldValue(field, e.target.value)}
                           className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                        />
+                      ) : field.type === "phone" ? (
+                        <PhoneInputField
+                          id={field.id}
+                          name={field.id}
+                          value={(typeof formValues[field.id] === "string" ? formValues[field.id] : "") as string}
+                          onChange={(val) => updateFieldValue(field, val)}
+                          placeholder={field.placeholder}
+                          required={false}
                         />
                       ) : (
                         <input
