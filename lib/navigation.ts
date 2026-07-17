@@ -74,6 +74,7 @@ export const mastersData: NavigationSection[] = [
       { title: "Holiday Type", href: "/masters/administrative-general-masters/holiday-type" },
       { title: "Medical Certificate", href: "/masters/administrative-general-masters/medical-certificate" },
       { title: "Reason", href: "/masters/administrative-general-masters/reason" },
+      { title: "Relationship", href: "/masters/administrative-general-masters/relationship" },
     ],
   },
 ];

@@ -90,6 +90,7 @@ export default function CheckInPage() {
   const [walkInAttendantPhone, setWalkInAttendantPhone] = useState("");
   const [walkInAttendantGender, setWalkInAttendantGender] = useState("");
   const [walkInAttendantRelation, setWalkInAttendantRelation] = useState("");
+  const [relationshipOptions, setRelationshipOptions] = useState<string[]>([]);
 
   const [countries] = useState(() => Country.getAllCountries());
   const [states, setStates] = useState<any[]>([]);
@@ -322,17 +323,22 @@ export default function CheckInPage() {
     async function loadOptions() {
       if (!hname) return;
       try {
-        const [depRes, docRes, schedRes] = await Promise.all([
+        const [depRes, docRes, schedRes, relRes] = await Promise.all([
           fetch(`/api/${encodeURIComponent(hname)}/forms/department_master`, { cache: "no-store" }),
           fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" }),
-          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_schedule`, { cache: "no-store" })
+          fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_schedule`, { cache: "no-store" }),
+          fetch(`/api/${encodeURIComponent(hname)}/forms/relationship`, { cache: "no-store" }),
         ]);
         const depData = await depRes.json();
         const docData = await docRes.json();
         const schedData = await schedRes.json().catch(() => ({ rows: [] }));
+        const relData = await relRes.json().catch(() => ({ rows: [] }));
 
         const deps = (depData.rows || []).map((r: any) => String(r.department_type || r.departmentType || r.department_name || r.name || r.code || "")).filter(Boolean);
         setDepartments(Array.from(new Set(deps)) as string[]);
+
+        const rels = (relData.rows || []).map((r: any) => String(r.name || r.relationship_name || r.code || "").trim()).filter(Boolean);
+        setRelationshipOptions(rels);
 
         const todayStr = todayDate;
         const dayName = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: timezone }).format(new Date());
@@ -696,7 +702,12 @@ export default function CheckInPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Relation <span className="text-red-500">*</span></label>
-                  <input type="text" value={attendantRelation} onChange={(e) => setAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                  <select value={attendantRelation} onChange={(e) => setAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm">
+                    <option value="">Select</option>
+                    {(relationshipOptions.length > 0 ? relationshipOptions : ["Father", "Mother", "Spouse", "Child", "Sibling", "Guardian", "Friend", "Other"]).map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -1118,7 +1129,12 @@ export default function CheckInPage() {
                         </div>
                         <div>
                           <label className="mb-1.5 block text-sm font-medium text-gray-700">Relation <span className="text-red-500">*</span></label>
-                          <input type="text" value={walkInAttendantRelation} onChange={(e) => setWalkInAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm" />
+                          <select value={walkInAttendantRelation} onChange={(e) => setWalkInAttendantRelation(e.target.value)} required className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm">
+                            <option value="">Select</option>
+                            {(relationshipOptions.length > 0 ? relationshipOptions : ["Father", "Mother", "Spouse", "Child", "Sibling", "Guardian", "Friend", "Other"]).map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                     )}
