@@ -121,6 +121,7 @@ export default function HospitalManageFamilyPage() {
   const [selectedStateCode, setSelectedStateCode] = useState("");
   const [formValues, setFormValues] = useState<FamilyFormValues>(EMPTY_VALUES);
   const [showOtp, setShowOtp] = useState(false);
+  const [relationshipOptions, setRelationshipOptions] = useState<string[]>([]);
 
   const countries = useMemo(() => Country.getAllCountries(), []);
   const states = useMemo(
@@ -152,6 +153,24 @@ export default function HospitalManageFamilyPage() {
   };
 
   useEffect(() => { void loadFamilyMembers(); }, [hname]);
+
+  useEffect(() => {
+    async function loadRelationships() {
+      if (!hname) return;
+      try {
+        const res = await fetch(`/api/${encodeURIComponent(hname)}/forms/relationship`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { rows?: Array<Record<string, unknown>> };
+        const opts = (data.rows ?? [])
+          .map((r) => String(r.name ?? r.relationship_name ?? "").trim())
+          .filter(Boolean);
+        if (opts.length > 0) setRelationshipOptions(opts);
+      } catch {
+        // silently ignore; fallback options are shown
+      }
+    }
+    void loadRelationships();
+  }, [hname]);
 
   const updateField = (field: keyof FamilyFormValues, value: string) => {
     setFormValues((current) => ({ ...current, [field]: value }));
@@ -542,7 +561,10 @@ export default function HospitalManageFamilyPage() {
                   <label className={labelCls}>Relationship</label>
                   <select value={formValues.relationshipShipLinkedPatient} onChange={(e) => updateField("relationshipShipLinkedPatient", e.target.value)} className={selectCls}>
                     <option value="">Select Relationship</option>
-                    {["Spouse", "Child", "Parent", "Sibling", "Other"].map((o) => <option key={o} value={o}>{o}</option>)}
+                    {(relationshipOptions.length > 0
+                      ? relationshipOptions
+                      : ["Spouse", "Child", "Parent", "Sibling", "Other"]
+                    ).map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
 
