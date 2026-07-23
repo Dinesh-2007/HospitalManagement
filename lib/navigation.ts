@@ -30,11 +30,14 @@ export const mastersData: NavigationSection[] = [
     href: "/masters/lab-hospital-facility-masters/item-master",
     items: [
       { title: "Lab", href: "/masters/lab-hospital-facility-masters/lab" },
+      { title: "Building Master", href: "/masters/lab-hospital-facility-masters/building-master" },
+      { title: "Floor Master", href: "/masters/lab-hospital-facility-masters/floor-master" },
       { title: "Ward", href: "/masters/lab-hospital-facility-masters/ward" },
+      { title: "Room Type", href: "/masters/lab-hospital-facility-masters/room-type" },
+      { title: "Room Purpose", href: "/masters/lab-hospital-facility-masters/room-purpose" },
+      { title: "Room Master", href: "/masters/lab-hospital-facility-masters/room-master" },
       { title: "Bed", href: "/masters/lab-hospital-facility-masters/bed" },
       { title: "Operation Theater", href: "/masters/lab-hospital-facility-masters/operation-theater" },
-      { title: "Room Type", href: "/masters/lab-hospital-facility-masters/room-type" },
-      { title: "Room Master", href: "/masters/lab-hospital-facility-masters/room-master" },
       { title: "Equipment Master", href: "/masters/lab-hospital-facility-masters/equipment-master" },
     ],
   },
@@ -124,6 +127,18 @@ export const navigation: NavigationSection[] = [
     items: [
       { title: "Consultation Billing", href: "/billing/consultation-billing" },
       { title: "Pharmacy Billing", href: "/billing/pharmacy-billing" },
+    ],
+  },
+
+  {
+    title: "Bed Management",
+    items: [
+      { title: "Infrastructure Setup", href: "/bed-management/infrastructure" },
+      { title: "Floor Plan", href: "/bed-management/floor-plan" },
+      { title: "Bed Allocation", href: "/bed-management/allocation" },
+      { title: "Bed Transfer", href: "/bed-management/transfer" },
+      { title: "Dashboard", href: "/bed-management/dashboard" },
+      { title: "Reports", href: "/bed-management/reports" },
     ],
   },
 

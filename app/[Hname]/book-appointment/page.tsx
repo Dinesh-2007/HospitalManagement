@@ -454,31 +454,40 @@ export default function BookAppointmentPage() {
       }));
   }, [doctorRows, doctorPhotos, scheduleRows, selectedDepartment]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isHovered = useRef(false);
-  const scrollDirection = useRef<1 | -1>(1);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const isCarouselHovered = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [carouselWidth, setCarouselWidth] = useState(0);
 
   useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
+    setSlideIndex(0);
+  }, [doctorOptions]);
 
-    let animationId: number;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setCarouselWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    setCarouselWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctorOptions.length]);
 
-    const step = () => {
-      if (!isHovered.current) {
-        container.scrollLeft += scrollDirection.current * 0.5;
-
-        if (container.scrollLeft >= container.scrollWidth - container.clientWidth - 1) {
-          scrollDirection.current = -1;
-        } else if (container.scrollLeft <= 0) {
-          scrollDirection.current = 1;
-        }
+  useEffect(() => {
+    if (doctorOptions.length <= 3) return;
+    const total = doctorOptions.length;
+    const id = setInterval(() => {
+      if (!isCarouselHovered.current) {
+        setSlideIndex((prev) => {
+          // When at last possible 3-group, wrap back to 0
+          const maxIndex = total - 3;
+          return prev >= maxIndex ? 0 : prev + 1;
+        });
       }
-      animationId = requestAnimationFrame(step);
-    };
-
-    animationId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animationId);
+    }, 2500);
+    return () => clearInterval(id);
   }, [doctorOptions]);
 
   useEffect(() => {
@@ -873,53 +882,88 @@ export default function BookAppointmentPage() {
                 })}
               </div>
 
-              {/* Auto-scrolling Doctors Section */}
-              <div className="mt-10 overflow-hidden">
+
+              {/* Carousel Doctors Section — 3 per view, infinite loop */}
+              <div className="mt-10">
                 <div className="mb-4">
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Our Specialists</h4>
                 </div>
                 {doctorOptions.length > 0 ? (
                   <div
-                    ref={scrollRef}
-                    onMouseEnter={() => { isHovered.current = true; }}
-                    onMouseLeave={() => { isHovered.current = false; }}
-                    onTouchStart={() => { isHovered.current = true; }}
-                    onTouchEnd={() => { isHovered.current = false; }}
-                    className="flex items-center gap-4 overflow-x-auto py-2 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-                    style={{ maskImage: "linear-gradient(to right, transparent, black 5%, black 95%, transparent)", WebkitMaskImage: "linear-gradient(to right, transparent, black 5%, black 95%, transparent)" }}
+                    ref={containerRef}
+                    className="relative overflow-hidden rounded-2xl"
+                    onMouseEnter={() => { isCarouselHovered.current = true; }}
+                    onMouseLeave={() => { isCarouselHovered.current = false; }}
                   >
-                    {/* Inner spacer for left edge of mask */}
-                    <div className="w-[5%] flex-shrink-0" />
-                    {doctorOptions.map((doctor, index) => (
-                      <button
-                        key={`${doctor.doctorId}-${index}`}
-                        type="button"
-                        onClick={() => directBookDoctor(doctor)}
-                        className="flex flex-col items-center justify-center p-4 w-[160px] rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer flex-shrink-0"
-                      >
-                        <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
-                          {doctor.profilePhoto ? (
-                            <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
-                          ) : (
-                            <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                          )}
+                    {/* Track: cards are 1/3 of container, gap=16px */}
+                    {(() => {
+                      const gap = 16;
+                      const cardWidth = carouselWidth > 0
+                        ? (carouselWidth - gap * 2) / 3
+                        : 0;
+                      const slideOffset = slideIndex * (cardWidth + gap);
+                      return (
+                        <div
+                          className="flex transition-transform duration-700 ease-in-out"
+                          style={{
+                            gap: `${gap}px`,
+                            transform: `translateX(-${slideOffset}px)`,
+                            willChange: "transform",
+                          }}
+                        >
+                          {doctorOptions.map((doctor, index) => (
+                            <button
+                              key={`${doctor.doctorId}-${index}`}
+                              type="button"
+                              onClick={() => directBookDoctor(doctor)}
+                              style={{
+                                width: cardWidth > 0 ? `${cardWidth}px` : "calc(33.333% - 11px)",
+                                flexShrink: 0,
+                              }}
+                              className="flex flex-col items-center justify-center p-4 rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer"
+                            >
+                              <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
+                                {doctor.profilePhoto ? (
+                                  <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
+                                ) : (
+                                  <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{doctor.name}</span>
+                              {doctor.department && (
+                                <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-1">{doctor.department}</span>
+                              )}
+                            </button>
+                          ))}
                         </div>
-                        <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{doctor.name}</span>
-                        {doctor.department && (
-                          <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-1">{doctor.department}</span>
-                        )}
-                      </button>
-                    ))}
-                    {/* Inner spacer for right edge of mask */}
-                    <div className="w-[5%] flex-shrink-0" />
+                      );
+                    })()}
+                    {/* Dot indicators — one dot per group of 3 */}
+                    {doctorOptions.length > 3 && (
+                      <div className="flex justify-center gap-1.5 mt-4">
+                        {Array.from({ length: doctorOptions.length - 2 }).map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setSlideIndex(i)}
+                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                              i === slideIndex
+                                ? "w-5 bg-brand-500"
+                                : "w-1.5 bg-gray-300 hover:bg-gray-400"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-gray-500 py-4">No doctors available.</div>
                 )}
               </div>
             </div>
+
           ) : (
             <div id="doctor-selection-section" className="mb-6 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/20 dark:bg-brand-500/10">
               <div className="flex items-center gap-2">
