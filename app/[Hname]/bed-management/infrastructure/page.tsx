@@ -39,17 +39,17 @@ type GeneratorResult = {
 };
 
 const DEFAULT_CONFIG: GeneratorConfig = {
-  buildingCount: 1,
-  floorsPerBuilding: 3,
-  departmentsPerFloor: 2,
-  wardsPerDepartment: 2,
-  roomsPerWard: 4,
-  bedsPerRoom: 2,
+  buildingCount: 0,
+  floorsPerBuilding: 0,
+  departmentsPerFloor: 0,
+  wardsPerDepartment: 0,
+  roomsPerWard: 0,
+  bedsPerRoom: 0,
   selectedDepartments: [],
   selectedWardTypes: [],
   roomType: "",
-  roomPurpose: "Patient Room",
-  bedType: "Standard",
+  roomPurpose: "",
+  bedType: "",
   chargePerBed: 0,
   chargePerRoom: 0,
 };
@@ -224,12 +224,12 @@ export default function InfrastructurePage() {
               {/* Counts */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {[
-                  { label: "Buildings", key: "buildingCount" as const, min: 1, max: 10 },
-                  { label: "Floors per Building", key: "floorsPerBuilding" as const, min: 1, max: 20 },
-                  { label: "Departments per Floor", key: "departmentsPerFloor" as const, min: 1, max: 10 },
-                  { label: "Wards per Department", key: "wardsPerDepartment" as const, min: 1, max: 10 },
-                  { label: "Rooms per Ward", key: "roomsPerWard" as const, min: 1, max: 50 },
-                  { label: "Beds per Room", key: "bedsPerRoom" as const, min: 1, max: 10 },
+                  { label: "Buildings", key: "buildingCount" as const, min: 0, max: 10 },
+                  { label: "Floors per Building", key: "floorsPerBuilding" as const, min: 0, max: 20 },
+                  { label: "Departments per Floor", key: "departmentsPerFloor" as const, min: 0, max: 10 },
+                  { label: "Wards per Department", key: "wardsPerDepartment" as const, min: 0, max: 10 },
+                  { label: "Rooms per Ward", key: "roomsPerWard" as const, min: 0, max: 50 },
+                  { label: "Beds per Room", key: "bedsPerRoom" as const, min: 0, max: 10 },
                 ].map((item) => (
                   <div key={item.key}>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
@@ -240,7 +240,7 @@ export default function InfrastructurePage() {
                       min={item.min}
                       max={item.max}
                       value={config[item.key] as number}
-                      onChange={(e) => updateConfig(item.key, Math.max(item.min, Number(e.target.value) || item.min))}
+                      onChange={(e) => updateConfig(item.key, Math.max(0, Number(e.target.value) || 0))}
                       className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                     />
                   </div>
@@ -323,10 +323,13 @@ export default function InfrastructurePage() {
                     onChange={(e) => updateConfig("roomPurpose", e.target.value)}
                     className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                   >
-                    <option value="Patient Room">Patient Room</option>
+                    <option value="">Select Room Purpose</option>
                     {roomPurposeOptions.map((opt) => (
                       <option key={opt} value={opt}>{opt}</option>
                     ))}
+                    {roomPurposeOptions.length === 0 && (
+                      <option disabled value="">No room purposes in master — add via Room Purpose</option>
+                    )}
                   </select>
                 </div>
                 <div>
@@ -402,7 +405,7 @@ export default function InfrastructurePage() {
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={isGenerating}
+                  disabled={isGenerating || config.buildingCount === 0}
                   className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:opacity-50"
                 >
                   {isGenerating ? (
