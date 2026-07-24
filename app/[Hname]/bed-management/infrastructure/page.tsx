@@ -71,6 +71,7 @@ export default function InfrastructurePage() {
   const [wardOptions, setWardOptions] = useState<string[]>([]);
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>([]);
   const [roomPurposeOptions, setRoomPurposeOptions] = useState<string[]>([]);
+  const [bedTypeOptions, setBedTypeOptions] = useState<string[]>([]);
 
   // Load LOV options
   useEffect(() => {
@@ -95,10 +96,32 @@ export default function InfrastructurePage() {
       }
     }
 
+    // Fetch distinct bed types from bed_master
+    async function loadBedTypes() {
+      try {
+        const res = await fetch(`/api/${hname}/forms/bed_master`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const seen = new Set<string>();
+        const types: string[] = [];
+        for (const row of (data.rows ?? []) as Record<string, unknown>[]) {
+          const bt = String(row.bed_type ?? "").trim();
+          if (bt && !seen.has(bt)) {
+            seen.add(bt);
+            types.push(bt);
+          }
+        }
+        setBedTypeOptions(types);
+      } catch {
+        /* ignore */
+      }
+    }
+
     void loadOptions("department_master", setDepartmentOptions);
     void loadOptions("ward_master", setWardOptions);
     void loadOptions("room_type_master", setRoomTypeOptions);
     void loadOptions("room_purpose_master", setRoomPurposeOptions);
+    void loadBedTypes();
   }, [hname]);
 
   // Load hierarchy
@@ -315,9 +338,13 @@ export default function InfrastructurePage() {
                     onChange={(e) => updateConfig("bedType", e.target.value)}
                     className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                   >
-                    {["Standard", "Semi-Fowler", "Fowler", "ICU Bed", "Pediatric Bed", "Bariatric Bed", "Motorized", "Manual", "Air Mattress", "Stretcher"].map((t) => (
+                    <option value="">Select Bed Type</option>
+                    {bedTypeOptions.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
+                    {bedTypeOptions.length === 0 && (
+                      <option disabled value="">No bed types in master — add via Bed Master</option>
+                    )}
                   </select>
                 </div>
                 <div>

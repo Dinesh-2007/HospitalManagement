@@ -121,7 +121,6 @@ export default function BedTransferPage() {
           oldBedId: Number(selectedAllocation.bed_id),
           newBedId: Number(selectedNewBed.id),
           transferredByName: transferredByName || null,
-          transferredByRole: "Admin",
           reason: transferReason || null,
         }),
       });

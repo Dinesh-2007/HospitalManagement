@@ -407,7 +407,8 @@ export default function CheckInPage() {
       result = result.filter((row) => {
         const pName = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]).toLowerCase();
         const dName = text(row, ["doctor"]).toLowerCase();
-        return pName.includes(q) || dName.includes(q);
+        const pId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]).toLowerCase();
+        return pName.includes(q) || dName.includes(q) || pId.includes(q);
       });
     }
     result = [...result].sort((a, b) => {

@@ -179,7 +179,6 @@ export default function BedAllocationPage() {
           patientId,
           patientName,
           allocatedByName: allocatedByName || null,
-          allocatedByRole: "Admin",
         }),
       });
       const data = await res.json();
