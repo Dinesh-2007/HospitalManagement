@@ -134,9 +134,13 @@ export const navigation: NavigationSection[] = [
     title: "Bed Management",
     items: [
       { title: "Infrastructure Setup", href: "/bed-management/infrastructure" },
+      { title: "Infrastructure Builder", href: "/bed-management/infrastructure-builder" },
       { title: "Floor Plan", href: "/bed-management/floor-plan" },
       { title: "Bed Allocation", href: "/bed-management/allocation" },
       { title: "Bed Transfer", href: "/bed-management/transfer" },
+      { title: "Bed Reservations", href: "/bed-management/reservations" },
+      { title: "Clinical Discharge", href: "/bed-management/discharge" },
+      { title: "Housekeeping", href: "/housekeeping" },
       { title: "Dashboard", href: "/bed-management/dashboard" },
       { title: "Reports", href: "/bed-management/reports" },
     ],

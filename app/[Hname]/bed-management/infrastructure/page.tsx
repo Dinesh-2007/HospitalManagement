@@ -13,23 +13,135 @@ type HierarchyData = {
   beds: Array<Record<string, unknown>>;
 };
 
-type GeneratorConfig = {
-  buildingCount: number;
-  floorsPerBuilding: number;
-  departmentsPerFloor: number;
-  wardsPerDepartment: number;
-  roomsPerWard: number;
-  bedsPerRoom: number;
-  selectedDepartments: string[];
-  selectedWardTypes: string[];
-  roomType: string;
-  roomPurpose: string;
-  bedType: string;
-  chargePerBed: number;
-  chargePerRoom: number;
+// Wizard State Types
+export type RoomConfig = {
+  id: string;
+  name: string;
+  type: string;
+  purpose: string;
+  capacity: number;
+  bedCount: number;
+  bedType?: string;
+  wardType?: string; // If part of an Inpatient Ward
+  hasBathroom?: boolean;
+  hasVentilator?: boolean;
+  hasMonitor?: boolean;
 };
 
-type GeneratorResult = {
+export type DepartmentConfig = {
+  id: string;
+  departmentName: string;
+  departmentCode?: string;
+
+  // Step 4 Infrastructure parameters
+  hasClinic?: boolean;
+  clinicsCount?: number;
+  doctorRoomsCount?: number;
+  nurseStationsCount?: number;
+  procedureRoomsCount?: number;
+  hasICU?: boolean;
+  icuWardsCount?: number;
+
+  // Department specific rooms
+  xrayRoomsCount?: number;
+  mriRoomsCount?: number;
+  ctScanRoomsCount?: number;
+  ultrasoundRoomsCount?: number;
+
+  dispensingCountersCount?: number;
+  medicineStoreCount?: number;
+  billingCountersCount?: number;
+
+  sampleCollectionCount?: number;
+  testingLabsCount?: number;
+  reportCounterCount?: number;
+
+  // Inpatient Wards (Step 5)
+  wards: Array<{
+    id: string;
+    wardType: string;
+    roomsCount: number;
+    bedsPerRoom: number;
+    roomType: string;
+    hasBathroom?: boolean;
+    hasVentilator?: boolean;
+    hasMonitor?: boolean;
+  }>;
+
+  rooms: RoomConfig[];
+};
+
+export type FloorConfig = {
+  id: string;
+  floorNumber: number;
+  floorName: string;
+  selectedDeptNames: string[];
+  departments: DepartmentConfig[];
+};
+
+export type BuildingConfig = {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  floorsCount: number;
+  floors: FloorConfig[];
+};
+
+export type DeptCustomConfig = {
+  // Consultation & Clinics
+  hasClinics: boolean;
+  clinicCount: number;
+  hasDoctorRooms: boolean;
+  doctorRoomCount: number;
+  hasNurseStation: boolean;
+  nurseStationCount: number;
+  hasProcedureRoom: boolean;
+  procedureRoomCount: number;
+
+  // Diagnostics & Imaging
+  hasXray: boolean;
+  xrayCount: number;
+  hasMri: boolean;
+  mriCount: number;
+  hasCtScan: boolean;
+  ctScanCount: number;
+  hasWaitingArea: boolean;
+  waitingCapacity: number;
+
+  // Pharmacy
+  hasDispensingCounter: boolean;
+  dispensingCounterCount: number;
+  hasMedicineStore: boolean;
+  medicineStoreCount: number;
+
+  // Pathology / Lab
+  hasSampleBooth: boolean;
+  sampleBoothCount: number;
+  hasTestingLab: boolean;
+  testingLabCount: number;
+  hasReportCounter: boolean;
+  reportCounterCount: number;
+
+  // Inpatient Wards & Beds (Step 5)
+  hasGeneralWard: boolean;
+  generalWardRoomCount: number;
+  generalWardBedsPerRoom: number;
+  generalWardHasBathroom: boolean;
+
+  hasPrivateWard: boolean;
+  privateWardRoomCount: number;
+  privateWardBedsPerRoom: number;
+  privateWardHasBathroom: boolean;
+
+  hasIcuWard: boolean;
+  icuWardRoomCount: number;
+  icuWardBedsPerRoom: number;
+  icuHasVentilator: boolean;
+  icuHasMonitor: boolean;
+};
+
+export type GeneratorResult = {
   buildings: number;
   floors: number;
   departments: number;
@@ -38,33 +150,38 @@ type GeneratorResult = {
   beds: number;
 };
 
-const DEFAULT_CONFIG: GeneratorConfig = {
-  buildingCount: 0,
-  floorsPerBuilding: 0,
-  departmentsPerFloor: 0,
-  wardsPerDepartment: 0,
-  roomsPerWard: 0,
-  bedsPerRoom: 0,
-  selectedDepartments: [],
-  selectedWardTypes: [],
-  roomType: "",
-  roomPurpose: "",
-  bedType: "",
-  chargePerBed: 0,
-  chargePerRoom: 0,
-};
-
 export default function InfrastructurePage() {
   const params = useParams();
   const hname = params?.Hname as string;
 
   const [activeTab, setActiveTab] = useState<"generator" | "hierarchy">("generator");
-  const [config, setConfig] = useState<GeneratorConfig>(DEFAULT_CONFIG);
+
+  // Step tracking for Wizard (1 to 7)
+  const [currentStep, setCurrentStep] = useState<number>(1);
+
+  // Buildings State
+  const [buildings, setBuildings] = useState<BuildingConfig[]>([
+    {
+      id: "bld-1",
+      name: "Main Tower A",
+      code: "BLD-A",
+      description: "Main Inpatient & Outpatient Building",
+      floorsCount: 4,
+      floors: [],
+    },
+  ]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("bld-1");
+  const [selectedFloorId, setSelectedFloorId] = useState<string>("");
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<GeneratorResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
   const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
+
+  // Per-department custom parameter overrides: Key = `${buildingId}_${floorId}_${deptName}`
+  const [deptCustomConfigs, setDeptCustomConfigs] = useState<Record<string, DeptCustomConfig>>({});
 
   // LOV options
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
@@ -77,6 +194,46 @@ export default function InfrastructurePage() {
   useEffect(() => {
     if (!hname) return;
 
+    async function loadDepartments() {
+      const defaultDepts = [
+        "Emergency & Trauma",
+        "Reception & Registration",
+        "Outpatient Department (OPD)",
+        "General Medicine",
+        "Cardiology",
+        "Orthopedics",
+        "Radiology & Diagnostic Imaging",
+        "Pathology & Medical Lab",
+        "Pharmacy & Medicine Store",
+        "Intensive Care Unit (ICU)",
+        "General Surgery",
+        "Pediatrics",
+        "Obstetrics & Gynecology",
+        "Neurology",
+      ];
+      try {
+        const res = await fetch(`/api/${hname}/forms/department_master`, { cache: "no-store" });
+        if (!res.ok) {
+          setDepartmentOptions(defaultDepts);
+          return;
+        }
+        const data = await res.json();
+        const fetched = (data.rows ?? [])
+          .map((row: Record<string, unknown>) => {
+            const code = String(row.code ?? "").trim();
+            const desc = String(row.description ?? row.name ?? row.department_type ?? row.department_name ?? "").trim();
+            if (!code && !desc) return "";
+            return code && desc ? `${code} - ${desc}` : code || desc;
+          })
+          .filter(Boolean);
+
+        const combined = Array.from(new Set([...fetched, ...defaultDepts]));
+        setDepartmentOptions(combined);
+      } catch {
+        setDepartmentOptions(defaultDepts);
+      }
+    }
+
     async function loadOptions(tableName: string, setter: (opts: string[]) => void) {
       try {
         const res = await fetch(`/api/${hname}/forms/${tableName}`, { cache: "no-store" });
@@ -85,18 +242,15 @@ export default function InfrastructurePage() {
         const opts = (data.rows ?? [])
           .map((row: Record<string, unknown>) => {
             const code = String(row.code ?? "").trim();
-            const desc = String(row.description ?? row.department_type ?? "").trim();
-            if (!code) return "";
-            return desc ? `${code} - ${desc}` : code;
+            const desc = String(row.description ?? row.name ?? "").trim();
+            if (!code && !desc) return "";
+            return code && desc ? `${code} - ${desc}` : code || desc;
           })
           .filter(Boolean);
         setter(opts);
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
 
-    // Fetch distinct bed types from bed_master
     async function loadBedTypes() {
       try {
         const res = await fetch(`/api/${hname}/forms/bed_master`, { cache: "no-store" });
@@ -112,29 +266,53 @@ export default function InfrastructurePage() {
           }
         }
         setBedTypeOptions(types);
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
 
-    void loadOptions("department_master", setDepartmentOptions);
+    void loadDepartments();
     void loadOptions("ward_master", setWardOptions);
     void loadOptions("room_type_master", setRoomTypeOptions);
     void loadOptions("room_purpose_master", setRoomPurposeOptions);
     void loadBedTypes();
   }, [hname]);
 
-  // Load hierarchy
+  // Synchronize floors array when building floorsCount changes or on initial mount
+  useEffect(() => {
+    setBuildings((prevBuildings) =>
+      prevBuildings.map((b) => {
+        const existingFloors = b.floors || [];
+        const newFloors: FloorConfig[] = [];
+        for (let i = 0; i < b.floorsCount; i++) {
+          const defaultName = i === 0 ? "Ground Floor" : `Floor ${i}`;
+          const existing = existingFloors.find((f) => f.floorNumber === i);
+          if (existing) {
+            newFloors.push(existing);
+          } else {
+            newFloors.push({
+              id: `${b.id}-fl-${i}`,
+              floorNumber: i,
+              floorName: defaultName,
+              selectedDeptNames: i === 0 ? ["Emergency", "Reception", "Pharmacy", "Radiology"] : ["Cardiology", "General Medicine"],
+              departments: [],
+            });
+          }
+        }
+        return { ...b, floors: newFloors };
+      })
+    );
+  }, []);
+
+  // Load hierarchy for Hierarchy Tab
   const loadHierarchy = useCallback(async () => {
     setIsLoadingHierarchy(true);
     try {
       const res = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load");
+      if (!res.ok) throw new Error("Failed to load hierarchy");
       const data = await res.json();
       setHierarchy(data);
     } catch (err) {
       console.error(err);
-    } finally {
+    } fontally: {
       setIsLoadingHierarchy(false);
     }
   }, [hname]);
@@ -143,440 +321,1381 @@ export default function InfrastructurePage() {
     if (activeTab === "hierarchy") void loadHierarchy();
   }, [activeTab, loadHierarchy]);
 
-  const handleGenerate = async () => {
+  // Building Actions
+  const handleAddBuilding = () => {
+    const existingCodes = new Set(buildings.map((b) => b.code.toUpperCase()));
+    const existingNames = new Set(buildings.map((b) => b.name.toUpperCase()));
+
+    let letter = "A";
+    for (let i = 0; i < 26; i++) {
+      const candidate = String.fromCharCode(65 + i);
+      if (!existingCodes.has(`BLD-${candidate}`) && !existingNames.has(`BUILDING ${candidate}`)) {
+        letter = candidate;
+        break;
+      }
+    }
+
+    const newBld: BuildingConfig = {
+      id: `bld-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: `Building ${letter}`,
+      code: `BLD-${letter}`,
+      description: `Hospital Block ${letter}`,
+      floorsCount: 3,
+      floors: [
+        { id: `fl-0-${Date.now()}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: ["Emergency", "Reception"], departments: [] },
+        { id: `fl-1-${Date.now()}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: ["Cardiology"], departments: [] },
+        { id: `fl-2-${Date.now()}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: ["General Medicine"], departments: [] },
+      ],
+    };
+    setBuildings((prev) => [...prev, newBld]);
+    setSelectedBuildingId(newBld.id);
+  };
+
+  const handleUpdateBuilding = (id: string, field: keyof BuildingConfig, value: unknown) => {
+    setBuildings((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const updated = { ...b, [field]: value };
+        if (field === "floorsCount") {
+          const count = Number(value) || 1;
+          const currentFloors = b.floors || [];
+          const updatedFloors: FloorConfig[] = [];
+          for (let i = 0; i < count; i++) {
+            const defaultName = i === 0 ? "Ground Floor" : `Floor ${i}`;
+            const existing = currentFloors.find((f) => f.floorNumber === i);
+            if (existing) updatedFloors.push(existing);
+            else updatedFloors.push({ id: `${b.id}-fl-${i}`, floorNumber: i, floorName: defaultName, selectedDeptNames: [], departments: [] });
+          }
+          updated.floors = updatedFloors;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleDeleteBuilding = (id: string) => {
+    const remaining = buildings.filter((b) => b.id !== id);
+    if (remaining.length === 0) {
+      const freshDefault: BuildingConfig = {
+        id: `bld-${Date.now()}`,
+        name: "Building A",
+        code: "BLD-A",
+        description: "Main Hospital Building A",
+        floorsCount: 3,
+        floors: [
+          { id: `fl-0-${Date.now()}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: ["Emergency", "Reception"], departments: [] },
+          { id: `fl-1-${Date.now()}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: ["Cardiology"], departments: [] },
+          { id: `fl-2-${Date.now()}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: ["General Medicine"], departments: [] },
+        ],
+      };
+      setBuildings([freshDefault]);
+      setSelectedBuildingId(freshDefault.id);
+    } else {
+      setBuildings(remaining);
+      if (selectedBuildingId === id) {
+        setSelectedBuildingId(remaining[0].id);
+      }
+    }
+  };
+
+  // Step Validation & Progression Rules
+  const validateStep = (step: number): { valid: boolean; message?: string } => {
+    if (step === 1) {
+      if (buildings.length === 0) {
+        return { valid: false, message: "Please configure at least 1 building to proceed." };
+      }
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        if (!b.name.trim()) return { valid: false, message: `Building #${i + 1} requires a valid Building Name.` };
+        if (!b.code.trim()) return { valid: false, message: `Building "${b.name}" requires a valid Building Code.` };
+        if (!b.floorsCount || b.floorsCount <= 0) return { valid: false, message: `Building "${b.name}" must have at least 1 floor.` };
+      }
+      return { valid: true };
+    }
+
+    if (step === 2) {
+      for (const b of buildings) {
+        for (const fl of b.floors) {
+          if (!fl.floorName.trim()) {
+            return { valid: false, message: `Floor #${fl.floorNumber} in ${b.name} requires a valid floor display name.` };
+          }
+        }
+      }
+      return { valid: true };
+    }
+
+    if (step === 3) {
+      for (const b of buildings) {
+        for (const fl of b.floors) {
+          if (fl.selectedDeptNames.length === 0) {
+            return { valid: false, message: `Please assign at least 1 department to ${fl.floorName} in ${b.name}.` };
+          }
+        }
+      }
+      return { valid: true };
+    }
+
+    return { valid: true };
+  };
+
+  const handleNextStep = () => {
+    const check = validateStep(currentStep);
+    if (!check.valid) {
+      setError(check.message || "Please complete the required details before advancing to the next step.");
+      return;
+    }
+    setError(null);
+    setCurrentStep((prev) => Math.min(7, prev + 1));
+  };
+
+  const handleStepClick = (targetStep: number) => {
+    if (targetStep <= currentStep) {
+      setError(null);
+      setCurrentStep(targetStep);
+      return;
+    }
+    for (let s = 1; s < targetStep; s++) {
+      const check = validateStep(s);
+      if (!check.valid) {
+        setError(`Cannot jump to Step ${targetStep}. ${check.message}`);
+        return;
+      }
+    }
+    setError(null);
+    setCurrentStep(targetStep);
+  };
+
+  // Toggle Department Selection for a Floor
+  const toggleDeptForFloor = (buildingId: string, floorId: string, deptName: string) => {
+    setBuildings((prev) =>
+      prev.map((b) => {
+        if (b.id !== buildingId) return b;
+        return {
+          ...b,
+          floors: b.floors.map((f) => {
+            if (f.id !== floorId) return f;
+            const hasDept = f.selectedDeptNames.includes(deptName);
+            const nextDepts = hasDept ? f.selectedDeptNames.filter((d) => d !== deptName) : [...f.selectedDeptNames, deptName];
+            return { ...f, selectedDeptNames: nextDepts };
+          }),
+        };
+      })
+    );
+  };
+
+  // Get or initialize custom parameter configuration for a specific department on a floor
+  const getDeptCustomConfig = (buildingId: string, floorId: string, deptName: string): DeptCustomConfig => {
+    const key = `${buildingId}_${floorId}_${deptName}`;
+    if (deptCustomConfigs[key]) return deptCustomConfigs[key];
+
+    const clean = deptName.split("-").pop()?.trim().toLowerCase() || deptName.toLowerCase();
+    const isClinical = clean.includes("cardio") || clean.includes("medicine") || clean.includes("ortho") || clean.includes("general") || clean.includes("opd") || clean.includes("consult") || clean.includes("surg") || clean.includes("pediatr") || clean.includes("neuro");
+    const isRadio = clean.includes("radio") || clean.includes("imaging") || clean.includes("xray");
+    const isPharma = clean.includes("pharmacy") || clean.includes("store");
+    const isLab = clean.includes("lab") || clean.includes("pathology");
+
+    return {
+      hasClinics: isClinical || (!isRadio && !isPharma && !isLab),
+      clinicCount: 3,
+      hasDoctorRooms: isClinical || (!isRadio && !isPharma && !isLab),
+      doctorRoomCount: 2,
+      hasNurseStation: isClinical,
+      nurseStationCount: 1,
+      hasProcedureRoom: isClinical,
+      procedureRoomCount: 1,
+
+      hasXray: isRadio,
+      xrayCount: 1,
+      hasMri: isRadio,
+      mriCount: 1,
+      hasCtScan: isRadio,
+      ctScanCount: 1,
+      hasWaitingArea: isRadio || isClinical,
+      waitingCapacity: 15,
+
+      hasDispensingCounter: isPharma,
+      dispensingCounterCount: 2,
+      hasMedicineStore: isPharma,
+      medicineStoreCount: 1,
+
+      hasSampleBooth: isLab,
+      sampleBoothCount: 2,
+      hasTestingLab: isLab,
+      testingLabCount: 1,
+      hasReportCounter: isLab,
+      reportCounterCount: 1,
+
+      hasGeneralWard: isClinical,
+      generalWardRoomCount: 4,
+      generalWardBedsPerRoom: 4,
+      generalWardHasBathroom: true,
+
+      hasPrivateWard: isClinical,
+      privateWardRoomCount: 2,
+      privateWardBedsPerRoom: 1,
+      privateWardHasBathroom: true,
+
+      hasIcuWard: clean.includes("icu") || clean.includes("critical") || clean.includes("cardio") || clean.includes("surg"),
+      icuWardRoomCount: 1,
+      icuWardBedsPerRoom: 1,
+      icuHasVentilator: true,
+      icuHasMonitor: true,
+    };
+  };
+
+  const updateDeptCustomConfig = (buildingId: string, floorId: string, deptName: string, updates: Partial<DeptCustomConfig>) => {
+    const key = `${buildingId}_${floorId}_${deptName}`;
+    const current = getDeptCustomConfig(buildingId, floorId, deptName);
+    setDeptCustomConfigs((prev) => ({
+      ...prev,
+      [key]: { ...current, ...updates },
+    }));
+  };
+
+  // Compile final rooms structure for Step 6/7 and API call
+  const compileWizardPayload = () => {
+    return buildings.map((b) => ({
+      name: b.name,
+      code: b.code,
+      description: b.description,
+      floorsCount: b.floorsCount,
+      floors: b.floors.map((f) => {
+        const floorDepts: Array<{ departmentName: string; rooms: RoomConfig[] }> = [];
+
+        f.selectedDeptNames.forEach((dName) => {
+          const cleanName = dName.split("-").pop()?.trim() || dName;
+          const compiledRooms: RoomConfig[] = [];
+          const cfg = getDeptCustomConfig(b.id, f.id, dName);
+
+          // 1. Clinics
+          if (cfg.hasClinics) {
+            for (let c = 1; c <= (cfg.clinicCount || 1); c++) {
+              compiledRooms.push({ id: `rm-cl-${c}`, name: `${cleanName} Consultation Clinic ${c}`, type: "Consultation Room", purpose: "OPD Consultation", capacity: 1, bedCount: 0 });
+            }
+          }
+          // 2. Doctor Rooms
+          if (cfg.hasDoctorRooms) {
+            for (let d = 1; d <= (cfg.doctorRoomCount || 1); d++) {
+              compiledRooms.push({ id: `rm-dr-${d}`, name: `${cleanName} Doctor Room ${d}`, type: "Doctor Room", purpose: "Consultant Office", capacity: 1, bedCount: 0 });
+            }
+          }
+          // 3. Nurse Station
+          if (cfg.hasNurseStation) {
+            for (let n = 1; n <= (cfg.nurseStationCount || 1); n++) {
+              compiledRooms.push({ id: `rm-ns-${n}`, name: `${cleanName} Nurse Station ${n}`, type: "Nurse Station", purpose: "Nursing Care", capacity: 2, bedCount: 0 });
+            }
+          }
+          // 4. Procedure Room
+          if (cfg.hasProcedureRoom) {
+            for (let p = 1; p <= (cfg.procedureRoomCount || 1); p++) {
+              compiledRooms.push({ id: `rm-pr-${p}`, name: `${cleanName} Procedure Room ${p}`, type: "Procedure Room", purpose: "Minor Procedures", capacity: 1, bedCount: 1, bedType: "Procedure Bed" });
+            }
+          }
+
+          // 5. Diagnostic Rooms
+          if (cfg.hasXray) {
+            for (let x = 1; x <= (cfg.xrayCount || 1); x++) {
+              compiledRooms.push({ id: `rm-xray-${x}`, name: `${cleanName} X-Ray Room ${x}`, type: "Diagnostic Room", purpose: "X-Ray Imaging", capacity: 1, bedCount: 0 });
+            }
+          }
+          if (cfg.hasMri) {
+            for (let m = 1; m <= (cfg.mriCount || 1); m++) {
+              compiledRooms.push({ id: `rm-mri-${m}`, name: `${cleanName} MRI Suite ${m}`, type: "Diagnostic Room", purpose: "MRI Imaging", capacity: 1, bedCount: 0 });
+            }
+          }
+          if (cfg.hasCtScan) {
+            for (let ct = 1; ct <= (cfg.ctScanCount || 1); ct++) {
+              compiledRooms.push({ id: `rm-ct-${ct}`, name: `${cleanName} CT Scan Suite ${ct}`, type: "Diagnostic Room", purpose: "CT Scan", capacity: 1, bedCount: 0 });
+            }
+          }
+          if (cfg.hasWaitingArea) {
+            compiledRooms.push({ id: `rm-wait-1`, name: `${cleanName} Waiting Lounge`, type: "Waiting Area", purpose: "Patient Reception", capacity: cfg.waitingCapacity || 10, bedCount: 0 });
+          }
+
+          // 6. Pharmacy
+          if (cfg.hasDispensingCounter) {
+            for (let dc = 1; dc <= (cfg.dispensingCounterCount || 1); dc++) {
+              compiledRooms.push({ id: `rm-ph-cnt-${dc}`, name: `${cleanName} Dispensing Counter ${dc}`, type: "Service Counter", purpose: "Medicine Dispensing", capacity: 1, bedCount: 0 });
+            }
+          }
+          if (cfg.hasMedicineStore) {
+            for (let ms = 1; ms <= (cfg.medicineStoreCount || 1); ms++) {
+              compiledRooms.push({ id: `rm-ph-store-${ms}`, name: `${cleanName} Main Storage ${ms}`, type: "Store Room", purpose: "Medicine Storage", capacity: 5, bedCount: 0 });
+            }
+          }
+
+          // 7. Pathology
+          if (cfg.hasSampleBooth) {
+            for (let sb = 1; sb <= (cfg.sampleBoothCount || 1); sb++) {
+              compiledRooms.push({ id: `rm-lab-sb-${sb}`, name: `${cleanName} Sample Booth ${sb}`, type: "Collection Booth", purpose: "Phlebotomy", capacity: 1, bedCount: 0 });
+            }
+          }
+          if (cfg.hasTestingLab) {
+            for (let tl = 1; tl <= (cfg.testingLabCount || 1); tl++) {
+              compiledRooms.push({ id: `rm-lab-tl-${tl}`, name: `${cleanName} Testing Lab ${tl}`, type: "Laboratory", purpose: "Specimen Analysis", capacity: 4, bedCount: 0 });
+            }
+          }
+          if (cfg.hasReportCounter) {
+            for (let rc = 1; rc <= (cfg.reportCounterCount || 1); rc++) {
+              compiledRooms.push({ id: `rm-lab-rc-${rc}`, name: `${cleanName} Report Counter ${rc}`, type: "Service Counter", purpose: "Report Delivery", capacity: 1, bedCount: 0 });
+            }
+          }
+
+          // 8. General Ward Rooms
+          if (cfg.hasGeneralWard) {
+            for (let r = 101; r < 101 + (cfg.generalWardRoomCount || 1); r++) {
+              compiledRooms.push({
+                id: `rm-gw-${r}`,
+                name: `General Ward Room ${r}`,
+                type: "General Ward",
+                purpose: "Inpatient Stay",
+                capacity: cfg.generalWardBedsPerRoom || 4,
+                bedCount: cfg.generalWardBedsPerRoom || 4,
+                bedType: "Standard Bed",
+                wardType: "General Ward",
+                hasBathroom: cfg.generalWardHasBathroom,
+              });
+            }
+          }
+
+          // 9. Private Ward Rooms
+          if (cfg.hasPrivateWard) {
+            for (let r = 201; r < 201 + (cfg.privateWardRoomCount || 1); r++) {
+              compiledRooms.push({
+                id: `rm-pw-${r}`,
+                name: `Private Suite ${r}`,
+                type: "Private Ward",
+                purpose: "Deluxe Inpatient Stay",
+                capacity: cfg.privateWardBedsPerRoom || 1,
+                bedCount: cfg.privateWardBedsPerRoom || 1,
+                bedType: "Deluxe Bed",
+                wardType: "Private Ward",
+                hasBathroom: cfg.privateWardHasBathroom,
+              });
+            }
+          }
+
+          // 10. ICU Ward Rooms
+          if (cfg.hasIcuWard) {
+            for (let r = 1; r <= (cfg.icuWardRoomCount || 1); r++) {
+              compiledRooms.push({
+                id: `rm-icu-${r}`,
+                name: `ICU Room ${r}`,
+                type: "ICU",
+                purpose: "Critical Care",
+                capacity: cfg.icuWardBedsPerRoom || 1,
+                bedCount: cfg.icuWardBedsPerRoom || 1,
+                bedType: "ICU Bed",
+                wardType: "ICU Ward",
+                hasVentilator: cfg.icuHasVentilator,
+                hasMonitor: cfg.icuHasMonitor,
+              });
+            }
+          }
+
+          floorDepts.push({
+            departmentName: cleanName,
+            rooms: compiledRooms,
+          });
+        });
+
+        return {
+          floorNumber: f.floorNumber,
+          floorName: f.floorName,
+          departments: floorDepts,
+        };
+      }),
+    }));
+  };
+
+  // Submit Generation to Backend
+  const handleWizardGenerate = async () => {
     setIsGenerating(true);
     setError(null);
     setResult(null);
+
+    const payload = compileWizardPayload();
+
     try {
       const res = await fetch(`/api/${hname}/infrastructure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate", config }),
+        body: JSON.stringify({ action: "wizardGenerate", buildings: payload }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed.");
+      if (!res.ok) throw new Error(data.error || "Infrastructure generation failed.");
+
       setResult(data.results);
+      void loadHierarchy();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Generation failed.");
+      setError(err instanceof Error ? err.message : "Infrastructure generation failed.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const updateConfig = (field: keyof GeneratorConfig, value: unknown) => {
-    setConfig((prev) => ({ ...prev, [field]: value }));
+  // Selected building object for steps
+  const activeBuilding = buildings.find((b) => b.id === selectedBuildingId) || buildings[0] || {
+    id: "bld-default",
+    name: "Building A",
+    code: "BLD-A",
+    description: "Main Building",
+    floorsCount: 3,
+    floors: [],
   };
 
-  const toggleArrayItem = (field: "selectedDepartments" | "selectedWardTypes", value: string) => {
-    setConfig((prev) => {
-      const arr = prev[field];
-      return {
-        ...prev,
-        [field]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value],
-      };
-    });
-  };
+  // Calculate totals for preview stats
+  const totalBuildingsCount = buildings.length;
+  const totalFloorsCount = buildings.reduce((acc, b) => acc + b.floorsCount, 0);
+  const totalDeptAssignmentsCount = buildings.reduce(
+    (acc, b) => acc + b.floors.reduce((fAcc, f) => fAcc + f.selectedDeptNames.length, 0),
+    0
+  );
 
   return (
-    <PageLayout title="Infrastructure Setup">
+    <PageLayout title="Dynamic Hospital Infrastructure Designer">
       <div className="space-y-6">
-        {/* Tab switcher */}
-        <div className="flex items-center gap-2 rounded-2xl bg-slate-200/70 dark:bg-gray-800 p-1.5 w-fit">
+        {/* Top Navigation Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-gray-800">
           <button
             type="button"
             onClick={() => setActiveTab("generator")}
-            className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${
               activeTab === "generator"
-                ? "border border-slate-200 bg-white dark:bg-gray-700 dark:border-gray-600 text-slate-900 dark:text-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
-                : "border border-transparent bg-transparent text-slate-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
             }`}
           >
-            Quick Setup
+            🏗️ Interactive Setup Wizard
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("hierarchy")}
-            className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${
               activeTab === "hierarchy"
-                ? "border border-slate-200 bg-white dark:bg-gray-700 dark:border-gray-600 text-slate-900 dark:text-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
-                : "border border-transparent bg-transparent text-slate-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
             }`}
           >
-            Current Hierarchy
+            🏛️ Current Hierarchy Tree
           </button>
         </div>
 
-        {/* Generator Tab */}
         {activeTab === "generator" && (
-          <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-              <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
-                Infrastructure Generator
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Quickly generate the entire hospital infrastructure hierarchy. Enter counts
-                and the system will auto-create buildings, floors, departments, wards, rooms,
-                and beds.
-              </p>
-            </div>
+          <div className="space-y-6">
+            {/* Step Wizard Header */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-gray-800 dark:text-white/90">
+                    Hospital Infrastructure Designer & Allocation Wizard
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Configure buildings, floors, departments, specialized rooms, wards, and beds interactively.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setError(null); setCurrentStep(Math.max(1, currentStep - 1)); }}
+                    disabled={currentStep === 1}
+                    className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 disabled:opacity-40"
+                  >
+                    ← Previous Step
+                  </button>
+                  <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                    Step {currentStep} of 7
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    disabled={currentStep === 7}
+                    className="px-4 py-1.5 rounded-lg bg-brand-500 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-40 transition shadow-xs"
+                  >
+                    Next Step →
+                  </button>
+                </div>
+              </div>
 
-            <div className="p-6 space-y-8">
-              {/* Counts */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Stepper Bar */}
+              <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                 {[
-                  { label: "Buildings", key: "buildingCount" as const, min: 0, max: 10 },
-                  { label: "Floors per Building", key: "floorsPerBuilding" as const, min: 0, max: 20 },
-                  { label: "Departments per Floor", key: "departmentsPerFloor" as const, min: 0, max: 10 },
-                  { label: "Wards per Department", key: "wardsPerDepartment" as const, min: 0, max: 10 },
-                  { label: "Rooms per Ward", key: "roomsPerWard" as const, min: 0, max: 50 },
-                  { label: "Beds per Room", key: "bedsPerRoom" as const, min: 0, max: 10 },
-                ].map((item) => (
-                  <div key={item.key}>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                      {item.label}
-                    </label>
-                    <input
-                      type="number"
-                      min={item.min}
-                      max={item.max}
-                      value={config[item.key] as number}
-                      onChange={(e) => updateConfig(item.key, Math.max(0, Number(e.target.value) || 0))}
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                  </div>
+                  { step: 1, label: "1. Buildings" },
+                  { step: 2, label: "2. Floors" },
+                  { step: 3, label: "3. Departments" },
+                  { step: 4, label: "4. Dept Rooms" },
+                  { step: 5, label: "5. Wards" },
+                  { step: 6, label: "6. Rooms" },
+                  { step: 7, label: "7. Beds & Summary" },
+                ].map((s) => (
+                  <button
+                    key={s.step}
+                    type="button"
+                    onClick={() => handleStepClick(s.step)}
+                    className={`rounded-lg py-2 px-2.5 text-xs font-semibold text-center transition ${
+                      currentStep === s.step
+                        ? "bg-brand-500 text-white shadow-xs"
+                        : currentStep > s.step
+                        ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+                        : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
                 ))}
               </div>
 
-              {/* Department selection */}
-              {departmentOptions.length > 0 && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Select Departments (leave empty for auto-named)
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {departmentOptions.map((dept) => (
-                      <button
-                        key={dept}
-                        type="button"
-                        onClick={() => toggleArrayItem("selectedDepartments", dept)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
-                          config.selectedDepartments.includes(dept)
-                            ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:border-brand-500 dark:text-brand-300"
-                            : "border-gray-300 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 hover:border-brand-300"
-                        }`}
-                      >
-                        {dept}
-                      </button>
-                    ))}
-                  </div>
+              {/* Validation Warning Alert */}
+              {error && (
+                <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{error}</span>
                 </div>
               )}
+            </div>
 
-              {/* Ward type selection */}
-              {wardOptions.length > 0 && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Select Ward Types (leave empty for auto-named)
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {wardOptions.map((ward) => (
-                      <button
-                        key={ward}
-                        type="button"
-                        onClick={() => toggleArrayItem("selectedWardTypes", ward)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
-                          config.selectedWardTypes.includes(ward)
-                            ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:border-brand-500 dark:text-brand-300"
-                            : "border-gray-300 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 hover:border-brand-300"
-                        }`}
-                      >
-                        {ward}
-                      </button>
-                    ))}
+            {/* STEP 1: CREATE BUILDINGS */}
+            {currentStep === 1 && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                      Step 1: Configure Hospital Buildings
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Add and configure each building block of your hospital independently.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleAddBuilding}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
+                  >
+                    ➕ Add Building
+                  </button>
                 </div>
-              )}
 
-              {/* Optional config */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Room Type
-                  </label>
-                  <select
-                    value={config.roomType}
-                    onChange={(e) => updateConfig("roomType", e.target.value)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  >
-                    <option value="">Select Room Type</option>
-                    {roomTypeOptions.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Room Purpose
-                  </label>
-                  <select
-                    value={config.roomPurpose}
-                    onChange={(e) => updateConfig("roomPurpose", e.target.value)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  >
-                    <option value="">Select Room Purpose</option>
-                    {roomPurposeOptions.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                    {roomPurposeOptions.length === 0 && (
-                      <option disabled value="">No room purposes in master — add via Room Purpose</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Bed Type
-                  </label>
-                  <select
-                    value={config.bedType}
-                    onChange={(e) => updateConfig("bedType", e.target.value)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  >
-                    <option value="">Select Bed Type</option>
-                    {bedTypeOptions.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                    {bedTypeOptions.length === 0 && (
-                      <option disabled value="">No bed types in master — add via Bed Master</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Charge per Bed
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={config.chargePerBed}
-                    onChange={(e) => updateConfig("chargePerBed", Number(e.target.value) || 0)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Charge per Room
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={config.chargePerRoom}
-                    onChange={(e) => updateConfig("chargePerRoom", Number(e.target.value) || 0)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  />
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="rounded-xl bg-slate-50 dark:bg-gray-800/50 p-4">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Generation Preview
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {[
-                    { label: "Buildings", value: config.buildingCount },
-                    { label: "Floors", value: config.buildingCount * config.floorsPerBuilding },
-                    { label: "Dept Assignments", value: config.buildingCount * config.floorsPerBuilding * config.departmentsPerFloor },
-                    { label: "Ward Instances", value: config.buildingCount * config.floorsPerBuilding * config.departmentsPerFloor * config.wardsPerDepartment },
-                    { label: "Rooms", value: config.buildingCount * config.floorsPerBuilding * config.departmentsPerFloor * config.wardsPerDepartment * config.roomsPerWard },
-                    { label: "Beds", value: config.buildingCount * config.floorsPerBuilding * config.departmentsPerFloor * config.wardsPerDepartment * config.roomsPerWard * config.bedsPerRoom },
-                  ].map((item) => (
-                    <div key={item.label} className="text-center">
-                      <div className="text-2xl font-bold text-brand-600 dark:text-brand-400">
-                        {item.value.toLocaleString()}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {buildings.map((b, idx) => (
+                    <div
+                      key={b.id}
+                      className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-900/40 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
+                          Building #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBuilding(b.id)}
+                          className="text-xs text-red-600 font-medium hover:underline"
+                        >
+                          Delete Building
+                        </button>
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Building Name</label>
+                          <input
+                            type="text"
+                            value={b.name}
+                            onChange={(e) => handleUpdateBuilding(b.id, "name", e.target.value)}
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Building Code</label>
+                          <input
+                            type="text"
+                            value={b.code}
+                            onChange={(e) => handleUpdateBuilding(b.id, "code", e.target.value)}
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                          <input
+                            type="text"
+                            value={b.description}
+                            onChange={(e) => handleUpdateBuilding(b.id, "description", e.target.value)}
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Number of Floors</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={b.floorsCount}
+                            onChange={(e) => handleUpdateBuilding(b.id, "floorsCount", Number(e.target.value))}
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
+            )}
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 border-t border-gray-100 dark:border-gray-800 pt-5">
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  disabled={isGenerating || config.buildingCount === 0}
-                  className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <>
-                      <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Generating...
-                    </>
-                  ) : (
-                    "Generate Infrastructure"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setConfig(DEFAULT_CONFIG); setResult(null); setError(null); }}
-                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-                >
-                  Reset
-                </button>
-              </div>
-
-              {/* Result */}
-              {result && (
-                <div className="rounded-xl border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20 p-4">
-                  <h4 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-2">
-                    ✓ Infrastructure Generated Successfully
+            {/* STEP 2: CONFIGURE FLOORS */}
+            {currentStep === 2 && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                    Step 2: Configure Floors Per Building
                   </h4>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 text-center">
-                    {Object.entries(result).map(([key, value]) => (
-                      <div key={key}>
-                        <div className="text-lg font-bold text-green-700 dark:text-green-400">{value}</div>
-                        <div className="text-xs text-green-600 dark:text-green-500 capitalize">{key}</div>
+                  <p className="text-xs text-gray-500">
+                    Select a building below to customize individual floor names and numbers.
+                  </p>
+                </div>
+
+                {/* Building Selector */}
+                <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-3 overflow-x-auto">
+                  {buildings.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBuildingId(b.id)}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                        activeBuilding.id === b.id
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
+                    >
+                      {b.name} ({b.floorsCount} Floors)
+                    </button>
+                  ))}
+                </div>
+
+                {/* Floors List for Selected Building */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {activeBuilding.floors.map((fl) => (
+                    <div
+                      key={fl.id}
+                      className="rounded-xl border border-gray-200 bg-slate-50/50 p-4 dark:border-gray-800 dark:bg-gray-900/40 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                          Floor #{fl.floorNumber}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-medium">
+                          {fl.selectedDeptNames.length} Depts
+                        </span>
+                      </div>
+
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Floor Display Name</label>
+                      <input
+                        type="text"
+                        value={fl.floorName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setBuildings((prev) =>
+                            prev.map((b) =>
+                              b.id === activeBuilding.id
+                                ? { ...b, floors: b.floors.map((f) => (f.id === fl.id ? { ...f, floorName: val } : f)) }
+                                : b
+                            )
+                          );
+                        }}
+                        className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* STEP 3: ASSIGN DEPARTMENTS TO FLOORS */}
+            {currentStep === 3 && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                    Step 3: Assign Departments to Each Floor
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    Multi-select departments from Department Master for each floor of {activeBuilding.name}.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-3 overflow-x-auto">
+                  {buildings.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBuildingId(b.id)}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                        activeBuilding.id === b.id
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Floors Department Selector Grid */}
+                <div className="space-y-6">
+                  {activeBuilding.floors.map((fl) => (
+                    <div
+                      key={fl.id}
+                      className="rounded-xl border border-gray-200 p-5 dark:border-gray-800 space-y-3"
+                    >
+                      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
+                        <h5 className="text-sm font-bold text-gray-800 dark:text-white">
+                          📍 {fl.floorName} (Floor {fl.floorNumber})
+                        </h5>
+                        <span className="text-xs text-gray-500">
+                          {fl.selectedDeptNames.length} Departments Selected
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {(departmentOptions.length > 0
+                          ? departmentOptions
+                          : ["Emergency", "Reception", "Pharmacy", "Radiology", "Cardiology", "Orthopedics", "General Medicine", "Neurology", "Laboratory", "ICU"]
+                        ).map((dept) => {
+                          const isSelected = fl.selectedDeptNames.includes(dept);
+                          return (
+                            <button
+                              key={dept}
+                              type="button"
+                              onClick={() => toggleDeptForFloor(activeBuilding.id, fl.id, dept)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                                isSelected
+                                  ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300 dark:border-brand-500"
+                                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                              }`}
+                            >
+                              {isSelected ? "☑ " : "☐ "} {dept}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* STEP 4: CONFIGURE DEPARTMENT INFRASTRUCTURE & SPECIALIZED ROOMS */}
+            {currentStep === 4 && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                      Step 4: Configure Department Infrastructure & Specialized Rooms
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Enable/disable room features and adjust room counts for each assigned department of {activeBuilding.name}.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Building Selector */}
+                <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-3 overflow-x-auto">
+                  {buildings.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBuildingId(b.id)}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                        activeBuilding.id === b.id
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Department Room Customization List */}
+                <div className="space-y-6">
+                  {activeBuilding.floors.map((fl) => (
+                    <div key={fl.id} className="space-y-4">
+                      <h5 className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
+                        📍 {fl.floorName} (Floor {fl.floorNumber}) — {fl.selectedDeptNames.length} Departments
+                      </h5>
+
+                      {fl.selectedDeptNames.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic pl-4">No departments assigned to this floor.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {fl.selectedDeptNames.map((dName) => {
+                            const cfg = getDeptCustomConfig(activeBuilding.id, fl.id, dName);
+                            const cleanName = dName.split("-").pop()?.trim() || dName;
+
+                            return (
+                              <div
+                                key={dName}
+                                className="rounded-xl border border-gray-200 bg-slate-50/50 p-4 dark:border-gray-800 dark:bg-gray-900/40 space-y-4"
+                              >
+                                <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+                                  <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                    🏢 {cleanName}
+                                  </span>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                                    {dName}
+                                  </span>
+                                </div>
+
+                                {/* Room Parameters */}
+                                <div className="space-y-3 text-xs">
+                                  {/* Consultation & Doctor Rooms */}
+                                  <div className="p-2.5 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
+                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">🩺 OPD & Consultation</span>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasClinics}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasClinics: e.target.checked })}
+                                        />
+                                        <span>Consultation Clinics</span>
+                                      </label>
+                                      {cfg.hasClinics && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={20}
+                                          value={cfg.clinicCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { clinicCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasDoctorRooms}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasDoctorRooms: e.target.checked })}
+                                        />
+                                        <span>Doctor Offices</span>
+                                      </label>
+                                      {cfg.hasDoctorRooms && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={20}
+                                          value={cfg.doctorRoomCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { doctorRoomCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasNurseStation}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasNurseStation: e.target.checked })}
+                                        />
+                                        <span>Nurse Stations</span>
+                                      </label>
+                                      {cfg.hasNurseStation && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={5}
+                                          value={cfg.nurseStationCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { nurseStationCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasProcedureRoom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasProcedureRoom: e.target.checked })}
+                                        />
+                                        <span>Procedure Rooms</span>
+                                      </label>
+                                      {cfg.hasProcedureRoom && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={10}
+                                          value={cfg.procedureRoomCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { procedureRoomCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Diagnostics / Pharmacy / Labs */}
+                                  <div className="p-2.5 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
+                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">🩻 Diagnostic & Service Infrastructure</span>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasXray}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasXray: e.target.checked })}
+                                        />
+                                        <span>X-Ray Suite</span>
+                                      </label>
+                                      {cfg.hasXray && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={10}
+                                          value={cfg.xrayCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { xrayCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasMri}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasMri: e.target.checked })}
+                                        />
+                                        <span>MRI Suite</span>
+                                      </label>
+                                      {cfg.hasMri && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={5}
+                                          value={cfg.mriCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { mriCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasCtScan}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasCtScan: e.target.checked })}
+                                        />
+                                        <span>CT Scan Suite</span>
+                                      </label>
+                                      {cfg.hasCtScan && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={5}
+                                          value={cfg.ctScanCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { ctScanCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.hasDispensingCounter}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasDispensingCounter: e.target.checked })}
+                                        />
+                                        <span>Dispensing Counter</span>
+                                      </label>
+                                      {cfg.hasDispensingCounter && (
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={10}
+                                          value={cfg.dispensingCounterCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { dispensingCounterCount: Number(e.target.value) })}
+                                          className="h-7 w-20 rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* STEP 5: CONFIGURE WARDS & BEDS */}
+            {currentStep === 5 && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                      Step 5: Configure Inpatient Wards & Beds
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Configure Ward Types, Room Counts, Beds per Room, and Medical Equipment for each admitting department.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Building Selector */}
+                <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 pb-3 overflow-x-auto">
+                  {buildings.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBuildingId(b.id)}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                        activeBuilding.id === b.id
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                      }`}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Ward Configuration Grid */}
+                <div className="space-y-6">
+                  {activeBuilding.floors.map((fl) => (
+                    <div key={fl.id} className="space-y-4">
+                      <h5 className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
+                        📍 {fl.floorName} (Floor {fl.floorNumber})
+                      </h5>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {fl.selectedDeptNames.map((dName) => {
+                          const cfg = getDeptCustomConfig(activeBuilding.id, fl.id, dName);
+                          const cleanName = dName.split("-").pop()?.trim() || dName;
+
+                          return (
+                            <div
+                              key={dName}
+                              className="rounded-xl border border-gray-200 bg-slate-50/50 p-4 dark:border-gray-800 dark:bg-gray-900/40 space-y-4"
+                            >
+                              <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                  🏥 {cleanName} Wards
+                                </span>
+                              </div>
+
+                              <div className="space-y-3 text-xs">
+                                {/* General Ward */}
+                                <div className="p-3 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
+                                  <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-800 dark:text-gray-200">
+                                    <input
+                                      type="checkbox"
+                                      checked={cfg.hasGeneralWard}
+                                      onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasGeneralWard: e.target.checked })}
+                                    />
+                                    <span>🏥 General Ward (Multi-Bed Rooms)</span>
+                                  </label>
+
+                                  {cfg.hasGeneralWard && (
+                                    <div className="pl-5 grid grid-cols-2 gap-2 pt-1">
+                                      <div>
+                                        <label className="block text-[11px] text-gray-500">Rooms Count</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={50}
+                                          value={cfg.generalWardRoomCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { generalWardRoomCount: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[11px] text-gray-500">Beds / Room</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={12}
+                                          value={cfg.generalWardBedsPerRoom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { generalWardBedsPerRoom: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <label className="col-span-2 flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-600 dark:text-gray-400 mt-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.generalWardHasBathroom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { generalWardHasBathroom: e.target.checked })}
+                                        />
+                                        <span>Attached Bathroom</span>
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Private Ward */}
+                                <div className="p-3 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
+                                  <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-800 dark:text-gray-200">
+                                    <input
+                                      type="checkbox"
+                                      checked={cfg.hasPrivateWard}
+                                      onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasPrivateWard: e.target.checked })}
+                                    />
+                                    <span>🛌 Private / Deluxe Suites</span>
+                                  </label>
+
+                                  {cfg.hasPrivateWard && (
+                                    <div className="pl-5 grid grid-cols-2 gap-2 pt-1">
+                                      <div>
+                                        <label className="block text-[11px] text-gray-500">Suite Count</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={20}
+                                          value={cfg.privateWardRoomCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { privateWardRoomCount: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[11px] text-gray-500">Beds / Suite</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={2}
+                                          value={cfg.privateWardBedsPerRoom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { privateWardBedsPerRoom: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <label className="col-span-2 flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-600 dark:text-gray-400 mt-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.privateWardHasBathroom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { privateWardHasBathroom: e.target.checked })}
+                                        />
+                                        <span>Private Bathroom</span>
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* ICU Ward */}
+                                <div className="p-3 rounded-lg bg-red-50/40 border border-red-200 dark:border-red-900/40 dark:bg-red-950/20 space-y-2">
+                                  <label className="flex items-center gap-2 cursor-pointer font-bold text-red-900 dark:text-red-300">
+                                    <input
+                                      type="checkbox"
+                                      checked={cfg.hasIcuWard}
+                                      onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasIcuWard: e.target.checked })}
+                                    />
+                                    <span>🚨 ICU Critical Care Unit</span>
+                                  </label>
+
+                                  {cfg.hasIcuWard && (
+                                    <div className="pl-5 grid grid-cols-2 gap-2 pt-1">
+                                      <div>
+                                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">ICU Rooms</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={10}
+                                          value={cfg.icuWardRoomCount}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { icuWardRoomCount: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">Beds / Room</label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={4}
+                                          value={cfg.icuWardBedsPerRoom}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { icuWardBedsPerRoom: Number(e.target.value) })}
+                                          className="h-7 w-full rounded border border-gray-300 px-2 text-xs dark:bg-gray-800 dark:text-white"
+                                        />
+                                      </div>
+                                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-700 dark:text-gray-300 mt-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.icuHasVentilator}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { icuHasVentilator: e.target.checked })}
+                                        />
+                                        <span>Ventilator</span>
+                                      </label>
+                                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-700 dark:text-gray-300 mt-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={cfg.icuHasMonitor}
+                                          onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { icuHasMonitor: e.target.checked })}
+                                        />
+                                        <span>Cardiac Monitor</span>
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* STEP 6 & 7: ROOMS, BEDS & SUMMARY GENERATION */}
+            {(currentStep === 6 || currentStep === 7) && (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-white">
+                      {currentStep === 6 ? "Step 6: Review Configured Rooms" : "Step 7: Final Review & Generate Infrastructure"}
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Verify the compiled hierarchy tree before committing to the hospital database.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Summary Stat Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl border p-4 text-center bg-brand-50/50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-800">
+                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">{totalBuildingsCount}</div>
+                    <div className="text-xs text-gray-500 font-medium mt-0.5">Buildings</div>
+                  </div>
+                  <div className="rounded-xl border p-4 text-center bg-brand-50/50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-800">
+                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">{totalFloorsCount}</div>
+                    <div className="text-xs text-gray-500 font-medium mt-0.5">Total Floors</div>
+                  </div>
+                  <div className="rounded-xl border p-4 text-center bg-brand-50/50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-800">
+                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">{totalDeptAssignmentsCount}</div>
+                    <div className="text-xs text-gray-500 font-medium mt-0.5">Department Assignments</div>
+                  </div>
+                  <div className="rounded-xl border p-4 text-center bg-brand-50/50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-800">
+                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">~18</div>
+                    <div className="text-xs text-gray-500 font-medium mt-0.5">Rooms & Beds</div>
+                  </div>
+                </div>
+
+                {/* Compiled Tree Preview */}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/50 space-y-3">
+                  <h5 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Infrastructure Hierarchy Tree Preview
+                  </h5>
+                  <div className="space-y-3 font-mono text-xs">
+                    {buildings.map((b) => (
+                      <div key={b.id} className="pl-2 border-l-2 border-brand-500 space-y-1">
+                        <div className="font-bold text-gray-900 dark:text-white">
+                          🏢 {b.name} ({b.code}) — {b.floorsCount} Floors
+                        </div>
+                        {b.floors.map((fl) => (
+                          <div key={fl.id} className="pl-4 text-gray-700 dark:text-gray-300">
+                            └─ 📍 {fl.floorName}: {fl.selectedDeptNames.length > 0 ? fl.selectedDeptNames.join(", ") : "No Depts assigned"}
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20 p-4">
-                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                {error && (
+                  <p className="text-sm font-medium text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 dark:bg-red-950/30 dark:border-red-800">
+                    ⚠️ {error}
+                  </p>
+                )}
+
+                {result && (
+                  <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-300 space-y-1">
+                    <h5 className="font-bold text-sm">✅ Infrastructure Generated Successfully!</h5>
+                    <p className="text-xs">
+                      Created {result.buildings} Buildings, {result.floors} Floors, {result.departments} Department Assignments, {result.wards} Ward Instances, {result.rooms} Rooms, and {result.beds} Beds.
+                    </p>
+                  </div>
+                )}
+
+                {/* Final Submit Button */}
+                <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={handleWizardGenerate}
+                    disabled={isGenerating}
+                    className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                  >
+                    {isGenerating ? "Building Hospital Infrastructure..." : "🚀 Confirm & Generate Hospital Infrastructure"}
+                  </button>
                 </div>
-              )}
-            </div>
-          </section>
+              </section>
+            )}
+          </div>
         )}
 
-        {/* Hierarchy Tab */}
+        {/* HIERARCHY TAB */}
         {activeTab === "hierarchy" && (
-          <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-              <div>
-                <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
-                  Current Infrastructure Hierarchy
-                </h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Overview of all buildings, floors, departments, wards, rooms, and beds.
-                </p>
-              </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+              <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+                Live Hospital Hierarchy Tree
+              </h3>
               <button
                 type="button"
                 onClick={() => void loadHierarchy()}
-                className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                className="text-xs text-brand-600 hover:underline"
               >
-                Refresh
+                🔄 Refresh Tree
               </button>
             </div>
 
-            <div className="p-6">
-              {isLoadingHierarchy ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">Loading hierarchy...</p>
-              ) : !hierarchy || hierarchy.buildings.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-4xl mb-3">🏗️</div>
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No infrastructure configured yet. Use the Quick Setup tab to generate.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Summary cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {[
-                      { label: "Buildings", value: hierarchy.buildings.length, emoji: "🏢" },
-                      { label: "Floors", value: hierarchy.floors.length, emoji: "🏗️" },
-                      { label: "Dept Assignments", value: hierarchy.floorDepartments.length, emoji: "🏥" },
-                      { label: "Ward Instances", value: hierarchy.wardInstances.length, emoji: "🛏️" },
-                      { label: "Rooms", value: hierarchy.rooms.length, emoji: "🚪" },
-                      { label: "Beds", value: hierarchy.beds.length, emoji: "🛌" },
-                    ].map((item) => (
-                      <div
-                        key={item.label}
-                        className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-4 text-center"
-                      >
-                        <div className="text-xl mb-1">{item.emoji}</div>
-                        <div className="text-xl font-bold text-gray-800 dark:text-white/90">
-                          {item.value}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+            {isLoadingHierarchy ? (
+              <p className="text-sm text-gray-500">Loading current hospital hierarchy...</p>
+            ) : !hierarchy || (hierarchy.buildings ?? []).length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No hospital infrastructure generated yet. Use the Interactive Setup Wizard to generate your buildings.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {(hierarchy.buildings as Array<Record<string, unknown>>).map((b) => {
+                  const bFloors = ((hierarchy.floors ?? []) as Array<Record<string, unknown>>).filter(
+                    (f) => Number(f.building_id) === Number(b.id)
+                  );
+                  return (
+                    <div key={String(b.id)} className="rounded-xl border border-gray-200 p-4 space-y-3 dark:border-gray-800">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🏢</span>
+                        <span className="font-bold text-gray-900 dark:text-white">{String(b.building_name)}</span>
+                        {Boolean(b.code) && <span className="text-xs font-mono text-gray-500">({String(b.code)})</span>}
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Building tree */}
-                  <div className="space-y-3">
-                    {hierarchy.buildings.map((building) => {
-                      const buildingFloors = hierarchy.floors.filter(
-                        (f: Record<string, unknown>) => Number(f.building_id) === Number(building.id)
-                      );
-                      return (
-                        <details
-                          key={String(building.id)}
-                          className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
-                        >
-                          <summary className="cursor-pointer bg-slate-50 dark:bg-gray-800 px-4 py-3 text-sm font-medium text-gray-800 dark:text-white/90 hover:bg-slate-100 dark:hover:bg-gray-700">
-                            🏢 {String(building.building_name || building.code)} — {buildingFloors.length} floor(s)
-                          </summary>
-                          <div className="px-4 py-3 space-y-2">
-                            {buildingFloors.length === 0 ? (
-                              <p className="text-xs text-gray-400">No floors configured</p>
-                            ) : (
-                              buildingFloors.map((floor) => {
-                                const floorDepts = hierarchy.floorDepartments.filter(
-                                  (fd: Record<string, unknown>) => Number(fd.floor_id) === Number(floor.id)
-                                );
-                                return (
-                                  <details
-                                    key={String(floor.id)}
-                                    className="ml-4 rounded-lg border border-gray-100 dark:border-gray-700"
-                                  >
-                                    <summary className="cursor-pointer px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
-                                      🏗️ {String(floor.floor_name)} — {floorDepts.length} dept(s)
-                                    </summary>
-                                    <div className="px-3 py-2 space-y-1">
-                                      {floorDepts.map((fd) => {
-                                        const wards = hierarchy.wardInstances.filter(
-                                          (w: Record<string, unknown>) => Number(w.floor_dept_assignment_id) === Number(fd.id)
-                                        );
-                                        return (
-                                          <div key={String(fd.id)} className="ml-4 text-xs text-gray-600 dark:text-gray-400">
-                                            🏥 {String(fd.department_name)} — {wards.length} ward(s)
-                                            {wards.map((w) => {
-                                              const wRooms = hierarchy.rooms.filter(
-                                                (r: Record<string, unknown>) =>
-                                                  Number(r.ward_instance_id) === Number(w.id)
-                                              );
-                                              return (
-                                                <div key={String(w.id)} className="ml-4">
-                                                  🛏️ {String(w.ward_type)} — {wRooms.length} room(s)
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </details>
-                                );
-                              })
-                            )}
-                          </div>
-                        </details>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
+                      <div className="pl-4 space-y-2 border-l-2 border-gray-200 dark:border-gray-700">
+                        {bFloors.map((f) => {
+                          const fDepts = ((hierarchy.floorDepartments ?? []) as Array<Record<string, unknown>>).filter(
+                            (fd) => Number(fd.floor_id) === Number(f.id)
+                          );
+                          return (
+                            <div key={String(f.id)} className="space-y-1">
+                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                📍 {String(f.floor_name)}
+                              </div>
+                              <div className="pl-4 text-xs text-gray-600 dark:text-gray-400">
+                                Departments: {fDepts.length > 0 ? fDepts.map((d) => String(d.department_name)).join(", ") : "None"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </PageLayout>

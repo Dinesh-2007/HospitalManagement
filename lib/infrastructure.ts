@@ -131,8 +131,6 @@ export type InfrastructureGeneratorConfig = {
           roomType?: string;
           roomPurpose?: string;
           bedType?: string;
-          chargePerBed?: number;
-          chargePerRoom?: number;
         }>;
       }>;
     }>;
@@ -153,6 +151,4 @@ export type QuickGeneratorConfig = {
   roomType?: string;
   roomPurpose?: string;
   bedType?: string;
-  chargePerBed?: number;
-  chargePerRoom?: number;
 };

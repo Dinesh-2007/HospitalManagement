@@ -4,12 +4,23 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageLayout } from "../../../../components/page-layout";
 import { bedStatusColor } from "../../../../lib/infrastructure";
+import { getCurrentUser } from "../../../../app/actions/user";
 
 type Row = Record<string, unknown>;
+
+type PatientRecord = {
+  patient_id: string;
+  patient_name: string;
+  mobile?: string;
+  dob?: string;
+};
 
 export default function BedAllocationPage() {
   const params = useParams();
   const hname = params?.Hname as string;
+
+  // Session user
+  const [currentUser, setCurrentUser] = useState<string>("");
 
   // Drill-down selections
   const [buildings, setBuildings] = useState<Row[]>([]);
@@ -26,10 +37,11 @@ export default function BedAllocationPage() {
   const [selectedRoom, setSelectedRoom] = useState("");
   const [selectedBed, setSelectedBed] = useState<Row | null>(null);
 
-  // Patient info
-  const [patientId, setPatientId] = useState("");
-  const [patientName, setPatientName] = useState("");
-  const [allocatedByName, setAllocatedByName] = useState("");
+  // Patient lookup state
+  const [patientSearchQuery, setPatientSearchQuery] = useState("");
+  const [patientSearchResults, setPatientSearchResults] = useState<PatientRecord[]>([]);
+  const [isSearchingPatient, setIsSearchingPatient] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
 
   const [isAllocating, setIsAllocating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -37,6 +49,14 @@ export default function BedAllocationPage() {
 
   // Current allocations
   const [allocations, setAllocations] = useState<Row[]>([]);
+
+  // Load session user
+  useEffect(() => {
+    if (!hname) return;
+    getCurrentUser(hname).then((user) => {
+      if (user) setCurrentUser(user);
+    }).catch(() => {});
+  }, [hname]);
 
   // Load buildings
   useEffect(() => {
@@ -54,7 +74,6 @@ export default function BedAllocationPage() {
       .then((r) => r.json())
       .then((data) => {
         setFloors(data.floors ?? []);
-        // Unique departments from floorDepartments
         const deptMap = new Map<string, Row>();
         (data.floorDepartments ?? []).forEach((fd: Row) => {
           const name = String(fd.department_name ?? "");
@@ -64,9 +83,6 @@ export default function BedAllocationPage() {
         setWards([]);
         setRooms([]);
         setBeds([]);
-
-        // If we have all data, we can filter downstream
-        // Store full data for filtering
         (window as unknown as Record<string, unknown>).__infraData = data;
       })
       .catch(() => {});
@@ -146,6 +162,26 @@ export default function BedAllocationPage() {
     setSelectedBed(null);
   }, [selectedRoom]);
 
+  // Patient search handler
+  useEffect(() => {
+    if (!patientSearchQuery.trim() || selectedPatient) {
+      setPatientSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setIsSearchingPatient(true);
+      fetch(`/api/${hname}/patient-search?q=${encodeURIComponent(patientSearchQuery.trim())}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setPatientSearchResults(data.rows ?? []);
+        })
+        .catch(() => setPatientSearchResults([]))
+        .finally(() => setIsSearchingPatient(false));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [patientSearchQuery, selectedPatient, hname]);
+
   // Load active allocations
   const loadAllocations = useCallback(async () => {
     if (!hname) return;
@@ -161,8 +197,8 @@ export default function BedAllocationPage() {
   useEffect(() => { void loadAllocations(); }, [loadAllocations]);
 
   const handleAllocate = async () => {
-    if (!selectedBed || !patientId || !patientName) {
-      setError("Please select a bed and enter patient details.");
+    if (!selectedBed || !selectedPatient) {
+      setError("Please select a bed and choose a verified patient from lookup.");
       return;
     }
 
@@ -176,17 +212,16 @@ export default function BedAllocationPage() {
         body: JSON.stringify({
           action: "allocate",
           bedId: Number(selectedBed.id),
-          patientId,
-          patientName,
-          allocatedByName: allocatedByName || null,
+          patientId: selectedPatient.patient_id,
+          patientName: selectedPatient.patient_name,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Allocation failed.");
-      setMessage(`Bed allocated successfully to ${patientName} (${patientId}).`);
+      setMessage(`Bed allocated successfully to ${data.patientName || selectedPatient.patient_name} (${selectedPatient.patient_id}).`);
       setSelectedBed(null);
-      setPatientId("");
-      setPatientName("");
+      setSelectedPatient(null);
+      setPatientSearchQuery("");
       void loadAllocations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Allocation failed.");
@@ -205,12 +240,12 @@ export default function BedAllocationPage() {
               Allocate Bed
             </h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Drill down through the hierarchy to find and allocate an available bed.
+              Drill down through the hierarchy to find an available bed and assign a validated patient.
             </p>
           </div>
 
           <div className="p-6 space-y-6">
-            {/* Step 1: Location drill-down */}
+            {/* Location drill-down */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Building</label>
@@ -318,7 +353,7 @@ export default function BedAllocationPage() {
                       </div>
                       {Boolean(bed.bed_type) && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {String(bed.bed_type)}
+                          {String(bed.bed_type)} {Boolean(bed.charge) && `• ₹${String(bed.charge)}/day`}
                         </div>
                       )}
                     </button>
@@ -329,60 +364,113 @@ export default function BedAllocationPage() {
 
             {selectedRoom && beds.length === 0 && (
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                No available beds in this room. All beds are occupied or unavailable.
+                No available beds in this room. All beds are occupied, reserved, cleaning, or under maintenance.
               </p>
             )}
 
-            {/* Patient info */}
+            {/* Verified Patient Lookup Section */}
             {selectedBed && (
               <div className="rounded-xl border border-brand-200 dark:border-brand-800 bg-brand-50/50 dark:bg-brand-500/5 p-5 space-y-4">
-                <h4 className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  Allocating: {String(selectedBed.description || selectedBed.bed_number)} in {String(selectedBed.room_name)}
-                </h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-brand-100 dark:border-brand-900/50 pb-3">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient ID *</label>
-                    <input
-                      type="text"
-                      value={patientId}
-                      onChange={(e) => setPatientId(e.target.value)}
-                      placeholder="e.g. PID-0001"
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
+                    <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                      Allocating: {String(selectedBed.description || selectedBed.bed_number)} in {String(selectedBed.room_name)}
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Rate: ₹{String(selectedBed.charge || selectedBed.rate || 0)}/day • Ward: {String(selectedBed.ward_name)}
+                    </p>
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Name *</label>
-                    <input
-                      type="text"
-                      value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
-                      placeholder="Enter patient name"
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Allocated By</label>
-                    <input
-                      type="text"
-                      value={allocatedByName}
-                      onChange={(e) => setAllocatedByName(e.target.value)}
-                      placeholder="Staff name"
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                    />
-                  </div>
+                  {currentUser && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 self-start sm:self-auto font-medium">
+                      Staff: {currentUser}
+                    </span>
+                  )}
                 </div>
+
+                {/* Patient Lookup Input */}
+                {!selectedPatient ? (
+                  <div className="relative space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">
+                      Search Registered Patient (by PID, Name, or Mobile) *
+                    </label>
+                    <input
+                      type="text"
+                      value={patientSearchQuery}
+                      onChange={(e) => setPatientSearchQuery(e.target.value)}
+                      placeholder="Type Patient ID (e.g. PID-0001), Name, or Mobile number..."
+                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                    />
+
+                    {isSearchingPatient && (
+                      <p className="text-xs text-gray-500">Searching patient database...</p>
+                    )}
+
+                    {/* Results Dropdown */}
+                    {patientSearchResults.length > 0 && (
+                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                        {patientSearchResults.map((p) => (
+                          <button
+                            key={p.patient_id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPatient(p);
+                              setPatientSearchQuery("");
+                              setPatientSearchResults([]);
+                            }}
+                            className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-brand-50 dark:hover:bg-brand-500/10 transition flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="font-semibold text-gray-800 dark:text-white">{p.patient_name}</span>
+                              <span className="ml-2 text-xs text-brand-600 dark:text-brand-400 font-mono">({p.patient_id})</span>
+                            </div>
+                            {p.mobile && <span className="text-xs text-gray-500">📱 {p.mobile}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {patientSearchQuery.trim() && !isSearchingPatient && patientSearchResults.length === 0 && (
+                      <p className="text-xs text-red-500">
+                        No registered patient found matching &quot;{patientSearchQuery}&quot;. Please register the patient in Patient Registration first.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  /* Selected Verified Patient Card */
+                  <div className="rounded-lg border border-green-200 bg-green-50/60 p-4 dark:border-green-800 dark:bg-green-950/20 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-semibold text-green-800 dark:text-green-200 font-mono">
+                          {selectedPatient.patient_id}
+                        </span>
+                        <span className="font-bold text-gray-900 dark:text-white">{selectedPatient.patient_name}</span>
+                      </div>
+                      {selectedPatient.mobile && (
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Phone: {selectedPatient.mobile}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPatient(null)}
+                      className="text-xs text-red-600 hover:text-red-800 font-medium underline"
+                    >
+                      Change Patient
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
                     onClick={handleAllocate}
-                    disabled={isAllocating || !patientId || !patientName}
+                    disabled={isAllocating || !selectedPatient}
                     className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:opacity-50"
                   >
-                    {isAllocating ? "Allocating..." : "Allocate Bed"}
+                    {isAllocating ? "Allocating Bed & Opening Billing Line..." : "Confirm Bed Allocation"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedBed(null)}
+                    onClick={() => { setSelectedBed(null); setSelectedPatient(null); }}
                     className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
                   >
                     Cancel
@@ -392,10 +480,14 @@ export default function BedAllocationPage() {
             )}
 
             {message && (
-              <p className="text-sm text-green-600 dark:text-green-400">{message}</p>
+              <p className="text-sm font-medium text-green-600 dark:text-green-400 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                ✅ {message}
+              </p>
             )}
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm font-medium text-red-600 dark:text-red-400 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                ⚠️ {error}
+              </p>
             )}
           </div>
         </section>
@@ -415,7 +507,7 @@ export default function BedAllocationPage() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
                   <thead>
                     <tr>
-                      {["Patient", "Bed", "Room", "Ward", "Floor", "Building", "Allocated At"].map((col) => (
+                      {["Patient", "Bed", "Room", "Ward", "Floor", "Building", "Allocated By", "Allocated At"].map((col) => (
                         <th key={col} className="px-4 py-3 text-left font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                           {col}
                         </th>
@@ -426,14 +518,15 @@ export default function BedAllocationPage() {
                     {allocations.map((a, i) => (
                       <tr key={String(a.id ?? i)}>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                          {String(a.patient_name || "-")}
-                          {a.patient_id ? <span className="text-xs text-gray-400 ml-1">({String(a.patient_id)})</span> : null}
+                          <span className="font-semibold">{String(a.patient_name || "-")}</span>
+                          {a.patient_id ? <span className="text-xs text-brand-600 dark:text-brand-400 font-mono ml-1.5">({String(a.patient_id)})</span> : null}
                         </td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.bed_name || "-")}</td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.room_name || "-")}</td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.ward_name || "-")}</td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.floor_name || "-")}</td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.building_name || "-")}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{String(a.allocated_by_name || "-")}</td>
                         <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                           {a.allocated_at ? new Date(String(a.allocated_at)).toLocaleString() : "-"}
                         </td>

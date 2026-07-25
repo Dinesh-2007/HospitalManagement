@@ -172,6 +172,8 @@ export default function FloorPlanPage() {
                     { color: "#22c55e", label: "Available" },
                     { color: "#eab308", label: "Partial" },
                     { color: "#ef4444", label: "Full" },
+                    { color: "#3b82f6", label: "Reserved" },
+                    { color: "#f97316", label: "Cleaning" },
                     { color: "#1f2937", label: "Maintenance" },
                   ].map((legend) => (
                     <span key={legend.label} className="flex items-center gap-1">
