@@ -160,17 +160,8 @@ export default function InfrastructurePage() {
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   // Buildings State
-  const [buildings, setBuildings] = useState<BuildingConfig[]>([
-    {
-      id: "bld-1",
-      name: "Main Tower A",
-      code: "BLD-A",
-      description: "Main Inpatient & Outpatient Building",
-      floorsCount: 4,
-      floors: [],
-    },
-  ]);
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("bld-1");
+  const [buildings, setBuildings] = useState<BuildingConfig[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
   const [selectedFloorId, setSelectedFloorId] = useState<string>("");
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -183,8 +174,13 @@ export default function InfrastructurePage() {
   // Per-department custom parameter overrides: Key = `${buildingId}_${floorId}_${deptName}`
   const [deptCustomConfigs, setDeptCustomConfigs] = useState<Record<string, DeptCustomConfig>>({});
 
+  // Update Modal State (Step 3)
+  const [updateModalFloor, setUpdateModalFloor] = useState<{ buildingId: string; floorId: string } | null>(null);
+  const [updateModalTab, setUpdateModalTab] = useState<"department" | "clinic" | "medicallab">("department");
+
   // LOV options
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
   const [wardOptions, setWardOptions] = useState<string[]>([]);
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>([]);
   const [roomPurposeOptions, setRoomPurposeOptions] = useState<string[]>([]);
@@ -195,26 +191,11 @@ export default function InfrastructurePage() {
     if (!hname) return;
 
     async function loadDepartments() {
-      const defaultDepts = [
-        "Emergency & Trauma",
-        "Reception & Registration",
-        "Outpatient Department (OPD)",
-        "General Medicine",
-        "Cardiology",
-        "Orthopedics",
-        "Radiology & Diagnostic Imaging",
-        "Pathology & Medical Lab",
-        "Pharmacy & Medicine Store",
-        "Intensive Care Unit (ICU)",
-        "General Surgery",
-        "Pediatrics",
-        "Obstetrics & Gynecology",
-        "Neurology",
-      ];
+      setIsLoadingDepartments(true);
       try {
         const res = await fetch(`/api/${hname}/forms/department_master`, { cache: "no-store" });
         if (!res.ok) {
-          setDepartmentOptions(defaultDepts);
+          setDepartmentOptions([]);
           return;
         }
         const data = await res.json();
@@ -226,11 +207,11 @@ export default function InfrastructurePage() {
             return code && desc ? `${code} - ${desc}` : code || desc;
           })
           .filter(Boolean);
-
-        const combined = Array.from(new Set([...fetched, ...defaultDepts]));
-        setDepartmentOptions(combined);
+        setDepartmentOptions(fetched);
       } catch {
-        setDepartmentOptions(defaultDepts);
+        setDepartmentOptions([]);
+      } finally {
+        setIsLoadingDepartments(false);
       }
     }
 
@@ -292,7 +273,7 @@ export default function InfrastructurePage() {
               id: `${b.id}-fl-${i}`,
               floorNumber: i,
               floorName: defaultName,
-              selectedDeptNames: i === 0 ? ["Emergency", "Reception", "Pharmacy", "Radiology"] : ["Cardiology", "General Medicine"],
+              selectedDeptNames: [],
               departments: [],
             });
           }
@@ -335,16 +316,17 @@ export default function InfrastructurePage() {
       }
     }
 
+    const ts = Date.now();
     const newBld: BuildingConfig = {
-      id: `bld-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: `bld-${ts}-${Math.random().toString(36).substring(2, 6)}`,
       name: `Building ${letter}`,
       code: `BLD-${letter}`,
-      description: `Hospital Block ${letter}`,
+      description: "",
       floorsCount: 3,
       floors: [
-        { id: `fl-0-${Date.now()}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: ["Emergency", "Reception"], departments: [] },
-        { id: `fl-1-${Date.now()}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: ["Cardiology"], departments: [] },
-        { id: `fl-2-${Date.now()}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: ["General Medicine"], departments: [] },
+        { id: `fl-0-${ts}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: [], departments: [] },
+        { id: `fl-1-${ts + 1}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: [], departments: [] },
+        { id: `fl-2-${ts + 2}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: [], departments: [] },
       ],
     };
     setBuildings((prev) => [...prev, newBld]);
@@ -376,16 +358,17 @@ export default function InfrastructurePage() {
   const handleDeleteBuilding = (id: string) => {
     const remaining = buildings.filter((b) => b.id !== id);
     if (remaining.length === 0) {
+      const ts = Date.now();
       const freshDefault: BuildingConfig = {
-        id: `bld-${Date.now()}`,
+        id: `bld-${ts}`,
         name: "Building A",
         code: "BLD-A",
-        description: "Main Hospital Building A",
+        description: "",
         floorsCount: 3,
         floors: [
-          { id: `fl-0-${Date.now()}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: ["Emergency", "Reception"], departments: [] },
-          { id: `fl-1-${Date.now()}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: ["Cardiology"], departments: [] },
-          { id: `fl-2-${Date.now()}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: ["General Medicine"], departments: [] },
+          { id: `fl-0-${ts}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: [], departments: [] },
+          { id: `fl-1-${ts + 1}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: [], departments: [] },
+          { id: `fl-2-${ts + 2}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: [], departments: [] },
         ],
       };
       setBuildings([freshDefault]);
@@ -736,11 +719,11 @@ export default function InfrastructurePage() {
 
   // Selected building object for steps
   const activeBuilding = buildings.find((b) => b.id === selectedBuildingId) || buildings[0] || {
-    id: "bld-default",
-    name: "Building A",
-    code: "BLD-A",
-    description: "Main Building",
-    floorsCount: 3,
+    id: "",
+    name: "",
+    code: "",
+    description: "",
+    floorsCount: 0,
     floors: [],
   };
 
@@ -753,7 +736,7 @@ export default function InfrastructurePage() {
   );
 
   return (
-    <PageLayout title="Dynamic Hospital Infrastructure Designer">
+    <PageLayout title="Hospital Infrastructure">
       <div className="space-y-6">
         {/* Top Navigation Tabs */}
         <div className="flex border-b border-gray-200 dark:border-gray-800">
@@ -766,7 +749,7 @@ export default function InfrastructurePage() {
                 : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
             }`}
           >
-            🏗️ Interactive Setup Wizard
+            Interactive Setup Wizard
           </button>
           <button
             type="button"
@@ -777,7 +760,7 @@ export default function InfrastructurePage() {
                 : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
             }`}
           >
-            🏛️ Current Hierarchy Tree
+            Current Hierarchy Tree
           </button>
         </div>
 
@@ -788,7 +771,7 @@ export default function InfrastructurePage() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-4">
                 <div>
                   <h3 className="text-base font-bold text-gray-800 dark:text-white/90">
-                    Hospital Infrastructure Designer & Allocation Wizard
+                    Hospital Infrastructure Designer
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     Configure buildings, floors, departments, specialized rooms, wards, and beds interactively.
@@ -826,7 +809,7 @@ export default function InfrastructurePage() {
                   { step: 4, label: "4. Dept Rooms" },
                   { step: 5, label: "5. Wards" },
                   { step: 6, label: "6. Rooms" },
-                  { step: 7, label: "7. Beds & Summary" },
+                  { step: 7, label: "7. Summary" },
                 ].map((s) => (
                   <button
                     key={s.step}
@@ -848,7 +831,7 @@ export default function InfrastructurePage() {
               {/* Validation Warning Alert */}
               {error && (
                 <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2">
-                  <span>⚠️</span>
+                  <span className="text-amber-500 font-bold">!</span>
                   <span>{error}</span>
                 </div>
               )}
@@ -871,11 +854,16 @@ export default function InfrastructurePage() {
                     onClick={handleAddBuilding}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
                   >
-                    ➕ Add Building
+                    + Add Building
                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {buildings.length === 0 && (
+                    <div className="col-span-full text-center py-10 text-sm text-gray-400 dark:text-gray-500">
+                      No buildings configured. Click <strong>+ Add Building</strong> to get started.
+                    </div>
+                  )}
                   {buildings.map((b, idx) => (
                     <div
                       key={b.id}
@@ -1049,18 +1037,31 @@ export default function InfrastructurePage() {
                     >
                       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
                         <h5 className="text-sm font-bold text-gray-800 dark:text-white">
-                          📍 {fl.floorName} (Floor {fl.floorNumber})
+                          {fl.floorName} (Floor {fl.floorNumber})
                         </h5>
-                        <span className="text-xs text-gray-500">
-                          {fl.selectedDeptNames.length} Departments Selected
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            {fl.selectedDeptNames.length} Departments Selected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUpdateModalFloor({ buildingId: activeBuilding.id, floorId: fl.id });
+                              setUpdateModalTab("department");
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-brand-500 text-white text-xs font-semibold hover:bg-brand-600 transition shadow-sm"
+                          >
+                            Update
+                          </button>
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        {(departmentOptions.length > 0
-                          ? departmentOptions
-                          : ["Emergency", "Reception", "Pharmacy", "Radiology", "Cardiology", "Orthopedics", "General Medicine", "Neurology", "Laboratory", "ICU"]
-                        ).map((dept) => {
+                        {isLoadingDepartments ? (
+                          <p className="text-xs text-gray-400 italic py-2">Loading departments from master...</p>
+                        ) : departmentOptions.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic py-2">No departments found. Please add departments in the Department Master first.</p>
+                        ) : departmentOptions.map((dept) => {
                           const isSelected = fl.selectedDeptNames.includes(dept);
                           return (
                             <button
@@ -1073,7 +1074,7 @@ export default function InfrastructurePage() {
                                   : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                               }`}
                             >
-                              {isSelected ? "☑ " : "☐ "} {dept}
+                              {dept}
                             </button>
                           );
                         })}
@@ -1081,6 +1082,400 @@ export default function InfrastructurePage() {
                     </div>
                   ))}
                 </div>
+
+                {/* ====== UPDATE MODAL ====== */}
+                {updateModalFloor && (() => {
+                  const modalBuilding = buildings.find(b => b.id === updateModalFloor.buildingId);
+                  const modalFloor = modalBuilding?.floors.find(f => f.id === updateModalFloor.floorId);
+                  if (!modalBuilding || !modalFloor) return null;
+
+                  return (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                      onClick={(e) => { if (e.target === e.currentTarget) setUpdateModalFloor(null); }}
+                    >
+                      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                          <div>
+                            <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                              {modalFloor.floorName} — Department Details
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {modalFloor.selectedDeptNames.length} department(s) assigned to this floor
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUpdateModalFloor(null)}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition text-sm font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {/* Modal Tabs */}
+                        <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0 bg-gray-50 dark:bg-gray-800/50">
+                          {([
+                            { key: "department", label: "Department" },
+                            { key: "clinic", label: "Clinic" },
+                            { key: "medicallab", label: "Medical Lab" },
+                          ] as const).map((tab) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setUpdateModalTab(tab.key)}
+                              className={`px-5 py-3 text-sm font-semibold border-b-2 transition ${
+                                updateModalTab === tab.key
+                                  ? "border-brand-500 text-brand-600 dark:text-brand-400 bg-white dark:bg-gray-900"
+                                  : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-gray-700/50"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="flex-1 overflow-auto p-6">
+
+                          {/* ---- DEPARTMENT TAB ---- */}
+                          {updateModalTab === "department" && (
+                            <div className="space-y-3">
+                              <p className="text-xs text-gray-500 mb-3">
+                                All departments assigned to <strong>{modalFloor.floorName}</strong>.
+                              </p>
+                              {modalFloor.selectedDeptNames.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic text-center py-8">No departments assigned to this floor yet.</p>
+                              ) : (
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider w-10">#</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Department Name</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Code</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Type</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                      {modalFloor.selectedDeptNames.map((dName, idx) => {
+                                        const cleanName = dName.split("-").pop()?.trim() || dName;
+                                        const codePart = dName.includes("-") ? dName.split("-")[0].trim() : "—";
+                                        const clean = dName.toLowerCase();
+                                        const deptType =
+                                          clean.includes("radio") || clean.includes("imaging") ? "Diagnostic"
+                                          : clean.includes("pharmacy") || clean.includes("store") ? "Pharmacy"
+                                          : clean.includes("lab") || clean.includes("pathology") ? "Laboratory"
+                                          : clean.includes("icu") || clean.includes("critical") ? "Critical Care"
+                                          : clean.includes("emergency") ? "Emergency"
+                                          : clean.includes("reception") || clean.includes("registration") ? "Administrative"
+                                          : "Clinical";
+                                        return (
+                                          <tr key={dName} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                                            <td className="px-4 py-3 text-xs text-gray-400 font-mono">{idx + 1}</td>
+                                            <td className="px-4 py-3">
+                                              <span className="font-semibold text-gray-900 dark:text-white text-sm">{cleanName}</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <span className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">{codePart}</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">{deptType}</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+                                                Active
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---- CLINIC TAB ---- */}
+                          {updateModalTab === "clinic" && (
+                            <div className="space-y-3">
+                              <p className="text-xs text-gray-500 mb-3">
+                                Clinic & OPD consultation room configuration for departments on <strong>{modalFloor.floorName}</strong>.
+                              </p>
+                              {modalFloor.selectedDeptNames.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic text-center py-8">No departments assigned to this floor yet.</p>
+                              ) : (
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-blue-50 dark:bg-blue-900/20 border-b border-gray-200 dark:border-gray-700">
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Department</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Consultation Clinics</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Doctor Offices</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Nurse Stations</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Procedure Rooms</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Waiting Area</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                      {modalFloor.selectedDeptNames.map((dName) => {
+                                        const cfg = getDeptCustomConfig(modalBuilding.id, modalFloor.id, dName);
+                                        const cleanName = dName.split("-").pop()?.trim() || dName;
+                                        return (
+                                          <tr key={dName} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition">
+                                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{cleanName}</td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasClinics ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={20}
+                                                    value={cfg.clinicCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { clinicCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-[10px] text-green-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasDoctorRooms ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={20}
+                                                    value={cfg.doctorRoomCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { doctorRoomCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-[10px] text-green-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasNurseStation ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={10}
+                                                    value={cfg.nurseStationCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { nurseStationCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-[10px] text-green-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasProcedureRoom ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={10}
+                                                    value={cfg.procedureRoomCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { procedureRoomCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-[10px] text-green-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasWaitingArea ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={200}
+                                                    value={cfg.waitingCapacity}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { waitingCapacity: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-[10px] text-green-600 font-medium">✓ cap.</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---- MEDICAL LAB TAB ---- */}
+                          {updateModalTab === "medicallab" && (
+                            <div className="space-y-3">
+                              <p className="text-xs text-gray-500 mb-3">
+                                Pathology & Medical Lab infrastructure for departments on <strong>{modalFloor.floorName}</strong>.
+                              </p>
+                              {modalFloor.selectedDeptNames.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic text-center py-8">No departments assigned to this floor yet.</p>
+                              ) : (
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-emerald-50 dark:bg-emerald-900/20 border-b border-gray-200 dark:border-gray-700">
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Department</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Sample Booths</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Testing Labs</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Report Counters</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">X-Ray Suites</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">MRI Suites</th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">CT Scan</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                      {modalFloor.selectedDeptNames.map((dName) => {
+                                        const cfg = getDeptCustomConfig(modalBuilding.id, modalFloor.id, dName);
+                                        const cleanName = dName.split("-").pop()?.trim() || dName;
+                                        return (
+                                          <tr key={dName} className="hover:bg-emerald-50/30 dark:hover:bg-emerald-900/10 transition">
+                                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{cleanName}</td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasSampleBooth ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={20}
+                                                    value={cfg.sampleBoothCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { sampleBoothCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasTestingLab ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={20}
+                                                    value={cfg.testingLabCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { testingLabCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasReportCounter ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={10}
+                                                    value={cfg.reportCounterCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { reportCounterCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasXray ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={10}
+                                                    value={cfg.xrayCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { xrayCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasMri ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={5}
+                                                    value={cfg.mriCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { mriCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              {cfg.hasCtScan ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    min={1} max={5}
+                                                    value={cfg.ctScanCount}
+                                                    onChange={(e) => updateDeptCustomConfig(modalBuilding.id, modalFloor.id, dName, { ctScanCount: Number(e.target.value) })}
+                                                    className="h-7 w-16 rounded border border-gray-300 dark:border-gray-600 px-2 text-center text-xs dark:bg-gray-800 dark:text-white focus:ring-1 focus:ring-emerald-500"
+                                                  />
+                                                  <span className="text-[10px] text-emerald-600 font-medium">✓ Enabled</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-gray-400 italic">— Disabled</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 flex-shrink-0 bg-gray-50 dark:bg-gray-800/50">
+                          <button
+                            type="button"
+                            onClick={() => setUpdateModalFloor(null)}
+                            className="px-5 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                          >
+                            Close
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUpdateModalFloor(null)}
+                            className="px-5 py-2 rounded-lg bg-brand-500 text-sm font-semibold text-white hover:bg-brand-600 transition shadow-sm"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </section>
             )}
 
@@ -1121,7 +1516,7 @@ export default function InfrastructurePage() {
                   {activeBuilding.floors.map((fl) => (
                     <div key={fl.id} className="space-y-4">
                       <h5 className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
-                        📍 {fl.floorName} (Floor {fl.floorNumber}) — {fl.selectedDeptNames.length} Departments
+                        {fl.floorName} (Floor {fl.floorNumber}) — {fl.selectedDeptNames.length} Departments
                       </h5>
 
                       {fl.selectedDeptNames.length === 0 ? (
@@ -1139,7 +1534,7 @@ export default function InfrastructurePage() {
                               >
                                 <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
                                   <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                    🏢 {cleanName}
+                                    {cleanName}
                                   </span>
                                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                                     {dName}
@@ -1150,7 +1545,7 @@ export default function InfrastructurePage() {
                                 <div className="space-y-3 text-xs">
                                   {/* Consultation & Doctor Rooms */}
                                   <div className="p-2.5 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
-                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">🩺 OPD & Consultation</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">OPD & Consultation</span>
                                     <div className="grid grid-cols-2 gap-2">
                                       <label className="flex items-center gap-1.5 cursor-pointer">
                                         <input
@@ -1238,7 +1633,7 @@ export default function InfrastructurePage() {
 
                                   {/* Diagnostics / Pharmacy / Labs */}
                                   <div className="p-2.5 rounded-lg bg-white border border-gray-200 dark:border-gray-700 dark:bg-gray-900 space-y-2">
-                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">🩻 Diagnostic & Service Infrastructure</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-200 block">Diagnostic & Service Infrastructure</span>
                                     <div className="grid grid-cols-2 gap-2">
                                       <label className="flex items-center gap-1.5 cursor-pointer">
                                         <input
@@ -1372,7 +1767,7 @@ export default function InfrastructurePage() {
                   {activeBuilding.floors.map((fl) => (
                     <div key={fl.id} className="space-y-4">
                       <h5 className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
-                        📍 {fl.floorName} (Floor {fl.floorNumber})
+                        {fl.floorName} (Floor {fl.floorNumber})
                       </h5>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1387,7 +1782,7 @@ export default function InfrastructurePage() {
                             >
                               <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
                                 <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                  🏥 {cleanName} Wards
+                                  {cleanName} Wards
                                 </span>
                               </div>
 
@@ -1400,7 +1795,7 @@ export default function InfrastructurePage() {
                                       checked={cfg.hasGeneralWard}
                                       onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasGeneralWard: e.target.checked })}
                                     />
-                                    <span>🏥 General Ward (Multi-Bed Rooms)</span>
+                                    <span>General Ward (Multi-Bed Rooms)</span>
                                   </label>
 
                                   {cfg.hasGeneralWard && (
@@ -1447,7 +1842,7 @@ export default function InfrastructurePage() {
                                       checked={cfg.hasPrivateWard}
                                       onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasPrivateWard: e.target.checked })}
                                     />
-                                    <span>🛌 Private / Deluxe Suites</span>
+                                    <span>Private / Deluxe Suites</span>
                                   </label>
 
                                   {cfg.hasPrivateWard && (
@@ -1494,7 +1889,7 @@ export default function InfrastructurePage() {
                                       checked={cfg.hasIcuWard}
                                       onChange={(e) => updateDeptCustomConfig(activeBuilding.id, fl.id, dName, { hasIcuWard: e.target.checked })}
                                     />
-                                    <span>🚨 ICU Critical Care Unit</span>
+                                    <span>ICU Critical Care Unit</span>
                                   </label>
 
                                   {cfg.hasIcuWard && (
@@ -1557,7 +1952,7 @@ export default function InfrastructurePage() {
                 <div className="border-b border-gray-100 dark:border-gray-800 pb-3 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-bold text-gray-800 dark:text-white">
-                      {currentStep === 6 ? "Step 6: Review Configured Rooms" : "Step 7: Final Review & Generate Infrastructure"}
+                      {currentStep === 6 ? "Step 6: Review Configured Rooms" : "Step 7: Summary"}
                     </h4>
                     <p className="text-xs text-gray-500">
                       Verify the compiled hierarchy tree before committing to the hospital database.
@@ -1580,7 +1975,7 @@ export default function InfrastructurePage() {
                     <div className="text-xs text-gray-500 font-medium mt-0.5">Department Assignments</div>
                   </div>
                   <div className="rounded-xl border p-4 text-center bg-brand-50/50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-800">
-                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">~18</div>
+                    <div className="text-2xl font-black text-brand-600 dark:text-brand-400">—</div>
                     <div className="text-xs text-gray-500 font-medium mt-0.5">Rooms & Beds</div>
                   </div>
                 </div>
@@ -1594,11 +1989,11 @@ export default function InfrastructurePage() {
                     {buildings.map((b) => (
                       <div key={b.id} className="pl-2 border-l-2 border-brand-500 space-y-1">
                         <div className="font-bold text-gray-900 dark:text-white">
-                          🏢 {b.name} ({b.code}) — {b.floorsCount} Floors
+                          {b.name} ({b.code}) — {b.floorsCount} Floors
                         </div>
                         {b.floors.map((fl) => (
                           <div key={fl.id} className="pl-4 text-gray-700 dark:text-gray-300">
-                            └─ 📍 {fl.floorName}: {fl.selectedDeptNames.length > 0 ? fl.selectedDeptNames.join(", ") : "No Depts assigned"}
+                            └─ {fl.floorName}: {fl.selectedDeptNames.length > 0 ? fl.selectedDeptNames.join(", ") : "No departments assigned"}
                           </div>
                         ))}
                       </div>
@@ -1608,13 +2003,13 @@ export default function InfrastructurePage() {
 
                 {error && (
                   <p className="text-sm font-medium text-red-600 bg-red-50 p-3 rounded-lg border border-red-200 dark:bg-red-950/30 dark:border-red-800">
-                    ⚠️ {error}
+                    {error}
                   </p>
                 )}
 
                 {result && (
                   <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-300 space-y-1">
-                    <h5 className="font-bold text-sm">✅ Infrastructure Generated Successfully!</h5>
+                    <h5 className="font-bold text-sm">Infrastructure Generated Successfully</h5>
                     <p className="text-xs">
                       Created {result.buildings} Buildings, {result.floors} Floors, {result.departments} Department Assignments, {result.wards} Ward Instances, {result.rooms} Rooms, and {result.beds} Beds.
                     </p>
@@ -1622,16 +2017,18 @@ export default function InfrastructurePage() {
                 )}
 
                 {/* Final Submit Button */}
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <button
-                    type="button"
-                    onClick={handleWizardGenerate}
-                    disabled={isGenerating}
-                    className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
-                  >
-                    {isGenerating ? "Building Hospital Infrastructure..." : "🚀 Confirm & Generate Hospital Infrastructure"}
-                  </button>
-                </div>
+                {currentStep === 7 && (
+                  <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <button
+                      type="button"
+                      onClick={handleWizardGenerate}
+                      disabled={isGenerating}
+                      className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                    >
+                      {isGenerating ? "Generating Infrastructure..." : "Confirm & Generate Infrastructure"}
+                    </button>
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -1649,7 +2046,7 @@ export default function InfrastructurePage() {
                 onClick={() => void loadHierarchy()}
                 className="text-xs text-brand-600 hover:underline"
               >
-                🔄 Refresh Tree
+                Refresh
               </button>
             </div>
 
@@ -1668,7 +2065,7 @@ export default function InfrastructurePage() {
                   return (
                     <div key={String(b.id)} className="rounded-xl border border-gray-200 p-4 space-y-3 dark:border-gray-800">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">🏢</span>
+                        <span className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase">BLD</span>
                         <span className="font-bold text-gray-900 dark:text-white">{String(b.building_name)}</span>
                         {Boolean(b.code) && <span className="text-xs font-mono text-gray-500">({String(b.code)})</span>}
                       </div>
@@ -1681,7 +2078,7 @@ export default function InfrastructurePage() {
                           return (
                             <div key={String(f.id)} className="space-y-1">
                               <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                                📍 {String(f.floor_name)}
+                                {String(f.floor_name)}
                               </div>
                               <div className="pl-4 text-xs text-gray-600 dark:text-gray-400">
                                 Departments: {fDepts.length > 0 ? fDepts.map((d) => String(d.department_name)).join(", ") : "None"}
