@@ -29,6 +29,7 @@ type DoctorOption = {
   specialization: string;
   qualification: string;
   experienceYears: string;
+  dateOfBirth: string;
   profilePhoto: string;
   clinic: string;
   phone: string;
@@ -236,6 +237,7 @@ function normalizeDoctor(row: MasterRow): DoctorOption {
     specialization: readText(row, ["specialization"]),
     qualification: readText(row, ["qualification"]),
     experienceYears: readText(row, ["experience_years", "experienceYears"]),
+    dateOfBirth: readText(row, ["date_of_birth", "dateOfBirth", "dob"]),
     profilePhoto: readText(row, ["profile_photo", "profilePhoto", "doctor_image", "photo"]),
     clinic: readText(row, ["clinic"]),
     phone: readText(row, ["mobile", "phoneOffice", "phoneResi"]),
@@ -988,7 +990,8 @@ export default function BookAppointmentPage() {
                   const isActive = doctor.name === selectedDoctor;
                   return (
                     <div key={doctor.name} className={`rounded-2xl border p-5 transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
-                      <div className="flex items-start gap-4">
+                      {/* Profile row */}
+                      <div className="flex items-center gap-4">
                         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-50">
                           {doctor.profilePhoto ? (
                             <img src={doctor.profilePhoto} alt={doctor.name} className="h-full w-full object-cover" />
@@ -996,33 +999,44 @@ export default function BookAppointmentPage() {
                             <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                            {doctor.specialization ? (
-                              <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-600">{doctor.specialization}</span>
-                            ) : null}
-                            {doctor.experienceYears ? (
-                              <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">{doctor.experienceYears} yrs</span>
-                            ) : null}
-                          </div>
-                          {doctor.qualification ? (
-                            <p className="mt-2 text-sm text-gray-500 truncate">{doctor.qualification}</p>
-                          ) : null}
-                        </div>
+                        <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
                       </div>
+
+                      {/* Info pills */}
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                        {doctor.dateOfBirth && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            Age {calculateAge(doctor.dateOfBirth)}
+                          </span>
+                        )}
+                        {doctor.experienceYears && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                            <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            {doctor.experienceYears} yrs exp
+                          </span>
+                        )}
+                        {doctor.department && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400">
+                            <svg className="h-3 w-3 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            {doctor.department}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
                       <div className="mt-4 grid gap-2 sm:grid-cols-2">
                         <button
                           type="button"
                           onClick={() => directBookDoctor(doctor)}
-                          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white"
+                          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition"
                         >
                           Book Appointment
                         </button>
                         <button
                           type="button"
                           onClick={() => void openDoctorPopup(doctor)}
-                          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700"
+                          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
                         >
                           More Details
                         </button>
