@@ -7,6 +7,7 @@ import {
   tableNameFromCardTitle,
 } from "../../../../../lib/master-form-table";
 import { getTenantDB } from "../../../../../lib/db";
+import { getCurrentUserRole } from "../../../../../app/actions/user";
 import type { Pool } from "pg";
 import bcrypt from "bcrypt";
 
@@ -346,17 +347,20 @@ export async function POST(
 
     // If adding a consultant doctor, also create a user account
     if (tableName === "consultant_doctor_master" && values.username) {
-      const username = String(values.username).trim();
-      const role = String(values.type ?? "Doctor").trim();
+      const creatorRole = await getCurrentUserRole(decodedHname);
+      if (creatorRole?.toLowerCase() === "admin") {
+        const username = String(values.username).trim();
+        const role = String(values.type ?? "Doctor").trim();
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(username, salt);
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(username, salt);
 
-      await pool.query(`
-        INSERT INTO users (username, password, role)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (username) DO NOTHING
-      `, [username, hashedPassword, role]);
+        await pool.query(`
+          INSERT INTO users (username, password, role)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (username) DO NOTHING
+        `, [username, hashedPassword, role]);
+      }
     }
 
     // Update appointment status to 'Pharmacy' if a dispensing record is created
@@ -455,6 +459,25 @@ export async function PUT(
 
     if (updateResult.rowCount === 0) {
       return NextResponse.json({ error: "Record not found." }, { status: 404 });
+    }
+
+    // If updating a consultant doctor, also ensure a user account exists/is updated
+    if (tableName === "consultant_doctor_master" && values.username) {
+      const creatorRole = await getCurrentUserRole(decodedHname);
+      if (creatorRole?.toLowerCase() === "admin") {
+        const username = String(values.username).trim();
+        const role = String(values.type ?? "Doctor").trim();
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(username, salt);
+
+        await pool.query(`
+          INSERT INTO users (username, password, role)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (username) DO UPDATE
+          SET role = EXCLUDED.role
+        `, [username, hashedPassword, role]);
+      }
     }
 
     return NextResponse.json({

@@ -39,25 +39,25 @@ export default function ManageUsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function loadUsers(active = true) {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/${encodeURIComponent(hname)}/manage-users`, {
-          cache: "no-store",
-        });
-        const data = (await response.json()) as { rows?: UserRow[]; error?: string };
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/${encodeURIComponent(hname)}/manage-users`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { rows?: UserRow[]; error?: string };
 
-        if (!response.ok) {
-          throw new Error(data.error ?? "Failed to load users.");
-        }
-
-        if (active) setUsers(data.rows ?? []);
-      } catch (error) {
-        if (active) {
-          setSubmitError(error instanceof Error ? error.message : "Failed to load users.");
-        }
-      } finally {
-        if (active) setIsLoading(false);
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to load users.");
       }
+
+      if (active) setUsers(data.rows ?? []);
+    } catch (error) {
+      if (active) {
+        setSubmitError(error instanceof Error ? error.message : "Failed to load users.");
+      }
+    } finally {
+      if (active) setIsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -262,9 +262,9 @@ export default function ManageUsersPage() {
                     <thead className="bg-transparent">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created At</th>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">User Name</th>
                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Role</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created At</th>
                         <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Actions</th>
                       </tr>
                     </thead>
@@ -272,9 +272,9 @@ export default function ManageUsersPage() {
                       {users.map((user) => (
                         <tr key={user.id}>
                           <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{user.id}</td>
-                          <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{user.created_at ?? "-"}</td>
                           <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{user.username}</td>
                           <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{user.role || "-"}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{user.created_at ?? "-"}</td>
                           <td className="px-4 py-4">
                             <div className="flex items-center justify-end gap-2">
                               <button

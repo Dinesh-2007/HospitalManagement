@@ -5,7 +5,7 @@ import { usePathname, useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NavigationSection } from "../lib/navigation";
 import { navigation } from "../lib/navigation";
-import { getCurrentUser } from "../app/actions/user";
+import { getCurrentUser, getCurrentUserRole } from "../app/actions/user";
 import {
   BoxCubeIcon,
   BoxIcon,
@@ -115,9 +115,8 @@ function SidebarItem({
       <li>
         <Link
           href={localHref}
-          className={`menu-item group ${isActive ? "menu-item-active" : "menu-item-inactive"} ${
-            isCompact ? "lg:justify-center" : "lg:justify-start"
-          }`}
+          className={`menu-item group ${isActive ? "menu-item-active" : "menu-item-inactive"} ${isCompact ? "lg:justify-center" : "lg:justify-start"
+            }`}
         >
           {icon ? (
             <span
@@ -137,9 +136,8 @@ function SidebarItem({
       <button
         type="button"
         onClick={() => onToggle(nodeKey)}
-        className={`menu-item group w-full ${isOpen ? "menu-item-active" : "menu-item-inactive"} ${
-          isCompact ? "lg:justify-center" : "lg:justify-start"
-        }`}
+        className={`menu-item group w-full ${isOpen ? "menu-item-active" : "menu-item-inactive"} ${isCompact ? "lg:justify-center" : "lg:justify-start"
+          }`}
       >
         {icon ? (
           <span className={`${isOpen ? "menu-item-icon-active" : "menu-item-icon-inactive"}`}>
@@ -149,9 +147,8 @@ function SidebarItem({
         {!isCompact ? <span className="truncate">{node.title}</span> : null}
         {!isCompact ? (
           <ChevronDownIcon
-            className={`ml-auto h-5 w-5 transition-transform duration-200 ${
-              isOpen ? "rotate-180 text-brand-500" : "text-gray-500"
-            }`}
+            className={`ml-auto h-5 w-5 transition-transform duration-200 ${isOpen ? "rotate-180 text-brand-500" : "text-gray-500"
+              }`}
           />
         ) : null}
       </button>
@@ -192,24 +189,26 @@ export function Sidebar() {
       : pathname;
   const { isExpanded, isHovered, isMobileOpen, setIsHovered } = useSidebar();
   const isCompact = !isExpanded && !isHovered && !isMobileOpen;
-  
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  
+
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+
   useEffect(() => {
     if (hname !== "HSMS") {
-      getCurrentUser(hname).then(setCurrentUser).catch(console.error);
+      getCurrentUserRole(hname)
+        .then((role) => setCurrentUserRole(role ? role.toLowerCase() : null))
+        .catch(console.error);
     }
   }, [hname]);
 
   const filteredNavigation = useMemo(() => {
     return navigation.filter(nav => {
       // Hide Manage Users for non-admin
-      if (nav.title === "Manage Users" && currentUser !== "admin") {
+      if (nav.title === "Manage Users" && currentUserRole !== "admin") {
         return false;
       }
       return true;
     });
-  }, [currentUser]);
+  }, [currentUserRole]);
 
   const initialOpen = useMemo(
     () => collectOpenKeys(filteredNavigation, normalizedPathname),
@@ -244,9 +243,8 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`fixed top-0 left-0 z-50 flex h-screen flex-col border-r border-gray-200 bg-white px-4 text-gray-900 transition-all duration-300 ease-in-out dark:border-gray-800 dark:bg-gray-900 ${
-        isExpanded || isMobileOpen || isHovered ? "w-[290px]" : "w-[90px]"
-      } ${isMobileOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+      className={`fixed top-0 left-0 z-50 flex h-screen flex-col border-r border-gray-200 bg-white px-4 text-gray-900 transition-all duration-300 ease-in-out dark:border-gray-800 dark:bg-gray-900 ${isExpanded || isMobileOpen || isHovered ? "w-[290px]" : "w-[90px]"
+        } ${isMobileOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       onMouseEnter={() => {
         if (!isExpanded) {
           setIsHovered(true);
@@ -281,9 +279,8 @@ export function Sidebar() {
           <div className="flex flex-col gap-6">
             <div>
               <h2
-                className={`mb-4 flex text-xs leading-5 uppercase text-gray-400 ${
-                  isCompact ? "lg:justify-center" : "justify-start"
-                }`}
+                className={`mb-4 flex text-xs leading-5 uppercase text-gray-400 ${isCompact ? "lg:justify-center" : "justify-start"
+                  }`}
               >
                 {isCompact ? "..." : "Menu"}
               </h2>
