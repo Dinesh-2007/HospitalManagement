@@ -442,10 +442,13 @@ async function createBed(
     wardName?: string;
     roomName: string;
     ward?: string;
+    description?: string;
   }
 ) {
-  const bedName = generateBedName(data.bedIndex);
-  const code = `${data.roomName.replace(/\s+/g, "")}B${data.bedIndex + 1}`;
+  const bedName = data.description || generateBedName(data.bedIndex);
+  const code = data.description
+    ? `${data.roomName.replace(/\s+/g, "")}-B${data.description.replace(/\s+/g, "")}`
+    : `${data.roomName.replace(/\s+/g, "")}-B${data.bedIndex + 1}`;
   const result = await pool.query(
     `INSERT INTO ${quoteIdentifier(TABLE_NAMES.BED)}
        (code, description, bed_number, bed_type, rate, charge, status, ward,
@@ -1111,8 +1114,9 @@ export async function POST(
               const rConfig = rooms[rIndex];
               const rName = String(rConfig.name || `Room ${rIndex + 1}`).trim();
               const rType = String(rConfig.type || "Standard").trim();
-              const rPurpose = String(rConfig.purpose || "General").trim();
+              const rPurpose = String(rConfig.purpose || "Patient Room").trim();
               const capacity = Number(rConfig.capacity) || 1;
+              const rate = Number(rConfig.rate) || 0;
               const bedCount = Number(rConfig.bedCount) || 0;
               const bedType = String(rConfig.bedType || "Standard").trim();
               const wardType = rConfig.wardType ? String(rConfig.wardType).trim() : undefined;
@@ -1146,7 +1150,7 @@ export async function POST(
                 roomType: rType,
                 roomPurpose: rPurpose,
                 capacity: capacity,
-                rate: 0,
+                rate: rate,
                 buildingName: building.building_name,
                 floorName: floor.floor_name,
                 departmentName: dName,
@@ -1155,7 +1159,25 @@ export async function POST(
               });
               results.rooms++;
 
-              if (bedCount > 0) {
+              if (Array.isArray(rConfig.beds) && rConfig.beds.length > 0) {
+                for (let bedIdx = 0; bedIdx < rConfig.beds.length; bedIdx++) {
+                  const bedConf = rConfig.beds[bedIdx];
+                  await createBed(pool, {
+                    roomId: Number(room.id),
+                    bedIndex: bedIdx,
+                    bedType: bedConf.bedType || bedType,
+                    charge: Number(bedConf.charge) || 0,
+                    buildingName: building.building_name,
+                    floorName: floor.floor_name,
+                    departmentName: dName,
+                    wardName: wardNameStr,
+                    roomName: rName,
+                    ward: wardNameStr,
+                    description: bedConf.bedNumber || bedConf.description,
+                  });
+                  results.beds++;
+                }
+              } else if (bedCount > 0) {
                 for (let bedIdx = 0; bedIdx < bedCount; bedIdx++) {
                   await createBed(pool, {
                     roomId: Number(room.id),
