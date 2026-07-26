@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PageLayout } from "../../../../components/page-layout";
 
 type HierarchyData = {
@@ -152,6 +152,7 @@ export type GeneratorResult = {
 
 export default function InfrastructurePage() {
   const params = useParams();
+  const router = useRouter();
   const hname = params?.Hname as string;
 
   const [activeTab, setActiveTab] = useState<"generator" | "hierarchy">("generator");
@@ -160,7 +161,30 @@ export default function InfrastructurePage() {
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   // Buildings State
-  const [buildings, setBuildings] = useState<BuildingConfig[]>([]);
+  const [buildings, setBuildings] = useState<BuildingConfig[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("wizard_buildings");
+      if (saved !== null) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        } catch { /* ignore */ }
+      }
+    }
+    const ts = Date.now();
+    return [
+      {
+        id: `bld-${ts}`,
+        name: "Building A",
+        code: "BLD-A",
+        description: "",
+        floorsCount: 1,
+        floors: [
+          { id: `fl-0-${ts}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: [], departments: [] },
+        ],
+      },
+    ];
+  });
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
   const [selectedFloorId, setSelectedFloorId] = useState<string>("");
 
@@ -170,6 +194,31 @@ export default function InfrastructurePage() {
 
   const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
   const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
+
+  // Sync buildings to sessionStorage & handle focus re-hydration
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("wizard_buildings", JSON.stringify(buildings));
+    }
+  }, [buildings]);
+
+  useEffect(() => {
+    const syncSessionState = () => {
+      if (typeof window === "undefined") return;
+      const saved = sessionStorage.getItem("wizard_buildings");
+      if (saved !== null) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setBuildings(parsed);
+          }
+        } catch { /* ignore */ }
+      }
+    };
+
+    window.addEventListener("focus", syncSessionState);
+    return () => window.removeEventListener("focus", syncSessionState);
+  }, []);
 
   // Per-department custom parameter overrides: Key = `${buildingId}_${floorId}_${deptName}`
   const [deptCustomConfigs, setDeptCustomConfigs] = useState<Record<string, DeptCustomConfig>>({});
@@ -322,11 +371,9 @@ export default function InfrastructurePage() {
       name: `Building ${letter}`,
       code: `BLD-${letter}`,
       description: "",
-      floorsCount: 3,
+      floorsCount: 1,
       floors: [
         { id: `fl-0-${ts}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: [], departments: [] },
-        { id: `fl-1-${ts + 1}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: [], departments: [] },
-        { id: `fl-2-${ts + 2}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: [], departments: [] },
       ],
     };
     setBuildings((prev) => [...prev, newBld]);
@@ -356,29 +403,14 @@ export default function InfrastructurePage() {
   };
 
   const handleDeleteBuilding = (id: string) => {
-    const remaining = buildings.filter((b) => b.id !== id);
-    if (remaining.length === 0) {
-      const ts = Date.now();
-      const freshDefault: BuildingConfig = {
-        id: `bld-${ts}`,
-        name: "Building A",
-        code: "BLD-A",
-        description: "",
-        floorsCount: 3,
-        floors: [
-          { id: `fl-0-${ts}`, floorNumber: 0, floorName: "Ground Floor", selectedDeptNames: [], departments: [] },
-          { id: `fl-1-${ts + 1}`, floorNumber: 1, floorName: "Floor 1", selectedDeptNames: [], departments: [] },
-          { id: `fl-2-${ts + 2}`, floorNumber: 2, floorName: "Floor 2", selectedDeptNames: [], departments: [] },
-        ],
-      };
-      setBuildings([freshDefault]);
-      setSelectedBuildingId(freshDefault.id);
-    } else {
-      setBuildings(remaining);
-      if (selectedBuildingId === id) {
-        setSelectedBuildingId(remaining[0].id);
-      }
-    }
+    const target = buildings.find((b) => b.id === id);
+    const bName = target?.name || "Building";
+    const bCode = target?.code || "";
+    router.push(
+      `/${hname}/bed-management/infrastructure/delete-building?id=${encodeURIComponent(
+        id
+      )}&name=${encodeURIComponent(bName)}&code=${encodeURIComponent(bCode)}`
+    );
   };
 
   // Step Validation & Progression Rules
@@ -2064,10 +2096,27 @@ export default function InfrastructurePage() {
                   );
                   return (
                     <div key={String(b.id)} className="rounded-xl border border-gray-200 p-4 space-y-3 dark:border-gray-800">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase">BLD</span>
-                        <span className="font-bold text-gray-900 dark:text-white">{String(b.building_name)}</span>
-                        {Boolean(b.code) && <span className="text-xs font-mono text-gray-500">({String(b.code)})</span>}
+                      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase">BLD</span>
+                          <span className="font-bold text-gray-900 dark:text-white">{String(b.building_name)}</span>
+                          {Boolean(b.code) && <span className="text-xs font-mono text-gray-500">({String(b.code)})</span>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(
+                              `/${hname}/bed-management/infrastructure/delete-building?id=${encodeURIComponent(
+                                String(b.id)
+                              )}&name=${encodeURIComponent(String(b.building_name))}&code=${encodeURIComponent(
+                                String(b.code || "")
+                              )}&isDb=true`
+                            )
+                          }
+                          className="text-xs text-red-600 font-medium hover:underline"
+                        >
+                          Delete Building
+                        </button>
                       </div>
 
                       <div className="pl-4 space-y-2 border-l-2 border-gray-200 dark:border-gray-700">
