@@ -212,7 +212,7 @@ export default function ConsultantDoctorPage() {
         id: "clinic",
         label: "Clinic",
         type: "select",
-        options: clinicOptions.length > 0 ? clinicOptions : ["OPD", "Cardiology", "Orthopedics", "Neurology"],
+        options: clinicOptions,
       },
       {
         id: "appointmentScheduleLimit",
