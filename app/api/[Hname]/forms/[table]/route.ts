@@ -345,7 +345,7 @@ export async function POST(
       insertValues,
     );
 
-    // If adding a consultant doctor, also create a user account
+    // If adding a consultant doctor, also create a user account and profile
     if (tableName === "consultant_doctor_master" && values.username) {
       const creatorRole = await getCurrentUserRole(decodedHname);
       if (creatorRole?.toLowerCase() === "admin") {
@@ -360,6 +360,114 @@ export async function POST(
           VALUES ($1, $2, $3)
           ON CONFLICT (username) DO NOTHING
         `, [username, hashedPassword, role]);
+
+        // Keep doctor_profile in sync
+        const row = insertResult.rows[0];
+        if (row) {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS doctor_profile (
+              id BIGSERIAL PRIMARY KEY,
+              doctor_id TEXT,
+              doctor_code TEXT,
+              first_name TEXT,
+              last_name TEXT,
+              gender TEXT,
+              date_of_birth DATE,
+              blood_group TEXT,
+              marital_status TEXT,
+              nationality TEXT,
+              profile_photo TEXT,
+              mobile_number TEXT,
+              alternate_mobile_number TEXT,
+              email_id TEXT,
+              personal_email TEXT,
+              address TEXT,
+              country TEXT,
+              state TEXT,
+              city TEXT,
+              pincode TEXT,
+              registration_number TEXT,
+              medical_council_name TEXT,
+              registration_date DATE,
+              license_expiry_date DATE,
+              mbbs_college_name TEXT,
+              mbbs_university TEXT,
+              mbbs_graduation_year TEXT,
+              higher_qualification TEXT,
+              higher_qualification_institution TEXT,
+              higher_qualification_completion_year TEXT,
+              specialization TEXT,
+              department TEXT,
+              designation TEXT,
+              license_number TEXT,
+              experience_years TEXT,
+              employee_type TEXT,
+              shift TEXT,
+              bank_name TEXT,
+              account_holder_name TEXT,
+              account_number TEXT,
+              ifsc_code TEXT,
+              pan_number TEXT,
+              aadhaar_number TEXT,
+              documents TEXT,
+              document_name TEXT,
+              document_attachment TEXT,
+              emergency_contacts TEXT,
+              work_experiences TEXT,
+              certifications TEXT,
+              username TEXT UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+          `);
+
+          await pool.query(`
+            INSERT INTO doctor_profile (
+              username, doctor_code, first_name, mobile_number, alternate_mobile_number,
+              email_id, address, country, state, city, pincode, registration_number,
+              specialization, department, designation, account_number, ifsc_code, bank_name
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ON CONFLICT (username) DO UPDATE SET
+              doctor_code = EXCLUDED.doctor_code,
+              first_name = EXCLUDED.first_name,
+              mobile_number = EXCLUDED.mobile_number,
+              alternate_mobile_number = EXCLUDED.alternate_mobile_number,
+              email_id = EXCLUDED.email_id,
+              address = EXCLUDED.address,
+              country = EXCLUDED.country,
+              state = EXCLUDED.state,
+              city = EXCLUDED.city,
+              pincode = EXCLUDED.pincode,
+              registration_number = EXCLUDED.registration_number,
+              specialization = EXCLUDED.specialization,
+              department = EXCLUDED.department,
+              designation = EXCLUDED.designation,
+              account_number = EXCLUDED.account_number,
+              ifsc_code = EXCLUDED.ifsc_code,
+              bank_name = EXCLUDED.bank_name,
+              updated_at = NOW()
+          `, [
+            username,
+            String(row.code ?? "").trim(),
+            String(row.doctor_consultant_name ?? row.doctorConsultantName ?? row.name ?? "").trim(),
+            String(row.mobile ?? "").trim(),
+            String(row.phone_office ?? row.phoneOffice ?? row.phone_resi ?? row.phoneResi ?? "").trim(),
+            String(row.email ?? "").trim(),
+            String(row.address ?? "").trim(),
+            String(row.country ?? "").trim(),
+            String(row.state ?? "").trim(),
+            String(row.city ?? "").trim(),
+            String(row.zip_code ?? row.zipCode ?? "").trim(),
+            String(row.registration_number ?? row.registrationNumber ?? "").trim(),
+            String(row.specialization ?? "").trim(),
+            String(row.clinic ?? row.department ?? "").trim(),
+            String(row.type ?? "").trim(),
+            String(row.bank_account_number ?? row.bankAccountNumber ?? "").trim(),
+            String(row.bank_branch_code ?? row.bankBranchCode ?? "").trim(),
+            String(row.bank_branch ?? row.bankBranch ?? "").trim()
+          ]);
+        }
       }
     }
 
@@ -477,6 +585,114 @@ export async function PUT(
           ON CONFLICT (username) DO UPDATE
           SET role = EXCLUDED.role
         `, [username, hashedPassword, role]);
+
+        // Keep doctor_profile in sync
+        const row = updateResult.rows[0];
+        if (row) {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS doctor_profile (
+              id BIGSERIAL PRIMARY KEY,
+              doctor_id TEXT,
+              doctor_code TEXT,
+              first_name TEXT,
+              last_name TEXT,
+              gender TEXT,
+              date_of_birth DATE,
+              blood_group TEXT,
+              marital_status TEXT,
+              nationality TEXT,
+              profile_photo TEXT,
+              mobile_number TEXT,
+              alternate_mobile_number TEXT,
+              email_id TEXT,
+              personal_email TEXT,
+              address TEXT,
+              country TEXT,
+              state TEXT,
+              city TEXT,
+              pincode TEXT,
+              registration_number TEXT,
+              medical_council_name TEXT,
+              registration_date DATE,
+              license_expiry_date DATE,
+              mbbs_college_name TEXT,
+              mbbs_university TEXT,
+              mbbs_graduation_year TEXT,
+              higher_qualification TEXT,
+              higher_qualification_institution TEXT,
+              higher_qualification_completion_year TEXT,
+              specialization TEXT,
+              department TEXT,
+              designation TEXT,
+              license_number TEXT,
+              experience_years TEXT,
+              employee_type TEXT,
+              shift TEXT,
+              bank_name TEXT,
+              account_holder_name TEXT,
+              account_number TEXT,
+              ifsc_code TEXT,
+              pan_number TEXT,
+              aadhaar_number TEXT,
+              documents TEXT,
+              document_name TEXT,
+              document_attachment TEXT,
+              emergency_contacts TEXT,
+              work_experiences TEXT,
+              certifications TEXT,
+              username TEXT UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+          `);
+
+          await pool.query(`
+            INSERT INTO doctor_profile (
+              username, doctor_code, first_name, mobile_number, alternate_mobile_number,
+              email_id, address, country, state, city, pincode, registration_number,
+              specialization, department, designation, account_number, ifsc_code, bank_name
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ON CONFLICT (username) DO UPDATE SET
+              doctor_code = EXCLUDED.doctor_code,
+              first_name = EXCLUDED.first_name,
+              mobile_number = EXCLUDED.mobile_number,
+              alternate_mobile_number = EXCLUDED.alternate_mobile_number,
+              email_id = EXCLUDED.email_id,
+              address = EXCLUDED.address,
+              country = EXCLUDED.country,
+              state = EXCLUDED.state,
+              city = EXCLUDED.city,
+              pincode = EXCLUDED.pincode,
+              registration_number = EXCLUDED.registration_number,
+              specialization = EXCLUDED.specialization,
+              department = EXCLUDED.department,
+              designation = EXCLUDED.designation,
+              account_number = EXCLUDED.account_number,
+              ifsc_code = EXCLUDED.ifsc_code,
+              bank_name = EXCLUDED.bank_name,
+              updated_at = NOW()
+          `, [
+            username,
+            String(row.code ?? "").trim(),
+            String(row.doctor_consultant_name ?? row.doctorConsultantName ?? row.name ?? "").trim(),
+            String(row.mobile ?? "").trim(),
+            String(row.phone_office ?? row.phoneOffice ?? row.phone_resi ?? row.phoneResi ?? "").trim(),
+            String(row.email ?? "").trim(),
+            String(row.address ?? "").trim(),
+            String(row.country ?? "").trim(),
+            String(row.state ?? "").trim(),
+            String(row.city ?? "").trim(),
+            String(row.zip_code ?? row.zipCode ?? "").trim(),
+            String(row.registration_number ?? row.registrationNumber ?? "").trim(),
+            String(row.specialization ?? "").trim(),
+            String(row.clinic ?? row.department ?? "").trim(),
+            String(row.type ?? "").trim(),
+            String(row.bank_account_number ?? row.bankAccountNumber ?? "").trim(),
+            String(row.bank_branch_code ?? row.bankBranchCode ?? "").trim(),
+            String(row.bank_branch ?? row.bankBranch ?? "").trim()
+          ]);
+        }
       }
     }
 

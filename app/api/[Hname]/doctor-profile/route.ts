@@ -129,19 +129,68 @@ export async function GET(
 
     let profile = rows.rows[0] ?? null;
 
-    // Fallback to consultant_doctor_master if no profile found for username
-    if (!profile && username) {
-      const masterRows = await pool.query(
-        `SELECT * FROM consultant_doctor_master WHERE username = $1 LIMIT 1`,
-        [username]
-      );
-      if (masterRows.rows[0]) {
-        const master = masterRows.rows[0];
+    // Fallback to consultant_doctor_master if no profile found
+    if (!profile) {
+      let masterRow = null;
+      if (username) {
+        const masterRows = await pool.query(
+          `SELECT * FROM consultant_doctor_master WHERE username = $1 LIMIT 1`,
+          [username]
+        );
+        masterRow = masterRows.rows[0] ?? null;
+      }
+      if (!masterRow && doctorCode) {
+        const masterRows = await pool.query(
+          `SELECT * FROM consultant_doctor_master WHERE code = $1 LIMIT 1`,
+          [doctorCode]
+        );
+        masterRow = masterRows.rows[0] ?? null;
+      }
+      if (!masterRow && doctorName) {
+        const masterRows = await pool.query(
+          `
+          SELECT * FROM consultant_doctor_master 
+          WHERE lower(trim(doctor_consultant_name)) = lower(trim($1))
+             OR lower(trim(doctor_consultant_name)) LIKE lower(trim($1)) || '%'
+             OR lower(trim(username)) = lower(trim($1))
+             OR lower(trim(username)) LIKE lower(trim($1)) || '%'
+             OR lower(code) = lower(trim($1))
+          LIMIT 1
+          `,
+          [doctorName]
+        );
+        masterRow = masterRows.rows[0] ?? null;
+      }
+      if (!masterRow && doctorId) {
+        const masterRows = await pool.query(
+          `SELECT * FROM consultant_doctor_master WHERE code = $1 OR username = $1 LIMIT 1`,
+          [doctorId]
+        );
+        masterRow = masterRows.rows[0] ?? null;
+      }
+
+      if (masterRow) {
         profile = {
-          username: master.username,
-          first_name: master.doctor_consultant_name ?? master.doctorConsultantName ?? master.name,
+          doctor_id: masterRow.username || masterRow.code || "",
+          doctor_code: masterRow.code || "",
+          first_name: masterRow.doctor_consultant_name ?? masterRow.doctorConsultantName ?? masterRow.name ?? "",
           last_name: "",
-          department: master.clinic ?? master.department,
+          mobile_number: masterRow.mobile || "",
+          alternate_mobile_number: masterRow.phone_office ?? masterRow.phone_resi ?? "",
+          email_id: masterRow.email || "",
+          address: masterRow.address || "",
+          country: masterRow.country || "",
+          state: masterRow.state || "",
+          city: masterRow.city || "",
+          pincode: masterRow.zip_code || "",
+          registration_number: masterRow.registration_number || "",
+          specialization: masterRow.specialization || "",
+          department: masterRow.clinic ?? masterRow.department ?? "",
+          designation: masterRow.type || "",
+          account_number: masterRow.bank_account_number || "",
+          ifsc_code: masterRow.bank_branch_code || "",
+          bank_name: masterRow.bank_branch || "",
+          username: masterRow.username || "",
         };
       }
     }
