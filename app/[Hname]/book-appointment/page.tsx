@@ -922,8 +922,9 @@ export default function BookAppointmentPage() {
                                 width: cardWidth > 0 ? `${cardWidth}px` : "calc(33.333% - 11px)",
                                 flexShrink: 0,
                               }}
-                              className="flex flex-col items-center justify-center p-4 rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer"
+                              className="flex flex-col items-center p-4 rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer"
                             >
+                              {/* Photo */}
                               <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
                                 {doctor.profilePhoto ? (
                                   <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
@@ -933,10 +934,32 @@ export default function BookAppointmentPage() {
                                   </svg>
                                 )}
                               </div>
-                              <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{doctor.name}</span>
+                              {/* Name */}
+                              <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{withSalutation(doctor.name, doctor.gender)}</span>
                               {doctor.department && (
-                                <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-1">{doctor.department}</span>
+                                <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-0.5">{doctor.department}</span>
                               )}
+                              {/* Info pills: Age, Experience, City */}
+                              <div className="mt-3 flex flex-wrap justify-center gap-1.5 text-xs">
+                                {doctor.dateOfBirth && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-gray-700">
+                                    <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                    {calculateAge(doctor.dateOfBirth)}
+                                  </span>
+                                )}
+                                {doctor.experienceYears && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                                    <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    {doctor.experienceYears} yrs
+                                  </span>
+                                )}
+                                {doctor.clinic && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                                    <svg className="h-3 w-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    {doctor.clinic}
+                                  </span>
+                                )}
+                              </div>
                             </button>
                           ))}
                         </div>
