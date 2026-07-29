@@ -90,7 +90,7 @@ export default function BedAllocationPage() {
 
   // Filter departments by floor
   useEffect(() => {
-    const data = (window as unknown as Record<string, unknown>).__infraData as { floorDepartments?: Row[]; wardInstances?: Row[]; rooms?: Row[]; beds?: Row[] } | undefined;
+    const data = (window as unknown as Record<string, unknown>).__infraData as { floorDepartments?: Row[]; wardInstances?: Row[]; wardMasters?: Row[]; rooms?: Row[]; beds?: Row[] } | undefined;
     if (!data) return;
 
     if (selectedFloor) {
@@ -113,20 +113,35 @@ export default function BedAllocationPage() {
     setBeds([]);
   }, [selectedFloor]);
 
-  // Filter wards by department
+  // Filter wards — combining ward_instance + ward_master (fallback for sites using Masters forms)
   useEffect(() => {
-    const data = (window as unknown as Record<string, unknown>).__infraData as { wardInstances?: Row[]; rooms?: Row[]; beds?: Row[] } | undefined;
+    const data = (window as unknown as Record<string, unknown>).__infraData as { wardInstances?: Row[]; wardMasters?: Row[]; rooms?: Row[]; beds?: Row[] } | undefined;
     if (!data || !selectedDepartment) { setWards([]); setRooms([]); setBeds([]); return; }
 
-    const filtered = (data.wardInstances ?? []).filter(
-      (w) => String(w.department_name) === selectedDepartment &&
-             (!selectedFloor || String(w.floor_name) === floors.find((f) => String(f.id) === selectedFloor)?.floor_name)
-    );
     const wardMap = new Map<string, Row>();
-    filtered.forEach((w) => {
-      const type = String(w.ward_type ?? "");
-      if (type && !wardMap.has(type)) wardMap.set(type, w);
+    const selFloorName = selectedFloor ? String(floors.find((f) => String(f.id) === selectedFloor)?.floor_name ?? "") : "";
+
+    // 1. Ward instances (created via Infrastructure Builder)
+    (data.wardInstances ?? []).forEach((w) => {
+      const wDept = String(w.department_name ?? "");
+      const wFloor = String(w.floor_name ?? "");
+      if (wDept.toLowerCase() === selectedDepartment.toLowerCase() &&
+          (!selFloorName || wFloor.toLowerCase() === selFloorName.toLowerCase())) {
+        const type = String(w.ward_type ?? "");
+        if (type) wardMap.set(type.toLowerCase(), w);
+      }
     });
+
+    // 2. Fallback: ward_master (added via Masters form — no building/floor/dept linkage)
+    if (wardMap.size === 0) {
+      (data.wardMasters ?? []).forEach((w) => {
+        const desc = String(w.description ?? w.code ?? "");
+        if (desc && !wardMap.has(desc.toLowerCase())) {
+          wardMap.set(desc.toLowerCase(), { ward_type: desc, _from_master: true });
+        }
+      });
+    }
+
     setWards(Array.from(wardMap.values()));
     setSelectedWard("");
     setSelectedRoom("");
@@ -135,16 +150,41 @@ export default function BedAllocationPage() {
     setBeds([]);
   }, [selectedDepartment, selectedFloor, floors]);
 
-  // Filter rooms by ward
+  // Derive room list from beds when room_master is empty (beds added via Bed Master form)
   useEffect(() => {
     const data = (window as unknown as Record<string, unknown>).__infraData as { rooms?: Row[]; beds?: Row[] } | undefined;
     if (!data || !selectedWard) { setRooms([]); setBeds([]); return; }
 
-    const filtered = (data.rooms ?? []).filter(
-      (r) => String(r.ward_name) === selectedWard &&
-             String(r.department_name) === selectedDepartment
+    // First try room_master rows
+    const fromRoomMaster = (data.rooms ?? []).filter(
+      (r) => String(r.ward_name).toLowerCase() === selectedWard.toLowerCase() &&
+             String(r.department_name).toLowerCase() === selectedDepartment.toLowerCase()
     );
-    setRooms(filtered);
+
+    if (fromRoomMaster.length > 0) {
+      setRooms(fromRoomMaster);
+    } else {
+      // Fallback: derive room names from bed_master's room_name field
+      const roomNameSet = new Set<string>();
+      const syntheticRooms: Row[] = [];
+      (data.beds ?? []).forEach((b) => {
+        const bWard = String(b.ward_name ?? b.ward ?? "");
+        if (bWard.toLowerCase() === selectedWard.toLowerCase()) {
+          const rName = String(b.room_name ?? "");
+          if (rName && !roomNameSet.has(rName.toLowerCase())) {
+            roomNameSet.add(rName.toLowerCase());
+            syntheticRooms.push({ id: rName, code: rName, description: rName, _synthetic: true });
+          }
+        }
+      });
+
+      // If no room_name either, create a single virtual room for the ward
+      if (syntheticRooms.length === 0) {
+        syntheticRooms.push({ id: `__ward__${selectedWard}`, code: selectedWard, description: selectedWard, _synthetic: true });
+      }
+      setRooms(syntheticRooms);
+    }
+
     setSelectedRoom("");
     setSelectedBed(null);
     setBeds([]);
@@ -152,12 +192,29 @@ export default function BedAllocationPage() {
 
   // Filter beds by room
   useEffect(() => {
-    const data = (window as unknown as Record<string, unknown>).__infraData as { beds?: Row[] } | undefined;
+    const data = (window as unknown as Record<string, unknown>).__infraData as { rooms?: Row[]; beds?: Row[] } | undefined;
     if (!data || !selectedRoom) { setBeds([]); return; }
 
-    const filtered = (data.beds ?? []).filter(
-      (b) => String(b.room_id) === selectedRoom && String(b.status || "Available") === "Available"
-    );
+    const roomRow = (data.rooms ?? []).find((r) => String(r.id) === selectedRoom);
+    const isVirtualWard = selectedRoom.startsWith("__ward__");
+    const virtualWardName = isVirtualWard ? selectedRoom.replace("__ward__", "") : "";
+    const roomDesc = roomRow ? String(roomRow.description ?? roomRow.code ?? "") : selectedRoom;
+
+    const filtered = (data.beds ?? []).filter((b) => {
+      const bWard = String(b.ward_name ?? b.ward ?? "");
+      const bRoom = String(b.room_name ?? "");
+      const bRoomId = String(b.room_id ?? "");
+
+      if (isVirtualWard) {
+        // Match by ward when no room_name was set
+        return bWard.toLowerCase() === virtualWardName.toLowerCase() &&
+               String(b.status || "Available") === "Available";
+      }
+      return (
+        bRoomId === selectedRoom ||
+        bRoom.toLowerCase() === roomDesc.toLowerCase()
+      ) && String(b.status || "Available") === "Available";
+    });
     setBeds(filtered);
     setSelectedBed(null);
   }, [selectedRoom]);

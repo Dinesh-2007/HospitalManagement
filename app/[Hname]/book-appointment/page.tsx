@@ -368,12 +368,64 @@ function calculateAge(dateOfBirth: string) {
   return `${age} yrs`;
 }
 
+function getExperienceYears(doctor: any) {
+  // If experience_years has a numeric string/value, return that formatted as years
+  const expVal = doctor.experienceYears ?? "";
+  if (expVal && !isNaN(Number(expVal)) && Number(expVal) > 0) {
+    return `${Number(expVal)} years`;
+  }
+
+  // Calculate from registrationDate
+  const regDateStr = doctor.registrationDate ?? "";
+  if (regDateStr) {
+    const regDate = new Date(regDateStr);
+    if (!isNaN(regDate.getTime())) {
+      const diffMs = Date.now() - regDate.getTime();
+      const diffYears = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      if (diffYears > 0) {
+        return `${diffYears} years`;
+      }
+    }
+  }
+
+  // Calculate from work experiences
+  let workExps = doctor.workExperiences || [];
+  if (typeof workExps === "string") {
+    try {
+      workExps = JSON.parse(workExps);
+    } catch {
+      workExps = [];
+    }
+  }
+  if (Array.isArray(workExps) && workExps.length > 0) {
+    let totalMs = 0;
+    workExps.forEach((exp: any) => {
+      const from = new Date(exp.fromDate || exp.from_date || exp.startDate);
+      let toStr = exp.toDate || exp.to_date || exp.endDate || "";
+      if (!toStr || toStr.toLowerCase() === "present") {
+        toStr = new Date().toISOString();
+      }
+      const to = new Date(toStr);
+      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
+        totalMs += (to.getTime() - from.getTime());
+      }
+    });
+    const totalYears = Math.floor(totalMs / (365.25 * 24 * 60 * 60 * 1000));
+    if (totalYears > 0) {
+      return `${totalYears} years`;
+    }
+  }
+
+  return "-";
+}
+
 export default function BookAppointmentPage() {
   const params = useParams();
   const router = useRouter();
   const hname = params?.Hname as string;
   const [departments, setDepartments] = useState<string[]>([]);
   const [doctorRows, setDoctorRows] = useState<MasterRow[]>([]);
+  const [doctorProfilesMap, setDoctorProfilesMap] = useState<Record<string, { profilePhoto?: string; dateOfBirth?: string; experienceYears?: string; specialization?: string; registrationDate?: string; workExperiences?: any[] }>>({});
   const [doctorPhotos, setDoctorPhotos] = useState<Record<string, string>>({});
   const [patientRows, setPatientRows] = useState<MasterRow[]>([]);
   const [scheduleRows, setScheduleRows] = useState<ScheduleSummary[]>([]);
@@ -450,11 +502,19 @@ export default function BookAppointmentPage() {
       .filter((doctor) => !selectedDepartment || !doctor.department || doctor.department === selectedDepartment)
       .filter((doctor) => scheduledDoctors.has(doctor.name.trim().toLowerCase()))
       .filter((doctor) => doctor.name)
-      .map((doctor) => ({
-        ...doctor,
-        profilePhoto: doctor.profilePhoto || doctorPhotos[doctor.name.toLowerCase()] || "",
-      }));
-  }, [doctorRows, doctorPhotos, scheduleRows, selectedDepartment]);
+      .map((doctor) => {
+        const extra = doctorProfilesMap[doctor.name.toLowerCase()] ?? {};
+        return {
+          ...doctor,
+          profilePhoto: doctor.profilePhoto || extra.profilePhoto || "",
+          dateOfBirth: doctor.dateOfBirth || extra.dateOfBirth || "",
+          experienceYears: doctor.experienceYears || extra.experienceYears || "",
+          specialization: doctor.specialization || extra.specialization || "",
+          registrationDate: extra.registrationDate || "",
+          workExperiences: extra.workExperiences || [],
+        };
+      });
+  }, [doctorRows, doctorProfilesMap, scheduleRows, selectedDepartment]);
 
   const [slideIndex, setSlideIndex] = useState(0);
   const isCarouselHovered = useRef(false);
@@ -495,7 +555,7 @@ export default function BookAppointmentPage() {
   useEffect(() => {
     let active = true;
 
-    async function loadDoctorPhotos() {
+    async function loadDoctorProfiles() {
       const names = Array.from(
         new Set(
           doctorRows
@@ -515,20 +575,31 @@ export default function BookAppointmentPage() {
               { cache: "no-store" },
             );
             const data = (await response.json().catch(() => ({}))) as { row?: Record<string, unknown> | null };
-            return [name.toLowerCase(), String(data.row?.profile_photo ?? data.row?.profilePhoto ?? "")] as const;
+            const r = data.row ?? {};
+            return [
+              name.toLowerCase(),
+              {
+                profilePhoto: String(r.profile_photo ?? r.profilePhoto ?? ""),
+                dateOfBirth: String(r.date_of_birth ?? r.dateOfBirth ?? r.dob ?? ""),
+                experienceYears: String(r.experience_years ?? r.experienceYears ?? ""),
+                specialization: String(r.specialization ?? ""),
+                registrationDate: String(r.registration_date ?? r.registrationDate ?? ""),
+                workExperiences: r.work_experiences ?? r.workExperiences ?? [],
+              },
+            ] as const;
           } catch {
-            return [name.toLowerCase(), ""] as const;
+            return [name.toLowerCase(), {}] as const;
           }
         }),
       );
 
       if (active) {
-        setDoctorPhotos(Object.fromEntries(entries));
+        setDoctorProfilesMap(Object.fromEntries(entries));
       }
     }
 
     if (doctorRows.length > 0) {
-      void loadDoctorPhotos();
+      void loadDoctorProfiles();
     }
 
     return () => {
@@ -917,48 +988,39 @@ export default function BookAppointmentPage() {
                             <button
                               key={`${doctor.doctorId}-${index}`}
                               type="button"
-                              onClick={() => directBookDoctor(doctor)}
+                              onClick={() => void openDoctorPopup(doctor)}
                               style={{
                                 width: cardWidth > 0 ? `${cardWidth}px` : "calc(33.333% - 11px)",
                                 flexShrink: 0,
                               }}
-                              className="flex flex-col items-center p-4 rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer"
+                              className="flex flex-col items-center p-4 rounded-2xl border border-gray-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition shadow-sm hover:shadow-md cursor-pointer animate-in fade-in duration-300"
                             >
-                              {/* Photo */}
-                              <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm mb-3 shrink-0 flex items-center justify-center">
-                                {doctor.profilePhoto ? (
-                                  <Image src={doctor.profilePhoto} alt={doctor.name} width={64} height={64} className="h-full w-full object-cover" unoptimized />
-                                ) : (
-                                  <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                  </svg>
-                                )}
+                              {/* Profile row centered horizontally */}
+                              <div className="flex items-center justify-center gap-4 w-full pb-3 border-b border-gray-100 dark:border-gray-800">
+                                {/* Photo */}
+                                <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-brand-100 bg-brand-50 shadow-sm shrink-0 flex items-center justify-center">
+                                  {doctor.profilePhoto ? (
+                                    <Image src={doctor.profilePhoto} alt={doctor.name} width={56} height={56} className="h-full w-full object-cover" unoptimized />
+                                  ) : (
+                                    <svg className="h-8 w-8 text-brand-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                  )}
+                                </div>
+                                {/* Name and Department */}
+                                <div className="text-left min-w-0">
+                                  <span className="text-sm font-semibold text-gray-800 block truncate">{withSalutation(doctor.name, doctor.gender)}</span>
+                                  {doctor.department && (
+                                    <span className="text-xs text-brand-600 block truncate">{doctor.department}</span>
+                                  )}
+                                </div>
                               </div>
-                              {/* Name */}
-                              <span className="text-sm font-semibold text-gray-800 truncate w-full text-center block whitespace-nowrap">{withSalutation(doctor.name, doctor.gender)}</span>
-                              {doctor.department && (
-                                <span className="text-xs text-brand-600 truncate w-full text-center block whitespace-nowrap mt-0.5">{doctor.department}</span>
-                              )}
-                              {/* Info pills: Age, Experience, City */}
-                              <div className="mt-3 flex flex-wrap justify-center gap-1.5 text-xs">
-                                {doctor.dateOfBirth && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-gray-700">
-                                    <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                    {calculateAge(doctor.dateOfBirth)}
-                                  </span>
-                                )}
-                                {doctor.experienceYears && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
-                                    <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    {doctor.experienceYears} yrs
-                                  </span>
-                                )}
-                                {doctor.clinic && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
-                                    <svg className="h-3 w-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    {doctor.clinic}
-                                  </span>
-                                )}
+
+                              {/* Info fields: Age, Specialization, Experience stacked vertically and centered */}
+                              <div className="mt-3 flex flex-col items-center gap-1 text-xs text-gray-500 w-full text-center">
+                                <span className="block truncate max-w-full">Age: {calculateAge(doctor.dateOfBirth)}</span>
+                                <span className="block truncate max-w-full font-medium text-brand-600 dark:text-brand-400">Specialization: {doctor.specialization || "-"}</span>
+                                <span className="block truncate max-w-full">Experience: {getExperienceYears(doctor)}</span>
                               </div>
                             </button>
                           ))}
@@ -1013,38 +1075,30 @@ export default function BookAppointmentPage() {
                   const isActive = doctor.name === selectedDoctor;
                   return (
                     <div key={doctor.name} className={`rounded-2xl border p-5 transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
-                      {/* Profile row */}
-                      <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-50">
+                      {/* Profile row centered horizontally */}
+                      <div className="flex items-center justify-center gap-4 w-full pb-3 border-b border-gray-100 dark:border-gray-800">
+                        {/* Photo */}
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center">
                           {doctor.profilePhoto ? (
                             <img src={doctor.profilePhoto} alt={doctor.name} className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
                           )}
                         </div>
-                        <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
+                        {/* Name and Department */}
+                        <div className="text-left min-w-0">
+                          <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
+                          {doctor.department && (
+                            <span className="text-xs text-brand-600 block truncate">{doctor.department}</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Info pills */}
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                        {doctor.dateOfBirth && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                            <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            Age {calculateAge(doctor.dateOfBirth)}
-                          </span>
-                        )}
-                        {doctor.experienceYears && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
-                            <svg className="h-3 w-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            {doctor.experienceYears} yrs exp
-                          </span>
-                        )}
-                        {doctor.department && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400">
-                            <svg className="h-3 w-3 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                            {doctor.department}
-                          </span>
-                        )}
+                      {/* Info fields: Age, Specialization, Experience stacked vertically and centered */}
+                      <div className="mt-3 flex flex-col items-center justify-center gap-1 text-xs text-gray-500 w-full text-center">
+                        <span className="block truncate max-w-full">Age: {calculateAge(doctor.dateOfBirth)}</span>
+                        <span className="block truncate max-w-full font-medium text-brand-600 dark:text-brand-400">Specialization: {doctor.specialization || "-"}</span>
+                        <span className="block truncate max-w-full">Experience: {getExperienceYears(doctor)}</span>
                       </div>
 
                       {/* Action buttons */}

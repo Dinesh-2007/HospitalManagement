@@ -91,7 +91,7 @@ export default function PatientDashboardPage() {
 
   const now = new Date();
 
-  const totalVisits = appointments.length;
+  const totalVisits = appointments.filter((a) => a.status !== "Cancelled").length;
 
   const upcomingAppointments = useMemo(() =>
     appointments.filter((a) => {
@@ -101,9 +101,13 @@ export default function PatientDashboardPage() {
     }), [appointments]);
 
   const lastVisit = useMemo(() => {
+    const visitedStatuses = new Set(["Checked In", "Vitals", "Conslt", "Lab", "Pharmacy", "Completed", "Visited"]);
     const past = appointments
       .filter((a) => {
         if (!a.appointment_date) return false;
+        const status = a.status || "";
+        const hasCheckedIn = Boolean((a as any).check_in_time) || visitedStatuses.has(status);
+        if (!hasCheckedIn) return false;
         const d = new Date(`${a.appointment_date}T${a.appointment_time ?? "00:00"}`);
         return !isNaN(d.getTime()) && d < now;
       })
@@ -242,147 +246,99 @@ export default function PatientDashboardPage() {
         ))}
       </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* Recent Appointments */}
-        <div className="xl:col-span-2 rounded-2xl border border-gray-200/80 bg-white/90 shadow-sm backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/60">
-          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+      {/* Next Appointment Banner (if available) */}
+      {upcomingAppointments.length > 0 && (
+        <div className="mb-6 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/60 p-5 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Recent Appointments</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Your latest scheduled visits</p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <h3 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">Next Appointment</h3>
+              </div>
+              <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white">{upcomingAppointments[0].doctor ?? "Doctor"}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{upcomingAppointments[0].department ?? "General"}</p>
             </div>
-            <Link
-              href={`/${encodeURIComponent(hname)}/patient-appointments`}
-              className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition"
-            >
-              View all →
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-100/80 dark:divide-gray-800">
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-500" />
+            <div className="flex items-center gap-3">
+              {upcomingAppointments[0].appointment_id_display && (
+                <span className="rounded-md bg-emerald-100 px-3 py-1 font-mono text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  {upcomingAppointments[0].appointment_id_display}
+                </span>
+              )}
+              <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm border border-emerald-100 dark:bg-gray-800 dark:border-gray-700 dark:text-emerald-300">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {formatDate(upcomingAppointments[0].appointment_date)} · {formatTime(upcomingAppointments[0].appointment_time)}
               </div>
-            ) : recentAppointments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50">
-                  <svg className="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                  </svg>
-                </div>
-                <p className="mt-3 text-sm font-medium text-gray-500">No appointments yet</p>
-                <Link href={`/${encodeURIComponent(hname)}/patient-book-appointment`} className="mt-3 text-xs font-semibold text-brand-600 hover:underline">
-                  Book your first appointment →
-                </Link>
-              </div>
-            ) : (
-              recentAppointments.map((appt, i) => {
-                const badge = statusBadge(appt.status);
-                return (
-                  <div key={appt.id ?? i} className="flex items-center gap-4 px-6 py-4 transition hover:bg-gray-50/60 dark:hover:bg-gray-800/20">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-gray-900 dark:text-white text-sm">{appt.doctor ?? "Doctor"}</p>
-                      <p className="text-xs text-gray-500">{appt.department ?? "General"}</p>
-                    </div>
-                    {appt.appointment_id_display && (
-                      <div className="flex-shrink-0 text-right">
-                        <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-indigo-600">{appt.appointment_id_display}</span>
-                      </div>
-                    )}
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-medium text-gray-700">{formatDate(appt.appointment_date)}</p>
-                      <p className="text-[11px] text-gray-400">{formatTime(appt.appointment_time)}</p>
-                    </div>
-                    <span className={`ml-2 flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badge.cls}`}>
-                      {badge.label}
-                    </span>
-                  </div>
-                );
-              })
-            )}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Quick Actions + Upcoming Card */}
-        <div className="flex flex-col gap-6">
-          {/* Quick Actions */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white/90 shadow-sm backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/60">
-            <div className="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Quick Actions</h3>
-            </div>
-            <div className="flex flex-col gap-2.5 p-4">
-              {[
-                {
-                  label: "Book Appointment",
-                  href: `/${encodeURIComponent(hname)}/patient-book-appointment`,
-                  icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
-                  cls: "bg-brand-500 text-white hover:bg-brand-600",
-                },
-                {
-                  label: "My Appointments",
-                  href: `/${encodeURIComponent(hname)}/patient-appointments`,
-                  icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
-                  cls: "bg-gray-100 text-gray-700 hover:bg-gray-200",
-                },
-                {
-                  label: "Manage Family",
-                  href: `/${encodeURIComponent(hname)}/manage-family`,
-                  icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
-                  cls: "bg-gray-100 text-gray-700 hover:bg-gray-200",
-                },
-                {
-                  label: "Edit Profile",
-                  href: `/${encodeURIComponent(hname)}/patient-registration?mode=edit`,
-                  icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
-                  cls: "bg-gray-100 text-gray-700 hover:bg-gray-200",
-                },
-              ].map((action) => (
-                <Link
-                  key={action.label}
-                  href={action.href}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-95 ${action.cls}`}
-                >
-                  {action.icon}
-                  {action.label}
-                </Link>
-              ))}
-            </div>
+      {/* Recent Appointments (Full Width, matching Good Evening Banner) */}
+      <div className="w-full rounded-2xl border border-gray-200/80 bg-white/90 shadow-sm backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/60">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Recent Appointments</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Your latest scheduled visits</p>
           </div>
+          <Link
+            href={`/${encodeURIComponent(hname)}/patient-appointments`}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition"
+          >
+            View all →
+          </Link>
+        </div>
 
-          {/* Upcoming Appointment Highlight */}
-          {upcomingAppointments.length > 0 && (
-            <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm">
-              <div className="border-b border-emerald-100 px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <h3 className="text-sm font-semibold text-emerald-800">Next Appointment</h3>
-                </div>
-              </div>
-              <div className="px-5 py-4">
-                <p className="text-lg font-bold text-gray-900">{upcomingAppointments[0].doctor ?? "Doctor"}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{upcomingAppointments[0].department ?? "General"}</p>
-                {upcomingAppointments[0].appointment_id_display && (
-                  <div className="mt-2">
-                    <span className="inline-block rounded-md bg-emerald-100 px-2.5 py-1 font-mono text-xs font-semibold text-emerald-700">{upcomingAppointments[0].appointment_id_display}</span>
-                  </div>
-                )}
-                <div className="mt-3 flex items-center gap-2 text-sm font-medium text-emerald-700">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  {formatDate(upcomingAppointments[0].appointment_date)} · {formatTime(upcomingAppointments[0].appointment_time)}
-                </div>
-              </div>
+        <div className="divide-y divide-gray-100/80 dark:divide-gray-800">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-500" />
             </div>
+          ) : recentAppointments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-50">
+                <svg className="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+              </div>
+              <p className="mt-3 text-sm font-medium text-gray-500">No appointments yet</p>
+              <Link href={`/${encodeURIComponent(hname)}/patient-book-appointment`} className="mt-3 text-xs font-semibold text-brand-600 hover:underline">
+                Book your first appointment →
+              </Link>
+            </div>
+          ) : (
+            recentAppointments.map((appt, i) => {
+              const badge = statusBadge(appt.status);
+              return (
+                <div key={appt.id ?? i} className="flex items-center gap-4 px-6 py-4 transition hover:bg-gray-50/60 dark:hover:bg-gray-800/20">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-gray-900 dark:text-white text-sm">{appt.doctor ?? "Doctor"}</p>
+                    <p className="text-xs text-gray-500">{appt.department ?? "General"}</p>
+                  </div>
+                  {appt.appointment_id_display && (
+                    <div className="flex-shrink-0 text-right">
+                      <span className="inline-block rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-indigo-600">{appt.appointment_id_display}</span>
+                    </div>
+                  )}
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-medium text-gray-700">{formatDate(appt.appointment_date)}</p>
+                    <p className="text-[11px] text-gray-400">{formatTime(appt.appointment_time)}</p>
+                  </div>
+                  <span className={`ml-2 flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badge.cls}`}>
+                    {badge.label}
+                  </span>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
-    </PatientProfileLayout>
+    </PatientProfileLayout >
   );
 }

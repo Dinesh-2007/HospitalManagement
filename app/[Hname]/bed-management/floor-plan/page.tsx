@@ -69,8 +69,25 @@ export default function FloorPlanPage() {
       );
       if (!res.ok) return;
       const data = await res.json();
-      setRooms(data.rooms ?? []);
-      setBeds(data.beds ?? []);
+      const fetchedRooms: Room[] = data.rooms ?? [];
+      const fetchedBeds: Bed[] = data.beds ?? [];
+      const fetchedWardMasters: Room[] = data.wardMasters ?? [];
+
+      // If room_master is empty, synthesize rooms from ward_master entries
+      // so wards show up as "rooms" in the floor plan grid
+      if (fetchedRooms.length === 0 && fetchedWardMasters.length > 0) {
+        const syntheticRooms: Room[] = fetchedWardMasters.map((w) => ({
+          id: `__ward__${String(w.description ?? w.code ?? w.id)}`,
+          code: String(w.code ?? ""),
+          description: String(w.description ?? w.code ?? ""),
+          ward_name: String(w.description ?? w.code ?? ""),
+          _synthetic: true,
+        }));
+        setRooms(syntheticRooms);
+      } else {
+        setRooms(fetchedRooms);
+      }
+      setBeds(fetchedBeds);
     } catch { /* ignore */ }
     finally { setIsLoading(false); }
   }, [hname, selectedBuilding, selectedFloor]);
@@ -79,11 +96,19 @@ export default function FloorPlanPage() {
 
   // Compute room status color from its beds
   function getRoomColor(room: Room): string {
-    const roomBeds = beds.filter((b) => Number(b.room_id) === Number(room.id));
-    if (roomBeds.length === 0) return "#6b7280"; // gray - no beds
-    const total = roomBeds.length;
-    const occupied = roomBeds.filter((b) => b.status === "Occupied").length;
-    const maintenance = roomBeds.filter(
+    const isWardRoom = String(room.id).startsWith("__ward__");
+    const wardName = isWardRoom ? String(room.description ?? "") : "";
+    const roomDesc = String(room.description ?? room.code ?? "");
+    const roomBedList = beds.filter((b) =>
+      isWardRoom
+        ? String(b.ward_name ?? b.ward ?? "").toLowerCase() === wardName.toLowerCase()
+        : (Number(b.room_id) === Number(room.id) ||
+           (roomDesc && String(b.room_name).toLowerCase() === roomDesc.toLowerCase()))
+    );
+    if (roomBedList.length === 0) return "#6b7280"; // gray - no beds
+    const total = roomBedList.length;
+    const occupied = roomBedList.filter((b) => b.status === "Occupied").length;
+    const maintenance = roomBedList.filter(
       (b) => b.status === "Maintenance" || b.status === "Blocked"
     ).length;
 
@@ -94,14 +119,32 @@ export default function FloorPlanPage() {
   }
 
   function getRoomStatusLabel(room: Room): string {
-    const roomBeds = beds.filter((b) => Number(b.room_id) === Number(room.id));
-    if (roomBeds.length === 0) return "No beds";
-    const occupied = roomBeds.filter((b) => b.status === "Occupied").length;
-    return `${occupied}/${roomBeds.length} occupied`;
+    const isWardRoom = String(room.id).startsWith("__ward__");
+    const wardName = isWardRoom ? String(room.description ?? "") : "";
+    const roomDesc = String(room.description ?? room.code ?? "");
+    const roomBedList = beds.filter((b) =>
+      isWardRoom
+        ? String(b.ward_name ?? b.ward ?? "").toLowerCase() === wardName.toLowerCase()
+        : (Number(b.room_id) === Number(room.id) ||
+           (roomDesc && String(b.room_name).toLowerCase() === roomDesc.toLowerCase()))
+    );
+    if (roomBedList.length === 0) return "No beds";
+    const occupied = roomBedList.filter((b) => b.status === "Occupied").length;
+    return `${occupied}/${roomBedList.length} occupied`;
   }
 
   const roomBeds = selectedRoom
-    ? beds.filter((b) => Number(b.room_id) === Number(selectedRoom.id))
+    ? (() => {
+        const isWardRoom = String(selectedRoom.id).startsWith("__ward__");
+        const wardName = isWardRoom ? String(selectedRoom.description ?? "") : "";
+        const roomDesc = String(selectedRoom.description ?? selectedRoom.code ?? "");
+        return beds.filter((b) =>
+          isWardRoom
+            ? String(b.ward_name ?? b.ward ?? "").toLowerCase() === wardName.toLowerCase()
+            : (Number(b.room_id) === Number(selectedRoom.id) ||
+               (roomDesc && String(b.room_name).toLowerCase() === roomDesc.toLowerCase()))
+        );
+      })()
     : [];
 
   return (

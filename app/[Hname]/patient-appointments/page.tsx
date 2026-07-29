@@ -16,6 +16,7 @@ type AppointmentRow = {
   doctor?: string | null;
   status?: string | null;
   reschedule_count?: number | null;
+  reschedule_history?: Array<{ fromDate?: string; fromTime?: string; toDate?: string; toTime?: string }> | null;
   patient_name?: string | null;
   patient_phone?: string | null;
   transferred_from_doctor?: string | null;
@@ -78,40 +79,89 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
     const endTime = a.appointment_end_time ?? null;
     const pname = patientLabel ?? a.patient_name ?? null;
 
-    // Determine if the scheduled time is expired
-    let isExpired = false;
     const currentStatus = a.status || "Scheduled";
-    if (currentStatus === "Scheduled" || currentStatus === "Rescheduled") {
-      if (date && time) {
-        const apptDate = new Date(`${date}T${time}`);
-        if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
-          isExpired = true;
-        }
-      }
+
+    // 1. Cancelled Appointment
+    if (currentStatus === "Cancelled") {
+      list.push({
+        id: `${a.id ?? Math.random()}_cancelled`,
+        appointment_date: date,
+        appointment_time: time,
+        appointment_end_time: endTime,
+        department: a.department ?? null,
+        doctor: a.doctor ?? null,
+        status: "Cancelled",
+        displayStatus: "Cancelled",
+        reschedule_count: a.reschedule_count ?? null,
+        patient_name: pname,
+        appointment_id_display: a.appointment_id_display ?? null,
+      });
+      continue;
     }
 
-    const scheduledStatusLabel = isExpired ? "Expired" : "Scheduled";
+    // 2. Rescheduled Appointment: Emit old slots as Cancelled, new slot as Rescheduled
+    if (currentStatus === "Rescheduled") {
+      if (Array.isArray(a.reschedule_history) && a.reschedule_history.length > 0) {
+        a.reschedule_history.forEach((hist, idx) => {
+          list.push({
+            id: `${a.id ?? Math.random()}_rescheduled_old_${idx}`,
+            appointment_date: hist.fromDate ?? date,
+            appointment_time: hist.fromTime ?? time,
+            appointment_end_time: null,
+            department: a.department ?? null,
+            doctor: a.doctor ?? null,
+            status: "Cancelled",
+            displayStatus: "Cancelled",
+            reschedule_count: null,
+            patient_name: pname,
+            appointment_id_display: a.appointment_id_display ?? null,
+          });
+        });
+      }
 
-    // 1. Base Scheduled/Expired Row
-    list.push({
-      id: `${a.id ?? Math.random()}_scheduled`,
-      appointment_date: date,
-      appointment_time: time,
-      appointment_end_time: endTime,
-      department: a.department ?? null,
-      doctor: a.doctor ?? null,
-      status: scheduledStatusLabel,
-      displayStatus: scheduledStatusLabel,
-      reschedule_count: a.reschedule_count ?? null,
-      patient_name: pname,
-      appointment_id_display: a.appointment_id_display ?? null,
-    });
+      list.push({
+        id: `${a.id ?? Math.random()}_rescheduled_current`,
+        appointment_date: date,
+        appointment_time: time,
+        appointment_end_time: endTime,
+        department: a.department ?? null,
+        doctor: a.doctor ?? null,
+        status: "Rescheduled",
+        displayStatus: "Rescheduled",
+        reschedule_count: a.reschedule_count ?? null,
+        patient_name: pname,
+        appointment_id_display: a.appointment_id_display ?? null,
+      });
+    } else {
+      // 3. Scheduled / Expired / Other Active Statuses
+      let isExpired = false;
+      if (currentStatus === "Scheduled") {
+        if (date && time) {
+          const apptDate = new Date(`${date}T${time}`);
+          if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
+            isExpired = true;
+          }
+        }
+      }
 
-    // 2. Reschedule History Rows (if any exist on the backend)
-    // Note: The patient-appointments endpoint might not return reschedule_history unless included,
-    // but if it does, we can synthesize them. We will add a placeholder if we need it later.
+      const scheduledStatusLabel = isExpired ? "Expired" : currentStatus;
 
-    // 3. Transferred Origin Row
+      list.push({
+        id: `${a.id ?? Math.random()}_active`,
+        appointment_date: date,
+        appointment_time: time,
+        appointment_end_time: endTime,
+        department: a.department ?? null,
+        doctor: a.doctor ?? null,
+        status: scheduledStatusLabel,
+        displayStatus: scheduledStatusLabel,
+        reschedule_count: a.reschedule_count ?? null,
+        patient_name: pname,
+        appointment_id_display: a.appointment_id_display ?? null,
+      });
+    }
+
+    // 4. Transferred Origin Row
     if (a.transferred_from_doctor) {
       list.push({
         id: `${a.id ?? Math.random()}_transferred`,
@@ -126,23 +176,6 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
         patient_name: pname,
         appointment_id_display: a.appointment_id_display ?? null,
         isTransferred: true,
-      });
-    }
-
-    // 4. Cancelled Row
-    if (currentStatus === "Cancelled") {
-      list.push({
-        id: `${a.id ?? Math.random()}_cancelled`,
-        appointment_date: date,
-        appointment_time: time,
-        appointment_end_time: endTime,
-        department: a.department ?? null,
-        doctor: a.doctor ?? null,
-        status: "Cancelled",
-        displayStatus: "Cancelled",
-        reschedule_count: a.reschedule_count ?? null,
-        patient_name: pname,
-        appointment_id_display: a.appointment_id_display ?? null,
       });
     }
   }

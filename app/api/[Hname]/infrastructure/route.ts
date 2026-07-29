@@ -671,14 +671,14 @@ export async function GET(
           (b: Record<string, unknown>) => String(b.id) === buildingId
         );
         if (buildingRow) {
-          roomFilter = "WHERE building_name = $1";
+          roomFilter = "WHERE LOWER(building_name) = LOWER($1)";
           roomParams.push(String(buildingRow.building_name ?? ""));
           if (floorId) {
             const floorRow = floors.rows.find(
               (f: Record<string, unknown>) => String(f.id) === floorId
             );
             if (floorRow) {
-              roomFilter += " AND floor_name = $2";
+              roomFilter += " AND LOWER(floor_name) = LOWER($2)";
               roomParams.push(String(floorRow.floor_name ?? ""));
             }
           }
@@ -692,18 +692,28 @@ export async function GET(
 
       const beds = await pool.query(
         `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.BED)} ${
-          roomFilter ? roomFilter.replace("building_name", "building_name").replace("floor_name", "floor_name") : ""
+          roomFilter ? roomFilter.replace("LOWER(building_name)", "LOWER(building_name)").replace("LOWER(floor_name)", "LOWER(floor_name)") : ""
         } ORDER BY id`,
         roomParams
       );
+
+      const wardMasters = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.WARD)} ORDER BY id`
+      ).catch(() => ({ rows: [] }));
+
+      const bedMasters = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.BED)} ORDER BY id`,
+        []
+      ).catch(() => ({ rows: [] }));
 
       return NextResponse.json({
         buildings: buildings.rows,
         floors: floors.rows,
         floorDepartments: floorDepts.rows,
         wardInstances: wardInstances.rows,
+        wardMasters: wardMasters.rows,
         rooms: rooms.rows,
-        beds: beds.rows,
+        beds: bedMasters.rows,
       });
     }
 
