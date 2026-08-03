@@ -156,6 +156,10 @@ export type GeneratedWard = {
   description?: string;
   status: "Enabled" | "Disabled";
   rooms: GeneratedRoom[];
+  roomsCountInput?: number;
+  bedsPerRoomInput?: number;
+  roomTypeInput?: string;
+  bedsCountInput?: number;
 };
 
 export type GeneratedDept = {
@@ -233,7 +237,7 @@ export default function InfrastructurePage() {
 
   // Compiled hierarchy state for manual inline editing (Step 5)
   const [generatedBuildings, setGeneratedBuildings] = useState<GeneratedBuilding[]>([]);
-  
+
   // Inpatient builder current selections
   const [builderBuildingId, setBuilderBuildingId] = useState<string>("");
   const [builderFloorId, setBuilderFloorId] = useState<string>("");
@@ -537,7 +541,7 @@ export default function InfrastructurePage() {
   ): string => {
     let name = pattern;
     const roomNum = (floorNum + 1) * 100 + roomIdx;
-    
+
     let wardCode = wardType.substring(0, 3).toUpperCase();
     if (wardType.toLowerCase().includes("general")) wardCode = "GW";
     else if (wardType.toLowerCase().includes("private")) wardCode = "PV";
@@ -582,10 +586,11 @@ export default function InfrastructurePage() {
       const defaultB = buildings[0];
       const defaultFl = defaultB.floors?.[0];
       const defaultDept = defaultFl?.selectedDeptNames?.[0] || "";
-      
+      const cleanDept = defaultDept.split("-").pop()?.trim() || defaultDept;
+
       setBuilderBuildingId((prev) => prev || defaultB.id);
       setBuilderFloorId((prev) => prev || (defaultFl?.id || ""));
-      setBuilderDeptName((prev) => prev || defaultDept);
+      setBuilderDeptName((prev) => prev || cleanDept);
     }
 
     setGeneratedBuildings((prev) => {
@@ -596,15 +601,41 @@ export default function InfrastructurePage() {
           const departments = fl.selectedDeptNames.map((dName) => {
             const cleanName = dName.split("-").pop()?.trim() || dName;
             const existingDept = existingFl?.departments.find((pde) => pde.departmentName === cleanName);
-            
+
             const defaultWards = wardOptions;
-            
+
             const wards = defaultWards.map((wType) => {
               const cleanWardType = wType.split("-").pop()?.trim() || wType;
               const existingWard = existingDept?.wards.find((pw) => pw.wardType === cleanWardType);
               if (existingWard) {
                 return existingWard;
               }
+              const isGeneral = cleanWardType.toLowerCase().includes("general");
+              const isPrivate = cleanWardType.toLowerCase().includes("private");
+              const isIcu = cleanWardType.toLowerCase().includes("icu") || cleanWardType.toLowerCase().includes("critical") || cleanWardType.toLowerCase().includes("ccu");
+
+              let rCount = 2;
+              let bPerRoom = 2;
+              let defaultRoomType = roomTypeOptions[0] || "General Ward Room";
+              let bCount = 4;
+
+              if (isGeneral) {
+                rCount = 4;
+                bPerRoom = 4;
+                bCount = 16;
+                defaultRoomType = roomTypeOptions.find(t => t.toLowerCase().includes("general")) || roomTypeOptions[0] || "General Ward Room";
+              } else if (isPrivate) {
+                rCount = 2;
+                bPerRoom = 1;
+                bCount = 2;
+                defaultRoomType = roomTypeOptions.find(t => t.toLowerCase().includes("private")) || roomTypeOptions[0] || "Private Suite";
+              } else if (isIcu) {
+                rCount = 2;
+                bPerRoom = 1;
+                bCount = 2;
+                defaultRoomType = roomTypeOptions.find(t => t.toLowerCase().includes("icu")) || roomTypeOptions[0] || "ICU Room";
+              }
+
               return {
                 id: `ward-${b.id}-${fl.id}-${cleanName}-${cleanWardType.replace(/\s+/g, '-')}`,
                 wardName: cleanWardType,
@@ -612,16 +643,20 @@ export default function InfrastructurePage() {
                 allocationType: "rooms" as const,
                 description: `Inpatient accommodation for ${cleanWardType}`,
                 status: "Disabled" as const,
-                rooms: []
+                rooms: [],
+                roomsCountInput: rCount,
+                bedsPerRoomInput: bPerRoom,
+                roomTypeInput: defaultRoomType,
+                bedsCountInput: bCount
               };
             });
-            
+
             return {
               departmentName: cleanName,
               wards
             };
           });
-          
+
           return {
             floorId: fl.id,
             floorNumber: fl.floorNumber,
@@ -629,7 +664,7 @@ export default function InfrastructurePage() {
             departments
           };
         });
-        
+
         return {
           buildingId: b.id,
           buildingName: b.name,
@@ -638,7 +673,7 @@ export default function InfrastructurePage() {
         };
       });
     });
-  }, [buildings, wardOptions]);
+  }, [buildings, wardOptions, roomTypeOptions]);
 
   // Synchronize when ward options load
   useEffect(() => {
@@ -646,6 +681,136 @@ export default function InfrastructurePage() {
       syncGeneratedBuildings();
     }
   }, [wardOptions, syncGeneratedBuildings]);
+
+  const updateWardInputFields = (
+    buildingId: string,
+    floorId: string,
+    deptName: string,
+    wardId: string,
+    updates: Partial<GeneratedWard>
+  ) => {
+    setGeneratedBuildings((prev) =>
+      prev.map((b) => {
+        if (b.buildingId !== buildingId) return b;
+        return {
+          ...b,
+          floors: b.floors.map((f) => {
+            if (f.floorId !== floorId) return f;
+            return {
+              ...f,
+              departments: f.departments.map((d) => {
+                if (d.departmentName !== deptName) return d;
+                return {
+                  ...d,
+                  wards: d.wards.map((w) => {
+                    if (w.id !== wardId) return w;
+                    return {
+                      ...w,
+                      ...updates,
+                    };
+                  }),
+                };
+              }),
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  const handleConfigureWard = (
+    buildingId: string,
+    floorId: string,
+    deptName: string,
+    ward: GeneratedWard
+  ) => {
+    const isRooms = (ward.allocationType || "rooms") === "rooms";
+    const roomsCount = Number(ward.roomsCountInput ?? 2);
+    const bedsPerRoom = Number(ward.bedsPerRoomInput ?? 2);
+    const roomType = ward.roomTypeInput || (roomTypeOptions[0] || "General Ward Room");
+    const bedsCount = Number(ward.bedsCountInput ?? 4);
+
+    setGeneratedBuildings((prev) =>
+      prev.map((b) => {
+        if (b.buildingId !== buildingId) return b;
+        return {
+          ...b,
+          floors: b.floors.map((f) => {
+            if (f.floorId !== floorId) return f;
+            return {
+              ...f,
+              departments: f.departments.map((d) => {
+                if (d.departmentName !== deptName) return d;
+                return {
+                  ...d,
+                  wards: d.wards.map((w) => {
+                    if (w.id !== ward.id) return w;
+
+                    const newRooms: GeneratedRoom[] = [];
+                    if (isRooms) {
+                      for (let r = 1; r <= roomsCount; r++) {
+                        const roomName = `RM${r}`;
+                        const beds: GeneratedBed[] = [];
+                        for (let bd = 1; bd <= bedsPerRoom; bd++) {
+                          beds.push({
+                            id: `bed-${buildingId}-${floorId}-${deptName}-${w.wardType}-${r}-${bd}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                            bedNumber: `${roomName}-BD${bd}`,
+                            bedType: bedTypeOptions[0] || "Standard Bed",
+                            charge: 0,
+                            status: "Available",
+                          });
+                        }
+                        newRooms.push({
+                          id: `rm-${buildingId}-${floorId}-${deptName}-${w.wardType}-${r}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                          roomNumber: roomName,
+                          roomType: roomType,
+                          roomPurpose: "Patient Room",
+                          capacity: bedsPerRoom,
+                          rate: 0,
+                          status: "Available",
+                          beds,
+                        });
+                      }
+                    } else {
+                      const virtualRoomName = `${w.wardType} Hall`;
+                      const beds: GeneratedBed[] = [];
+                      for (let bd = 1; bd <= bedsCount; bd++) {
+                        beds.push({
+                          id: `bed-${buildingId}-${floorId}-${deptName}-${w.wardType}-${bd}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                          bedNumber: `BD${bd}`,
+                          bedType: bedTypeOptions[0] || "Standard Bed",
+                          charge: 0,
+                          status: "Available",
+                        });
+                      }
+                      newRooms.push({
+                        id: `rm-virtual-${buildingId}-${floorId}-${deptName}-${w.wardType.replace(/\s+/g, '-')}`,
+                        roomNumber: virtualRoomName,
+                        roomType: roomTypeOptions[0] || "Open Ward",
+                        roomPurpose: "Patient Hall",
+                        capacity: bedsCount,
+                        rate: 0,
+                        status: "Available",
+                        beds,
+                      });
+                    }
+
+                    return {
+                      ...w,
+                      rooms: newRooms,
+                    };
+                  }),
+                };
+              }),
+            };
+          }),
+        };
+      })
+    );
+
+    setBuilderWardType(ward.wardType);
+    setBuilderRoomId(null);
+  };
 
   const updateWardStatus = (buildingId: string, floorId: string, deptName: string, wardId: string, enabled: boolean) => {
     setGeneratedBuildings((prev) =>
@@ -693,7 +858,7 @@ export default function InfrastructurePage() {
       bedPrefix: string;
       bedPattern: string;
     }
-   ) => {
+  ) => {
     setGeneratedBuildings((prev) =>
       prev.map((b) => {
         if (b.buildingId !== buildingId) return b;
@@ -707,17 +872,17 @@ export default function InfrastructurePage() {
               departments: f.departments.map((d) => {
                 if (d.departmentName !== deptName) return d;
                 const deptCode = deptName.substring(0, 3).toUpperCase();
-                
+
                 return {
                   ...d,
                   wards: d.wards.map((w) => {
                     if (w.id !== wardId) return w;
-                    
+
                     const newRooms: GeneratedRoom[] = [];
                     for (let r = 1; r <= params.roomCount; r++) {
                       const rName = resolveRoomName(params.roomPattern || "{Prefix}{FloorNum}{RoomIndex}", deptCode, floorNum, r, w.wardType);
                       const finalRoomName = rName.replace(/{Prefix}/g, params.roomPrefix || "");
-                      
+
                       const beds: GeneratedBed[] = [];
                       for (let bd = 1; bd <= params.bedsPerRoom; bd++) {
                         const bName = resolveBedName(params.bedPattern || "{RoomName}-B{BedIndex}", deptCode, floorNum, r, finalRoomName, bd);
@@ -730,7 +895,7 @@ export default function InfrastructurePage() {
                           status: "Available",
                         });
                       }
-                      
+
                       newRooms.push({
                         id: `rm-${buildingId}-${floorId}-${deptName}-${w.wardType}-${r}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                         roomNumber: finalRoomName,
@@ -742,7 +907,7 @@ export default function InfrastructurePage() {
                         beds,
                       });
                     }
-                    
+
                     return {
                       ...w,
                       rooms: [...w.rooms, ...newRooms],
@@ -1016,7 +1181,7 @@ export default function InfrastructurePage() {
                     if (w.id !== wardId) return w;
                     const targetRoom = w.rooms.find((r) => r.id === roomId);
                     if (!targetRoom) return w;
-                    
+
                     const newRoomNumber = `${targetRoom.roomNumber}-Copy`;
                     const newRoom: GeneratedRoom = {
                       ...targetRoom,
@@ -1028,11 +1193,11 @@ export default function InfrastructurePage() {
                         bedNumber: bed.bedNumber.replace(targetRoom.roomNumber, newRoomNumber),
                       })),
                     };
-                    
+
                     const idxOfTarget = w.rooms.findIndex((r) => r.id === roomId);
                     const copyRooms = [...w.rooms];
                     copyRooms.splice(idxOfTarget + 1, 0, newRoom);
-                    
+
                     return {
                       ...w,
                       rooms: copyRooms,
@@ -1199,7 +1364,7 @@ export default function InfrastructurePage() {
               departments: f.departments.map((d) => {
                 if (d.departmentName !== deptName) return d;
                 const deptCode = deptName.substring(0, 3).toUpperCase();
-                
+
                 return {
                   ...d,
                   wards: d.wards.map((w) => {
@@ -1208,7 +1373,7 @@ export default function InfrastructurePage() {
                       ...w,
                       rooms: w.rooms.map((r) => {
                         if (r.id !== roomId) return r;
-                        
+
                         const newBeds: GeneratedBed[] = [];
                         for (let bd = 1; bd <= params.bedCount; bd++) {
                           const bName = resolveBedName(params.bedPattern || "{RoomName}-B{BedIndex}", deptCode, floorNum, 1, r.roomNumber, bd);
@@ -1222,7 +1387,7 @@ export default function InfrastructurePage() {
                             equipment: params.equipment,
                           });
                         }
-                        
+
                         const updatedBeds = [...r.beds, ...newBeds];
                         return {
                           ...r,
@@ -1248,11 +1413,11 @@ export default function InfrastructurePage() {
       return;
     }
     setError(null);
-    
+
     if (currentStep === 3) {
       syncGeneratedBuildings();
     }
-    
+
     setCurrentStep((prev) => Math.min(6, prev + 1));
   };
 
@@ -1270,11 +1435,11 @@ export default function InfrastructurePage() {
       }
     }
     setError(null);
-    
+
     if (targetStep === 4) {
       syncGeneratedBuildings();
     }
-    
+
     setCurrentStep(targetStep);
   };
 
@@ -1303,19 +1468,19 @@ export default function InfrastructurePage() {
 
     const defaultWards: Record<string, WardConfig> = {};
     const deptCode = deptName.includes("-") ? deptName.split("-")[0].trim() : deptName.substring(0, 3).toUpperCase();
-    
+
     const allWards = wardOptions;
     allWards.forEach((w) => {
       const cleanW = w.split("-").pop()?.trim() || w;
       const isGeneral = cleanW.toLowerCase().includes("general");
       const isPrivate = cleanW.toLowerCase().includes("private");
       const isIcu = cleanW.toLowerCase().includes("icu") || cleanW.toLowerCase().includes("critical") || cleanW.toLowerCase().includes("ccu");
-      
+
       const enabled = isGeneral || isPrivate || isIcu;
       let roomCount = 1;
       let bedsPerRoom = 1;
       let rate = 1000;
-      
+
       if (isGeneral) {
         roomCount = 4;
         bedsPerRoom = 4;
@@ -1426,7 +1591,7 @@ export default function InfrastructurePage() {
     };
 
     const updatedWard = { ...ward, ...updates };
-    
+
     setDeptCustomConfigs((prev) => ({
       ...prev,
       [key]: {
@@ -1565,22 +1730,20 @@ export default function InfrastructurePage() {
           <button
             type="button"
             onClick={() => setActiveTab("generator")}
-            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${
-              activeTab === "generator"
-                ? "border-brand-500 text-brand-600 dark:text-brand-400"
-                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-            }`}
+            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${activeTab === "generator"
+              ? "border-brand-500 text-brand-600 dark:text-brand-400"
+              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
+              }`}
           >
             Interactive Setup Wizard
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("hierarchy")}
-            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${
-              activeTab === "hierarchy"
-                ? "border-brand-500 text-brand-600 dark:text-brand-400"
-                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
-            }`}
+            className={`border-b-2 px-5 py-3 text-sm font-medium transition ${activeTab === "hierarchy"
+              ? "border-brand-500 text-brand-600 dark:text-brand-400"
+              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
+              }`}
           >
             Current Hierarchy Tree
           </button>
@@ -1636,13 +1799,12 @@ export default function InfrastructurePage() {
                     key={s.step}
                     type="button"
                     onClick={() => handleStepClick(s.step)}
-                    className={`rounded-lg py-2 px-2.5 text-xs font-semibold text-center transition ${
-                      currentStep === s.step
-                        ? "bg-brand-500 text-white shadow-xs"
-                        : currentStep > s.step
+                    className={`rounded-lg py-2 px-2.5 text-xs font-semibold text-center transition ${currentStep === s.step
+                      ? "bg-brand-500 text-white shadow-xs"
+                      : currentStep > s.step
                         ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                         : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200"
-                    }`}
+                      }`}
                   >
                     {s.label}
                   </button>
@@ -1771,11 +1933,10 @@ export default function InfrastructurePage() {
                       key={b.id}
                       type="button"
                       onClick={() => setSelectedBuildingId(b.id)}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
-                        activeBuilding.id === b.id
-                          ? "bg-brand-500 text-white"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
-                      }`}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${activeBuilding.id === b.id
+                        ? "bg-brand-500 text-white"
+                        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                        }`}
                     >
                       {b.name} ({b.floorsCount} Floors)
                     </button>
@@ -1838,11 +1999,10 @@ export default function InfrastructurePage() {
                       key={b.id}
                       type="button"
                       onClick={() => setSelectedBuildingId(b.id)}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
-                        activeBuilding.id === b.id
-                          ? "bg-brand-500 text-white"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
-                      }`}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${activeBuilding.id === b.id
+                        ? "bg-brand-500 text-white"
+                        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200"
+                        }`}
                     >
                       {b.name}
                     </button>
@@ -1956,12 +2116,12 @@ export default function InfrastructurePage() {
                                       const clean = dept.toLowerCase();
                                       const deptType =
                                         clean.includes("radio") || clean.includes("imaging") ? "Diagnostic"
-                                        : clean.includes("pharmacy") || clean.includes("store") ? "Pharmacy"
-                                        : clean.includes("lab") || clean.includes("pathology") ? "Laboratory"
-                                        : clean.includes("icu") || clean.includes("critical") ? "Critical Care"
-                                        : clean.includes("emergency") ? "Emergency"
-                                        : clean.includes("reception") || clean.includes("registration") ? "Administrative"
-                                        : "Clinical";
+                                          : clean.includes("pharmacy") || clean.includes("store") ? "Pharmacy"
+                                            : clean.includes("lab") || clean.includes("pathology") ? "Laboratory"
+                                              : clean.includes("icu") || clean.includes("critical") ? "Critical Care"
+                                                : clean.includes("emergency") ? "Emergency"
+                                                  : clean.includes("reception") || clean.includes("registration") ? "Administrative"
+                                                    : "Clinical";
                                       return (
                                         <tr key={dept} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition ${isSelected ? 'bg-brand-50/40 dark:bg-brand-900/10' : ''}`}>
                                           <td className="px-4 py-3 text-center">
@@ -2024,11 +2184,11 @@ export default function InfrastructurePage() {
             {currentStep === 4 && (() => {
               const currentB = generatedBuildings.find((b) => b.buildingId === (builderBuildingId || (buildings[0]?.id || "")));
               const currentFl = currentB?.floors.find((f) => f.floorId === (builderFloorId || (currentB.floors[0]?.floorId || "")));
-              
+
               const defaultDept = currentFl?.departments[0]?.departmentName || "";
               const activeDeptName = builderDeptName || defaultDept;
               const currentDept = currentFl?.departments.find((d) => d.departmentName === activeDeptName);
-              
+
               const currentWard = currentDept?.wards.find((w) => w.wardType === builderWardType);
               const currentRoom = currentWard?.rooms.find((r) => r.id === builderRoomId);
 
@@ -2122,7 +2282,7 @@ export default function InfrastructurePage() {
                       {builderRoomId && currentRoom && (
                         <>
                           <span>/</span>
-                          <span className="text-emerald-500 font-bold">{currentRoom.roomNumber}</span>
+                          <span className="text-brand-500 font-bold">{currentRoom.roomNumber}</span>
                         </>
                       )}
                     </div>
@@ -2159,29 +2319,26 @@ export default function InfrastructurePage() {
                           return (
                             <div
                               key={ward.id}
-                              className={`rounded-xl border p-5 flex flex-col justify-between transition-all duration-300 ${
-                                isEnabled 
-                                  ? `${typeColor} shadow-md dark:shadow-none scale-[1.01]` 
-                                  : "border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/10 opacity-75 hover:opacity-100"
-                              }`}
+                              className={`rounded-xl border p-5 flex flex-col justify-between transition-all duration-300 ${isEnabled
+                                ? `${typeColor} shadow-md dark:shadow-none scale-[1.01]`
+                                : "border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/10 opacity-75 hover:opacity-100"
+                                }`}
                             >
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${labelColor}`}>
                                     {ward.wardType}
                                   </span>
-                                  
+
                                   <button
                                     type="button"
                                     onClick={() => updateWardStatus(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, !isEnabled)}
-                                    className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                      isEnabled ? "bg-emerald-500" : "bg-gray-200 dark:bg-gray-700"
-                                    }`}
+                                    className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isEnabled ? "bg-brand-500" : "bg-gray-200 dark:bg-gray-700"
+                                      }`}
                                   >
                                     <span
-                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                        isEnabled ? "translate-x-5" : "translate-x-0"
-                                      }`}
+                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? "translate-x-5" : "translate-x-0"
+                                        }`}
                                     />
                                   </button>
                                 </div>
@@ -2198,36 +2355,85 @@ export default function InfrastructurePage() {
                                       value={ward.allocationType || "rooms"}
                                       onChange={(e) => {
                                         const newType = e.target.value as "rooms" | "beds";
-                                        updateWardConfig(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.wardType, { allocationType: newType });
+                                        updateWardInputFields(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, { allocationType: newType });
                                       }}
                                       className="h-7 text-[11px] font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2"
                                     >
                                       <option value="rooms">Room → Beds</option>
-                                      <option value="beds">Beds Only (Open Hall)</option>
+                                      <option value="beds">Beds Only</option>
                                     </select>
                                   </div>
+
+                                  {(ward.allocationType || "rooms") === "rooms" ? (
+                                    <>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">Room nos.:</span>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          value={ward.roomsCountInput ?? 2}
+                                          onChange={(e) => {
+                                            updateWardInputFields(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, { roomsCountInput: Math.max(1, Number(e.target.value)) });
+                                          }}
+                                          className="h-7 w-20 text-[11px] font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 text-center"
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">Bed nos.:</span>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          value={ward.bedsPerRoomInput ?? 2}
+                                          onChange={(e) => {
+                                            updateWardInputFields(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, { bedsPerRoomInput: Math.max(1, Number(e.target.value)) });
+                                          }}
+                                          className="h-7 w-20 text-[11px] font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 text-center"
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">Room Type:</span>
+                                        <select
+                                          value={ward.roomTypeInput || (roomTypeOptions[0] || "")}
+                                          onChange={(e) => {
+                                            updateWardInputFields(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, { roomTypeInput: e.target.value });
+                                          }}
+                                          className="h-7 w-32 text-[11px] font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2"
+                                        >
+                                          {roomTypeOptions.map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">Bed nos.:</span>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        value={ward.bedsCountInput ?? 4}
+                                        onChange={(e) => {
+                                          updateWardInputFields(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward.id, { bedsCountInput: Math.max(1, Number(e.target.value)) });
+                                        }}
+                                        className="h-7 w-20 text-[11px] font-medium rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 text-center"
+                                      />
+                                    </div>
+                                  )}
+
                                   <div className="flex items-center justify-between pt-1">
                                     <div className="text-[11px] text-gray-500">
                                       {ward.allocationType === "beds" ? (
-                                        <><strong>{totalBedsCount}</strong> Direct Beds</>
+                                        <><strong>{totalBedsCount}</strong> Configured Beds</>
                                       ) : (
                                         <><strong>{roomCount}</strong> Rooms • <strong>{totalBedsCount}</strong> Beds</>
                                       )}
                                     </div>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setBuilderWardType(ward.wardType);
-                                        if (roomTypeOptions.length > 0) {
-                                          setGenRoomType(roomTypeOptions[0]);
-                                        }
-                                        if (bedTypeOptions.length > 0) {
-                                          setGenBedType(bedTypeOptions[0]);
-                                        }
-                                      }}
+                                      onClick={() => handleConfigureWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, ward)}
                                       className="px-3.5 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold shadow-sm transition"
                                     >
-                                      {ward.allocationType === "beds" ? "Configure Beds →" : "Configure Rooms →"}
+                                      Configure →
                                     </button>
                                   </div>
                                 </div>
@@ -2257,107 +2463,6 @@ export default function InfrastructurePage() {
                         </h5>
                       </div>
 
-                      {/* Direct Bed Auto Generator */}
-                      <div className="rounded-xl border border-brand-100 bg-brand-50/20 dark:border-brand-900/30 dark:bg-brand-950/10 p-5 space-y-4">
-                        <div className="flex items-center gap-2 border-b border-brand-100/50 dark:border-brand-900/20 pb-2">
-                          <svg className="w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span className="text-xs font-bold text-brand-800 dark:text-brand-300 uppercase tracking-wider">
-                            Auto Direct Bed Generator
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-xs">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Number of Beds
-                            </label>
-                            <input
-                              type="number"
-                              min={1} max={100}
-                              value={genBedsPerRoom}
-                              onChange={(e) => setGenBedsPerRoom(Math.max(1, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-center"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Type
-                            </label>
-                            <select
-                              value={genBedType}
-                              onChange={(e) => setGenBedType(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2"
-                            >
-                              {bedTypeOptions.map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Prefix
-                            </label>
-                            <input
-                              type="text"
-                              value={genBedPrefix}
-                              onChange={(e) => setGenBedPrefix(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                              placeholder="e.g. B"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Rate / Charge (₹)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={genRoomRate}
-                              onChange={(e) => setGenRoomRate(Math.max(0, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="pt-2 text-xs">
-                          <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                            Bed Naming Pattern
-                          </label>
-                          <input
-                            type="text"
-                            value={genBedPattern}
-                            onChange={(e) => setGenBedPattern(e.target.value)}
-                            className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 font-mono"
-                          />
-                        </div>
-
-                        <div className="flex justify-between items-center pt-3 border-t border-brand-100/50 dark:border-brand-900/20">
-                          <span className="text-[10px] text-gray-500">
-                            Pattern place holders: <code>{"{Prefix}"}</code>, <code>{"{RoomName}"}</code>, <code>{"{BedIndex}"}</code>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              generateBedsDirectlyForWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, {
-                                bedCount: genBedsPerRoom,
-                                bedType: genBedType || (bedTypeOptions[0] || ""),
-                                bedPrefix: genBedPrefix,
-                                bedPattern: genBedPattern,
-                                rate: genRoomRate,
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold transition shadow-sm"
-                          >
-                            Generate Beds
-                          </button>
-                        </div>
-                      </div>
-
                       {/* Direct Beds List */}
                       <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
@@ -2375,7 +2480,7 @@ export default function InfrastructurePage() {
 
                         {(currentWard?.rooms[0]?.beds || []).length === 0 ? (
                           <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                            <p className="text-sm text-gray-500 italic">No beds configured yet in this ward hall. Use the Auto Direct Bed Generator above.</p>
+                            <p className="text-sm text-gray-500 italic">No beds configured yet in this ward hall.</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -2404,28 +2509,17 @@ export default function InfrastructurePage() {
                                   </button>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                  <div>
-                                    <label className="block text-[10px] text-gray-400 mb-0.5">Type</label>
-                                    <select
-                                      value={bed.bedType}
-                                      onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentWard!.rooms[0].id, bed.id, { bedType: e.target.value })}
-                                      className="w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-1.5 py-1 text-[11px]"
-                                    >
-                                      {bedTypeOptions.map(bt => (
-                                        <option key={bt} value={bt}>{bt}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] text-gray-400 mb-0.5">Charge (₹)</label>
-                                    <input
-                                      type="number"
-                                      value={bed.charge}
-                                      onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentWard!.rooms[0].id, bed.id, { charge: Number(e.target.value) })}
-                                      className="w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-1.5 py-1 text-[11px] text-center"
-                                    />
-                                  </div>
+                                <div className="text-[11px]">
+                                  <label className="block text-[10px] text-gray-400 mb-0.5">Type</label>
+                                  <select
+                                    value={bed.bedType}
+                                    onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentWard!.rooms[0].id, bed.id, { bedType: e.target.value })}
+                                    className="w-full border border-gray-250 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 text-[11px]"
+                                  >
+                                    {bedTypeOptions.map(bt => (
+                                      <option key={bt} value={bt}>{bt}</option>
+                                    ))}
+                                  </select>
                                 </div>
                               </div>
                             ))}
@@ -2449,159 +2543,6 @@ export default function InfrastructurePage() {
                         </h5>
                       </div>
 
-                      {/* Room auto generator */}
-                      <div className="rounded-xl border border-brand-100 bg-brand-50/20 dark:border-brand-900/30 dark:bg-brand-950/10 p-5 space-y-4">
-                        <div className="flex items-center gap-2 border-b border-brand-100/50 dark:border-brand-900/20 pb-2">
-                          <svg className="w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span className="text-xs font-bold text-brand-800 dark:text-brand-300 uppercase tracking-wider">
-                            Auto Room & Bed Generator
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3.5 text-xs">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Number of Rooms
-                            </label>
-                            <input
-                              type="number"
-                              min={1} max={50}
-                              value={genRoomCount}
-                              onChange={(e) => setGenRoomCount(Math.max(1, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-center"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Room Type
-                            </label>
-                            <select
-                              value={genRoomType}
-                              onChange={(e) => setGenRoomType(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2"
-                            >
-                              {roomTypeOptions.map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                              {roomTypeOptions.length === 0 && (
-                                <option value="">No Room Types Configured</option>
-                              )}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Room Prefix
-                            </label>
-                            <input
-                              type="text"
-                              value={genRoomPrefix}
-                              onChange={(e) => setGenRoomPrefix(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                              placeholder="e.g. RM"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Room Rate (₹)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={genRoomRate}
-                              onChange={(e) => setGenRoomRate(Math.max(0, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Beds Per Room
-                            </label>
-                            <input
-                              type="number"
-                              min={1} max={20}
-                              value={genBedsPerRoom}
-                              onChange={(e) => setGenBedsPerRoom(Math.max(1, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-center"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Type
-                            </label>
-                            <select
-                              value={genBedType}
-                              onChange={(e) => setGenBedType(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2"
-                            >
-                              {bedTypeOptions.map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                              {bedTypeOptions.length === 0 && (
-                                <option value="">No Bed Types Configured</option>
-                              )}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-2">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Room Naming Pattern
-                            </label>
-                            <input
-                              type="text"
-                              value={genRoomPattern}
-                              onChange={(e) => setGenRoomPattern(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 font-mono"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Naming Pattern
-                            </label>
-                            <input
-                              type="text"
-                              value={genBedPattern}
-                              onChange={(e) => setGenBedPattern(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 font-mono"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-3 border-t border-brand-100/50 dark:border-brand-900/20">
-                          <span className="text-[10px] text-gray-500">
-                            Pattern place holders: <code>{"{Prefix}"}</code>, <code>{"{FloorNum}"}</code>, <code>{"{RoomIndex}"}</code>, <code>{"{RoomName}"}</code>, <code>{"{BedIndex}"}</code>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              generateRoomsForWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, {
-                                roomCount: genRoomCount,
-                                roomType: genRoomType || (roomTypeOptions.length > 0 ? (roomTypeOptions[0].split("-").pop()?.trim() || roomTypeOptions[0]) : ""),
-                                roomPrefix: genRoomPrefix,
-                                roomPattern: genRoomPattern,
-                                rate: genRoomRate,
-                                bedsPerRoom: genBedsPerRoom,
-                                bedType: genBedType || (bedTypeOptions.length > 0 ? (bedTypeOptions[0].split("-").pop()?.trim() || bedTypeOptions[0]) : ""),
-                                bedPrefix: genBedPrefix,
-                                bedPattern: genBedPattern
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold transition shadow-sm"
-                          >
-                            Generate Rooms
-                          </button>
-                        </div>
-                      </div>
-
                       {/* Rooms list */}
                       <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
@@ -2619,10 +2560,10 @@ export default function InfrastructurePage() {
 
                         {currentWard?.rooms.length === 0 ? (
                           <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                            <p className="text-sm text-gray-500 italic">No rooms configured yet. Use the Auto Generator above to generate rooms.</p>
+                            <p className="text-sm text-gray-500 italic">No rooms configured yet.</p>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {currentWard?.rooms.map((room) => (
                               <div
                                 key={room.id}
@@ -2637,7 +2578,7 @@ export default function InfrastructurePage() {
                                       className="font-bold border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-2.5 py-1 w-28 focus:ring-1 focus:ring-brand-500"
                                       placeholder="Room Number"
                                     />
-                                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300 font-semibold">
+                                    <span className="text-[10px] px-2 py-0.5 rounded bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-300 font-semibold">
                                       {room.beds.length} Beds
                                     </span>
                                   </div>
@@ -2666,32 +2607,20 @@ export default function InfrastructurePage() {
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 text-[11px]">
-                                  <div>
-                                    <label className="block text-[10px] text-gray-500 mb-0.5">Room Type</label>
-                                    <select
-                                      value={room.roomType}
-                                      onChange={(e) => updateRoomInWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard.id, room.id, { roomType: e.target.value })}
-                                      className="w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1"
-                                    >
-                                      {roomTypeOptions.map(t => (
-                                        <option key={t} value={t}>{t}</option>
-                                      ))}
-                                      {roomTypeOptions.length === 0 && (
-                                        <option value="">No Room Types Configured</option>
-                                      )}
-                                    </select>
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[10px] text-gray-500 mb-0.5">Room Rate (₹)</label>
-                                    <input
-                                      type="number"
-                                      value={room.rate}
-                                      onChange={(e) => updateRoomInWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard.id, room.id, { rate: Number(e.target.value) })}
-                                      className="w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 text-center"
-                                    />
-                                  </div>
+                                <div className="text-[11px]">
+                                  <label className="block text-[10px] text-gray-500 mb-0.5">Room Type</label>
+                                  <select
+                                    value={room.roomType}
+                                    onChange={(e) => updateRoomInWard(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard.id, room.id, { roomType: e.target.value })}
+                                    className="w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1"
+                                  >
+                                    {roomTypeOptions.map(t => (
+                                      <option key={t} value={t}>{t}</option>
+                                    ))}
+                                    {roomTypeOptions.length === 0 && (
+                                      <option value="">No Room Types Configured</option>
+                                    )}
+                                  </select>
                                 </div>
 
                                 <div className="pt-2 border-t border-gray-150 dark:border-gray-800 flex justify-end">
@@ -2699,9 +2628,8 @@ export default function InfrastructurePage() {
                                     type="button"
                                     onClick={() => {
                                       setBuilderRoomId(room.id);
-                                      setGenBedRate(room.rate);
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition"
                                   >
                                     Configure Beds ({room.beds.length}) →
                                   </button>
@@ -2728,126 +2656,6 @@ export default function InfrastructurePage() {
                         </h5>
                       </div>
 
-                      {/* Bed generator */}
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50/20 dark:border-emerald-900/30 dark:bg-emerald-950/10 p-5 space-y-4">
-                        <div className="flex items-center gap-2 border-b border-emerald-100/50 dark:border-emerald-900/20 pb-2">
-                          <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v2M5 7h14m-1.5 14h-11A1.5 1.5 0 015 19.5V7h14v12.5a1.5 1.5 0 01-1.5 1.5z" />
-                          </svg>
-                          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-                            Bed Auto Generator
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5 text-xs">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Number of Beds
-                            </label>
-                            <input
-                              type="number"
-                              min={1} max={20}
-                              value={genBedCount}
-                              onChange={(e) => setGenBedCount(Math.max(1, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-center"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Type
-                            </label>
-                            <select
-                              value={genBedType}
-                              onChange={(e) => setGenBedType(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2"
-                            >
-                              {bedTypeOptions.map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                              {bedTypeOptions.length === 0 && (
-                                <option value="">No Bed Types Configured</option>
-                              )}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Prefix
-                            </label>
-                            <input
-                              type="text"
-                              value={genBedPrefix}
-                              onChange={(e) => setGenBedPrefix(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                              placeholder="e.g. B"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Charge / Rate (₹)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={genBedRate}
-                              onChange={(e) => setGenBedRate(Math.max(0, Number(e.target.value)))}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                            />
-                          </div>
-
-                          <div className="col-span-2 sm:col-span-1">
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Equipment list
-                            </label>
-                            <input
-                              type="text"
-                              value={genBedEquipment}
-                              onChange={(e) => setGenBedEquipment(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5"
-                              placeholder="Ventilator, Monitor, Oxygen"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 text-xs pt-1">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              Bed Naming Pattern
-                            </label>
-                            <input
-                              type="text"
-                              value={genBedPattern}
-                              onChange={(e) => setGenBedPattern(e.target.value)}
-                              className="h-8 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 font-mono"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-3 border-t border-emerald-100/50 dark:border-emerald-900/20">
-                          <span className="text-[10px] text-gray-500">
-                            Pattern placeholders: <code>{"{RoomName}"}</code>, <code>{"{Prefix}"}</code>, <code>{"{BedIndex}"}</code>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              generateBedsForRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom!.id, {
-                                bedCount: genBedCount,
-                                bedType: genBedType || (bedTypeOptions.length > 0 ? (bedTypeOptions[0].split("-").pop()?.trim() || bedTypeOptions[0]) : ""),
-                                bedPrefix: genBedPrefix,
-                                bedPattern: genBedPattern,
-                                charge: genBedRate,
-                                equipment: genBedEquipment
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-sm"
-                          >
-                            Generate Beds
-                          </button>
-                        </div>
-                      </div>
-
                       {/* Beds list */}
                       <div className="space-y-4">
                         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-2">
@@ -2865,7 +2673,7 @@ export default function InfrastructurePage() {
 
                         {currentRoom?.beds.length === 0 ? (
                           <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                            <p className="text-sm text-gray-500 italic">No beds configured for this room yet. Click Add Bed or use the Auto Generator above.</p>
+                            <p className="text-sm text-gray-500 italic">No beds configured for this room yet.</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2876,7 +2684,7 @@ export default function InfrastructurePage() {
                               >
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg className="w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v2M5 7h14m-1.5 14h-11A1.5 1.5 0 015 19.5V7h14v12.5a1.5 1.5 0 01-1.5 1.5z" />
                                     </svg>
                                     <input
@@ -2901,32 +2709,20 @@ export default function InfrastructurePage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                    <div>
-                                      <label className="block text-[10px] text-gray-500 mb-0.5">Bed Type</label>
-                                      <select
-                                        value={bed.bedType}
-                                        onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom.id, bed.id, { bedType: e.target.value })}
-                                        className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded px-2 py-0.5"
-                                      >
-                                        {bedTypeOptions.map(t => (
-                                          <option key={t} value={t}>{t}</option>
-                                        ))}
-                                        {bedTypeOptions.length === 0 && (
-                                          <option value="">No Bed Types Configured</option>
-                                        )}
-                                      </select>
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[10px] text-gray-500 mb-0.5">Charge (₹)</label>
-                                      <input
-                                        type="number"
-                                        value={bed.charge}
-                                        onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom.id, bed.id, { charge: Number(e.target.value) })}
-                                        className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded px-2 py-0.5 text-center"
-                                      />
-                                    </div>
+                                  <div>
+                                    <label className="block text-[10px] text-gray-500 mb-0.5">Bed Type</label>
+                                    <select
+                                      value={bed.bedType}
+                                      onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom.id, bed.id, { bedType: e.target.value })}
+                                      className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded px-2 py-0.5"
+                                    >
+                                      {bedTypeOptions.map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                      ))}
+                                      {bedTypeOptions.length === 0 && (
+                                        <option value="">No Bed Types Configured</option>
+                                      )}
+                                    </select>
                                   </div>
 
                                   <div>
@@ -2980,7 +2776,7 @@ export default function InfrastructurePage() {
                           {b.floors.length} Floors
                         </span>
                       </summary>
-                      
+
                       <div className="p-4 space-y-3 pl-6 border-t border-gray-150 dark:border-gray-800 bg-white dark:bg-transparent">
                         {b.floors.map((fl) => (
                           <details key={fl.floorId} className="group/floor border border-gray-100 dark:border-gray-850 rounded-lg" open>
@@ -2995,7 +2791,7 @@ export default function InfrastructurePage() {
                                 {fl.departments.length} Depts
                               </span>
                             </summary>
-                            
+
                             <div className="p-3 pl-6 space-y-3 border-t border-gray-100 dark:border-gray-850">
                               {fl.departments.map((dept) => (
                                 <details key={dept.departmentName} className="group/dept border border-gray-100/50 dark:border-gray-800/50 rounded" open>
@@ -3010,7 +2806,7 @@ export default function InfrastructurePage() {
                                       {dept.wards.filter(w => w.status === "Enabled").length} Wards
                                     </span>
                                   </summary>
-                                  
+
                                   <div className="p-2 pl-6 space-y-2 border-t border-gray-100/50 dark:border-gray-850/50 text-xs">
                                     {dept.wards.filter(w => w.status === "Enabled").map((ward) => (
                                       <details key={ward.id} className="group/ward border border-dashed border-gray-200 dark:border-gray-800 rounded">
@@ -3025,7 +2821,7 @@ export default function InfrastructurePage() {
                                             {ward.rooms.length} Rooms
                                           </span>
                                         </summary>
-                                        
+
                                         <div className="p-2 pl-4 space-y-2 border-t border-dashed border-gray-200 dark:border-gray-800">
                                           {ward.rooms.map((room) => (
                                             <div key={room.id} className="p-2 bg-gray-50/50 dark:bg-gray-900/20 border border-gray-100 dark:border-gray-800 rounded flex flex-col gap-1 text-[11px]">
@@ -3039,8 +2835,8 @@ export default function InfrastructurePage() {
                                               </div>
                                               <div className="pl-3 border-l border-gray-300 dark:border-gray-700 flex flex-wrap gap-2 pt-1">
                                                 {room.beds.map((bed) => (
-                                                  <div key={bed.id} className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/30 flex items-center gap-1.5">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                  <div key={bed.id} className="px-2 py-0.5 rounded bg-brand-50 dark:bg-brand-950/20 text-brand-700 dark:text-brand-300 border border-brand-100 dark:border-brand-900/30 flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
                                                     <span>Bed {bed.bedNumber} ({bed.bedType})</span>
                                                     {bed.equipment && (
                                                       <span className="text-[9px] text-gray-400 font-medium">({bed.equipment})</span>
@@ -3188,7 +2984,7 @@ export default function InfrastructurePage() {
                     type="button"
                     onClick={handleWizardGenerate}
                     disabled={isGenerating}
-                    className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                    className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50 shadow-sm"
                   >
                     {isGenerating ? "Generating Infrastructure..." : "Confirm & Generate Infrastructure"}
                   </button>
@@ -3276,6 +3072,6 @@ export default function InfrastructurePage() {
           </div>
         )}
       </div>
-    </PageLayout>
+    </PageLayout >
   );
 }
