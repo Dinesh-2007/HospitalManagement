@@ -287,7 +287,7 @@ function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
 
   let rawWork = row.workExperiences ?? row.work_experiences;
   if (typeof rawWork === "string" && rawWork.trim()) {
-    try { rawWork = JSON.parse(rawWork); } catch {}
+    try { rawWork = JSON.parse(rawWork); } catch { }
   }
   if (Array.isArray(rawWork)) {
     for (const item of rawWork) {
@@ -306,7 +306,7 @@ function normalizeDoctorProfile(row: MasterRow | null): DoctorProfile | null {
 
   let rawCerts = row.certifications;
   if (typeof rawCerts === "string" && rawCerts.trim()) {
-    try { rawCerts = JSON.parse(rawCerts); } catch {}
+    try { rawCerts = JSON.parse(rawCerts); } catch { }
   }
   if (Array.isArray(rawCerts)) {
     for (const item of rawCerts) {
@@ -534,7 +534,7 @@ export default function BookAppointmentPage() {
     ro.observe(el);
     setCarouselWidth(el.getBoundingClientRect().width);
     return () => ro.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doctorOptions.length]);
 
   useEffect(() => {
@@ -739,7 +739,7 @@ export default function BookAppointmentPage() {
       const rows = d.rows ?? [];
       // Filter for scheduled appointments
       const scheduled = rows.filter((a: any) => a.status === "Scheduled" || !a.status);
-      
+
       const now = new Date();
       const activeAppts = scheduled.filter((a: any) => {
         if (a.appointment_date && a.appointment_time) {
@@ -1035,11 +1035,10 @@ export default function BookAppointmentPage() {
                             key={i}
                             type="button"
                             onClick={() => setSlideIndex(i)}
-                            className={`h-1.5 rounded-full transition-all duration-300 ${
-                              i === slideIndex
+                            className={`h-1.5 rounded-full transition-all duration-300 ${i === slideIndex
                                 ? "w-5 bg-brand-500"
                                 : "w-1.5 bg-gray-300 hover:bg-gray-400"
-                            }`}
+                              }`}
                           />
                         ))}
                       </div>
@@ -1074,47 +1073,61 @@ export default function BookAppointmentPage() {
                 {doctorOptions.map((doctor) => {
                   const isActive = doctor.name === selectedDoctor;
                   return (
-                    <div key={doctor.name} className={`rounded-2xl border p-5 transition ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
-                      {/* Profile row centered horizontally */}
-                      <div className="flex items-center justify-center gap-4 w-full pb-3 border-b border-gray-100 dark:border-gray-800">
-                        {/* Photo */}
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center">
+                    <div key={doctor.name} className={`rounded-2xl border transition overflow-hidden ${isActive ? "border-brand-300 bg-brand-50" : "border-gray-200 bg-white"}`}>
+                      {/* Profile row */}
+                      <div className="flex items-start gap-4 p-5 pb-4">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
                           {doctor.profilePhoto ? (
                             <img src={doctor.profilePhoto} alt={doctor.name} className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
                           )}
                         </div>
-                        {/* Name and Department */}
-                        <div className="text-left min-w-0">
-                          <p className="text-base font-semibold text-gray-800 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
-                          {doctor.department && (
-                            <span className="text-xs text-brand-600 block truncate">{doctor.department}</span>
+                        <div className="min-w-0 flex-1">
+                          {/* Name */}
+                          <p className="text-base font-bold text-gray-900 truncate">{withSalutation(doctor.name, doctor.gender)}</p>
+                          {/* Specialization */}
+                          {(doctor.specialization || doctor.department) && (
+                            <p className="mt-0.5 text-sm text-gray-500 truncate">{doctor.specialization || doctor.department}</p>
+                          )}
+                          {/* Experience • Qualification */}
+                          {(doctor.experienceYears || doctor.qualification) && (
+                            <p className="mt-1 text-sm font-semibold text-brand-600">
+                              {doctor.experienceYears ? `${doctor.experienceYears} YEARS` : ""}
+                              {doctor.experienceYears && doctor.qualification ? <span className="mx-1 text-gray-400">•</span> : null}
+                              {doctor.qualification ? doctor.qualification.toUpperCase() : ""}
+                            </p>
+                          )}
+                          {/* Age */}
+                          {doctor.dateOfBirth && (
+                            <p className="mt-0.5 text-xs text-gray-400">Age {calculateAge(doctor.dateOfBirth)}</p>
+                          )}
+                          {/* City */}
+                          {doctor.clinic && (
+                            <p className="mt-0.5 text-xs text-gray-400">{doctor.clinic}</p>
                           )}
                         </div>
                       </div>
 
-                      {/* Info fields: Age, Specialization, Experience stacked vertically and centered */}
-                      <div className="mt-3 flex flex-col items-center justify-center gap-1 text-xs text-gray-500 w-full text-center">
-                        <span className="block truncate max-w-full">Age: {calculateAge(doctor.dateOfBirth)}</span>
-                        <span className="block truncate max-w-full font-medium text-brand-600 dark:text-brand-400">Specialization: {doctor.specialization || "-"}</span>
-                        <span className="block truncate max-w-full">Experience: {getExperienceYears(doctor)}</span>
-                      </div>
+                      {/* Divider */}
+                      <div className="border-t border-gray-100" />
 
                       {/* Action buttons */}
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-2 divide-x divide-gray-100">
                         <button
                           type="button"
                           onClick={() => directBookDoctor(doctor)}
-                          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition"
+                          className="flex items-center justify-center gap-1.5 py-3 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 transition active:scale-95 rounded-bl-2xl"
                         >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           Book Appointment
                         </button>
                         <button
                           type="button"
                           onClick={() => void openDoctorPopup(doctor)}
-                          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                          className="flex items-center justify-center gap-1.5 py-3 text-sm font-semibold text-gray-600 bg-white hover:bg-gray-50 transition active:scale-95 rounded-br-2xl"
                         >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                           More Details
                         </button>
                       </div>
