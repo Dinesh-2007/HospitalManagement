@@ -480,12 +480,12 @@ async function createBed(
 /** Legal transition graph. Returns error string if transition is illegal, null if OK. */
 function checkTransition(from: string, to: string): string | null {
   const graph: Record<string, string[]> = {
-    Available:   ["Occupied", "Reserved", "Maintenance"],
-    Occupied:    ["Cleaning"],
-    Reserved:    ["Occupied", "Available"],
-    Cleaning:    ["Available"],
+    Available: ["Occupied", "Reserved", "Maintenance"],
+    Occupied: ["Cleaning"],
+    Reserved: ["Occupied", "Available"],
+    Cleaning: ["Available"],
     Maintenance: ["Available"],
-    Blocked:     ["Available", "Maintenance"],
+    Blocked: ["Available", "Maintenance"],
   };
   const allowed = graph[from] ?? [];
   if (!allowed.includes(to)) {
@@ -691,8 +691,7 @@ export async function GET(
       );
 
       const beds = await pool.query(
-        `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.BED)} ${
-          roomFilter ? roomFilter.replace("LOWER(building_name)", "LOWER(building_name)").replace("LOWER(floor_name)", "LOWER(floor_name)") : ""
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.BED)} ${roomFilter ? roomFilter.replace("LOWER(building_name)", "LOWER(building_name)").replace("LOWER(floor_name)", "LOWER(floor_name)") : ""
         } ORDER BY id`,
         roomParams
       );
@@ -1072,6 +1071,14 @@ export async function POST(
       if (!Array.isArray(buildings) || buildings.length === 0) {
         return NextResponse.json({ error: "At least one building is required in wizard configuration." }, { status: 400 });
       }
+
+      // Erase existing infrastructure tables to prevent duplicate entries
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.BED)}`);
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.ROOM)}`);
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.WARD_INSTANCE)}`);
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.FLOOR_DEPT)}`);
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.FLOOR)}`);
+      await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.BUILDING)}`);
 
       const results = { buildings: 0, floors: 0, departments: 0, wards: 0, rooms: 0, beds: 0 };
 
