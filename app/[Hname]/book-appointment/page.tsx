@@ -664,6 +664,9 @@ export default function BookAppointmentPage() {
   async function openDoctorPopup(doctor: DoctorOption) {
     setSelectedDoctor(doctor.name);
     setSelectedDoctorOption(doctor);
+    if (doctor.department) {
+      setSelectedDepartment(doctor.department);
+    }
     setIsDoctorPopupOpen(true);
     setErrorMessage(null);
     try {
@@ -694,7 +697,12 @@ export default function BookAppointmentPage() {
 
   function directBookDoctor(doctor: DoctorOption) {
     const department = selectedDepartment || doctor.department || "";
+    if (department) {
+      setSelectedDepartment(department);
+    }
     const doctorName = doctor.name;
+    setSelectedDoctor(doctorName);
+    setSelectedDoctorOption(doctor);
     const forPatient = bookingFor ?? authenticatedPatient;
     const query = new URLSearchParams({
       department,
@@ -712,11 +720,13 @@ export default function BookAppointmentPage() {
 
   function executeBooking() {
     setShowBookConfirmation(false);
-    if (!selectedDepartment || !selectedDoctor) return;
+    const department = selectedDepartment || selectedDoctorOption?.department || doctorDetails?.department || "";
+    const doctorName = selectedDoctor || selectedDoctorOption?.name || doctorDetails?.firstName || doctorDetails?.lastName || "";
+    if (!department || !doctorName) return;
     const forPatient = bookingFor ?? authenticatedPatient;
     const query = new URLSearchParams({
-      department: selectedDepartment,
-      doctor: selectedDoctor,
+      department,
+      doctor: doctorName,
       patientId: String(forPatient?.id ?? ""),
       patientName: forPatient?.name ?? "",
       patientPhone: forPatient?.phone ?? "",

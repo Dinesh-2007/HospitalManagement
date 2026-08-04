@@ -262,13 +262,30 @@ export default function AppointmentCalendarPage() {
 
   useEffect(() => {
     async function loadPatient() {
-      if (!patientId) return;
+      const nameParam = searchParams.get("patientName") ?? "";
+      const phoneParam = searchParams.get("patientPhone") ?? "";
+      if (!patientId && !phoneParam && !nameParam) return;
       const rows = await loadRows(hname, `/forms/${PATIENT_TABLE}`);
-      const record = rows.map(normalizePatientRow).find((row) => String(row.id ?? "") === patientId);
-      setPatient(record ?? null);
+      const normalizedRows = rows.map(normalizePatientRow);
+      let record = normalizedRows.find((row) => patientId && String(row.id ?? "") === patientId);
+      if (!record && phoneParam) {
+        const cleanPhone = phoneParam.replace(/\D/g, "");
+        record = normalizedRows.find((row) => row.mobile && row.mobile.replace(/\D/g, "") === cleanPhone);
+      }
+      if (!record && nameParam) {
+        record = normalizedRows.find((row) => row.patient_name && row.patient_name.trim().toLowerCase() === nameParam.trim().toLowerCase());
+      }
+      if (!record) {
+        record = {
+          id: patientId ? Number(patientId) : undefined,
+          patient_name: nameParam || "Patient",
+          mobile: phoneParam || null,
+        };
+      }
+      setPatient(record);
     }
     void loadPatient().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load patient."));
-  }, [hname, patientId]);
+  }, [hname, patientId, searchParams]);
 
   useEffect(() => {
     async function loadSchedule() {
