@@ -881,7 +881,10 @@ export default function AppointmentCalendarPage() {
 
             <button
               type="button"
-              onClick={() => setSuccessData(null)}
+              onClick={() => {
+                setSuccessData(null);
+                router.push(`/${hname}/patient-dashboard`);
+              }}
               className="mt-8 w-full rounded-xl bg-brand-500 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition"
             >
               Done
