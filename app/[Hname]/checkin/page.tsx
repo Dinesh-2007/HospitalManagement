@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
@@ -46,7 +47,7 @@ export default function CheckInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkingIn, setCheckingIn] = useState<string | number | null>(null);
-  const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; queueId: string; patientName: string } | null>(null);
+  const [checkInResult, setCheckInResult] = useState<{ patientId: string; appointmentNumber: string; queueId: string; patientName: string; wantsQrCode?: boolean } | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
 
   // Walk-in modal state variables
@@ -83,6 +84,7 @@ export default function CheckInPage() {
   const [attendantPhone, setAttendantPhone] = useState("");
   const [attendantGender, setAttendantGender] = useState("");
   const [attendantRelation, setAttendantRelation] = useState("");
+  const [wantsQrCode, setWantsQrCode] = useState<"yes" | "no" | "">("");
 
   // Attendant state for walk-in check-in
   const [walkInHasAttendant, setWalkInHasAttendant] = useState<"yes" | "no" | "">("");
@@ -90,6 +92,7 @@ export default function CheckInPage() {
   const [walkInAttendantPhone, setWalkInAttendantPhone] = useState("");
   const [walkInAttendantGender, setWalkInAttendantGender] = useState("");
   const [walkInAttendantRelation, setWalkInAttendantRelation] = useState("");
+  const [walkInWantsQrCode, setWalkInWantsQrCode] = useState<"yes" | "no" | "">("");
   const [relationshipOptions, setRelationshipOptions] = useState<string[]>([]);
 
   const [countries] = useState(() => Country.getAllCountries());
@@ -249,6 +252,7 @@ export default function CheckInPage() {
         appointmentNumber: checkInData.appointmentNumber ?? "",
         queueId: checkInData.queueId ?? "",
         patientName: walkInRegForm.patientName,
+        wantsQrCode: walkInWantsQrCode === "yes",
       });
 
       setShowWalkInModal(false);
@@ -263,6 +267,7 @@ export default function CheckInPage() {
       setWalkInAttendantPhone("");
       setWalkInAttendantGender("");
       setWalkInAttendantRelation("");
+      setWalkInWantsQrCode("");
 
       await loadPatients();
     } catch (err: any) {
@@ -471,6 +476,7 @@ export default function CheckInPage() {
           appointmentNumber: data.appointmentNumber ?? "",
           queueId: data.queueId ?? "",
           patientName: data.patientName ?? patientName,
+          wantsQrCode: wantsQrCode === "yes",
         });
       }
 
@@ -549,7 +555,7 @@ export default function CheckInPage() {
           {error ? <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">{error}</div> : null}
 
           {checkInResult ? (
-            <div className="flex items-start justify-between gap-4 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">
               <div>
                 <span className="font-semibold">Check-in successful!</span>
                 {" "}{checkInResult.patientName && <span>Patient: <span className="font-medium">{checkInResult.patientName}</span> — </span>}
@@ -557,7 +563,14 @@ export default function CheckInPage() {
                 {checkInResult.appointmentNumber && <> &nbsp;·&nbsp; Ref. No.: <span className="font-mono font-semibold">{checkInResult.appointmentNumber}</span></>}
                 {checkInResult.queueId && <> &nbsp;·&nbsp; Queue ID: <span className="font-mono font-semibold">{checkInResult.queueId}</span></>}
               </div>
-              <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
+              <div className="flex items-center gap-3">
+                {checkInResult.wantsQrCode && (
+                  <button type="button" onClick={() => window.print()} className="shrink-0 rounded-lg bg-success-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-success-700">
+                    Print Ticket
+                  </button>
+                )}
+                <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
+              </div>
             </div>
           ) : null}
 
@@ -576,13 +589,14 @@ export default function CheckInPage() {
                   <th className="px-4 py-3 text-left">Slot</th>
                   <th className="px-4 py-3 text-left">Attendant</th>
                   <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-center">Print</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>Loading...</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={12}>Loading...</td></tr>
                 ) : filteredRows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>No scheduled patients found.</td></tr>
+                  <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={12}>No scheduled patients found.</td></tr>
                 ) : filteredRows.map((row) => {
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
                   const isCheckedIn = !!row.appointment_check_in_time;
@@ -649,11 +663,38 @@ export default function CheckInPage() {
                               setAttendantPhone("");
                               setAttendantGender("");
                               setAttendantRelation("");
+                              setWantsQrCode("");
                             }}
                             disabled={isRowCheckingIn}
                             className="rounded-full border border-brand-300 bg-brand-50 px-4 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 transition disabled:opacity-50"
                           >
                             {isRowCheckingIn ? "Checking..." : "Check-in"}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {isCheckedIn && (
+                          <button
+                            type="button"
+                            title="Print Ticket"
+                            onClick={() => {
+                              const pId = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                              const apptNum = text(row, ["appointment_number"]);
+                              const qId = text(row, ["queue_id"]);
+                              setCheckInResult({
+                                patientId: pId || "",
+                                appointmentNumber: apptNum || "",
+                                queueId: qId || "",
+                                patientName: name,
+                                wantsQrCode: true,
+                              });
+                              setTimeout(() => window.print(), 100);
+                            }}
+                            className="p-1.5 inline-flex text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
                           </button>
                         )}
                       </td>
@@ -713,6 +754,18 @@ export default function CheckInPage() {
               </div>
             )}
 
+            <div className="mb-4 text-sm text-gray-600 pt-4 border-t border-gray-100 dark:border-gray-800">
+              Generate QR code for print?
+              <div className="flex items-center gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="wantsQrCode" value="yes" checked={wantsQrCode === "yes"} onChange={(e) => setWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> Yes
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="wantsQrCode" value="no" checked={wantsQrCode === "no"} onChange={(e) => setWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> No
+                </label>
+              </div>
+            </div>
+
             <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 dark:border-gray-800">
               <button type="button" onClick={() => setAttendantCheckInRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
                 Cancel
@@ -722,6 +775,10 @@ export default function CheckInPage() {
                 onClick={() => {
                   if (hasAttendant === "") {
                     setError("Please select whether there is an attendant.");
+                    return;
+                  }
+                  if (wantsQrCode === "") {
+                    setError("Please select whether to generate a QR code.");
                     return;
                   }
                   if (hasAttendant === "yes" && (!attendantName || !attendantPhone || !attendantGender || !attendantRelation)) {
@@ -736,7 +793,7 @@ export default function CheckInPage() {
                     attendantRelation
                   });
                 }}
-                disabled={hasAttendant === "" || checkingIn === attendantCheckInRow.appointment_id}
+                disabled={hasAttendant === "" || wantsQrCode === "" || checkingIn === attendantCheckInRow.appointment_id}
                 className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
               >
                 {checkingIn === attendantCheckInRow.appointment_id ? "Checking..." : "Complete Check-in"}
@@ -1140,6 +1197,19 @@ export default function CheckInPage() {
                       </div>
                     )}
                   </div>
+                  <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="mb-4 text-sm text-gray-600">
+                      Generate QR code for print?
+                      <div className="flex items-center gap-4 mt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="walkInWantsQrCode" value="yes" checked={walkInWantsQrCode === "yes"} onChange={(e) => setWalkInWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> Yes
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="walkInWantsQrCode" value="no" checked={walkInWantsQrCode === "no"} onChange={(e) => setWalkInWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> No
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex gap-3 pt-4 justify-end border-t border-gray-100 dark:border-gray-800">
                   <button
@@ -1159,7 +1229,7 @@ export default function CheckInPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={walkInSubmitting}
+                    disabled={walkInSubmitting || walkInWantsQrCode === ""}
                     className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
                   >
                     {walkInSubmitting ? "Saving..." : "Check-in"}
@@ -1170,6 +1240,64 @@ export default function CheckInPage() {
           </div>
         </div>
       )}
+
+      {/* Print Ticket Section */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #print-ticket-section, #print-ticket-section * {
+            visibility: visible;
+          }
+          #print-ticket-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+        }
+      `}} />
+      <div id="print-ticket-section" className="hidden print:block absolute top-0 left-0 w-full h-full bg-white z-[9999] p-8">
+        {checkInResult && checkInResult.wantsQrCode && (
+          <div className="mx-auto max-w-sm border border-gray-800 p-6 text-center text-black">
+            <h1 className="text-2xl font-bold mb-2">Hospital Check-in Ticket</h1>
+            <p className="text-sm mb-6">Please keep this ticket with you</p>
+            
+            <div className="mb-6 flex justify-center">
+              <QRCodeSVG 
+                value={JSON.stringify({
+                  patientId: checkInResult.patientId,
+                  appointmentNumber: checkInResult.appointmentNumber,
+                  queueId: checkInResult.queueId,
+                  patientName: checkInResult.patientName
+                })}
+                size={150}
+              />
+            </div>
+            
+            <div className="text-left space-y-2 mb-4">
+              <div className="flex justify-between border-b border-dashed border-gray-400 pb-1">
+                <span className="font-semibold">Patient Name:</span>
+                <span>{checkInResult.patientName}</span>
+              </div>
+              <div className="flex justify-between border-b border-dashed border-gray-400 pb-1">
+                <span className="font-semibold">Patient ID:</span>
+                <span className="font-mono">{checkInResult.patientId}</span>
+              </div>
+              <div className="flex justify-between border-b border-dashed border-gray-400 pb-1">
+                <span className="font-semibold">Queue ID:</span>
+                <span className="font-mono">{checkInResult.queueId}</span>
+              </div>
+              <div className="flex justify-between border-b border-dashed border-gray-400 pb-1">
+                <span className="font-semibold">Ref. No:</span>
+                <span className="font-mono">{checkInResult.appointmentNumber}</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-8">Generated on {new Date().toLocaleString()}</p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
