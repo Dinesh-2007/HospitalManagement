@@ -13,7 +13,7 @@ export function Header() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
   const { theme, toggleTheme } = useTheme();
-  
+
   const params = useParams();
   const hname = params?.Hname ? decodeURIComponent(params.Hname as string) : "HSMS";
 
@@ -42,11 +42,11 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-[99999] flex w-full border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+    <header className="sticky top-0 z-40 flex w-full border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
       <div className="flex w-full grow flex-col items-center justify-between lg:flex-row lg:px-6">
         <div className="flex w-full items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 dark:border-gray-800 sm:gap-4 lg:justify-normal lg:border-b-0 lg:px-0 lg:py-4">
           <button
-            className="z-[99999] flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 lg:h-11 lg:w-11 lg:border lg:border-gray-200 dark:lg:border-gray-800"
+            className="z-40 flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 lg:h-11 lg:w-11 lg:border lg:border-gray-200 dark:lg:border-gray-800"
             onClick={handleToggle}
             aria-label="Toggle Sidebar"
           >
