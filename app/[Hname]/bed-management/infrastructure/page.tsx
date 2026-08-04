@@ -196,6 +196,7 @@ export default function InfrastructurePage() {
   const hname = params?.Hname as string;
 
   const [activeTab, setActiveTab] = useState<"generator" | "hierarchy">("generator");
+  const [hasCheckedInit, setHasCheckedInit] = useState<boolean>(false);
 
   // Step tracking for Wizard (1 to 7)
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -426,9 +427,226 @@ export default function InfrastructurePage() {
     }
   }, [hname]);
 
+  // Helper to rehydrate wizard builder state from existing database hierarchy
+  const rehydrateWizardState = useCallback((data: any) => {
+    if (!data || !data.buildings || data.buildings.length === 0) return;
+
+    try {
+      // 1. Rehydrate 'buildings' state (BuildingConfig[])
+      const mappedBuildings: BuildingConfig[] = data.buildings.map((dbB: any) => {
+        const dbFloorsForB = (data.floors || []).filter(
+          (f: any) => Number(f.building_id) === Number(dbB.id) || f.building === dbB.building_name
+        );
+
+        const floors: FloorConfig[] = dbFloorsForB.map((dbF: any) => {
+          const dbDeptsForF = (data.floorDepartments || []).filter(
+            (fd: any) => Number(fd.floor_id) === Number(dbF.id)
+          );
+          const selectedDeptNames = dbDeptsForF.map((fd: any) => fd.department_name);
+
+          const departments: DepartmentConfig[] = dbDeptsForF.map((dbFd: any) => {
+            const dbWardsForDept = (data.wardInstances || []).filter(
+              (w: any) =>
+                Number(w.floor_dept_assignment_id) === Number(dbFd.id) ||
+                (w.building_name === dbB.building_name &&
+                  w.floor_name === dbF.floor_name &&
+                  w.department_name === dbFd.department_name)
+            );
+
+            const wardConfigs = dbWardsForDept.map((dbW: any) => {
+              const roomsForWard = (data.rooms || []).filter(
+                (r: any) =>
+                  Number(r.ward_instance_id) === Number(dbW.id) ||
+                  (r.building_name === dbB.building_name &&
+                    r.floor_name === dbF.floor_name &&
+                    r.department_name === dbFd.department_name &&
+                    r.ward_name === dbW.ward_type)
+              );
+
+              let bedsCount = 0;
+              let bedsPerRoomInput = 0;
+              if (roomsForWard.length > 0) {
+                const roomIds = roomsForWard.map((r: any) => Number(r.id));
+                const bedsInRooms = (data.beds || []).filter((b: any) => roomIds.includes(Number(b.room_id)));
+                bedsCount = bedsInRooms.length;
+                bedsPerRoomInput = roomsForWard.length > 0 ? Math.ceil(bedsCount / roomsForWard.length) : 0;
+              }
+
+              return {
+                id: String(dbW.id),
+                wardType: dbW.ward_type,
+                roomsCount: roomsForWard.length,
+                bedsPerRoom: bedsPerRoomInput || 1,
+                roomType: roomsForWard[0]?.room_type || "General Ward Room",
+              };
+            });
+
+            return {
+              departmentName: dbFd.department_name,
+              wards: wardConfigs,
+              rooms: [],
+            };
+          });
+
+          return {
+            id: String(dbF.id),
+            floorNumber: Number(dbF.floor_number),
+            floorName: dbF.floor_name,
+            selectedDeptNames,
+            departments,
+          };
+        });
+
+        return {
+          id: String(dbB.id),
+          name: dbB.building_name,
+          code: dbB.code || `BLD-${dbB.id}`,
+          description: dbB.description || "",
+          floorsCount: dbFloorsForB.length || 1,
+          floors,
+        };
+      });
+
+      // 2. Rehydrate 'generatedBuildings' state (GeneratedBuilding[])
+      const mappedGenerated: GeneratedBuilding[] = data.buildings.map((dbB: any) => {
+        const dbFloorsForB = (data.floors || []).filter(
+          (f: any) => Number(f.building_id) === Number(dbB.id) || f.building === dbB.building_name
+        );
+
+        const floors: GeneratedFloor[] = dbFloorsForB.map((dbF: any) => {
+          const dbDepts = (data.floorDepartments || []).filter(
+            (fd: any) => Number(fd.floor_id) === Number(dbF.id)
+          );
+
+          const departments: GeneratedDept[] = dbDepts.map((dbFd: any) => {
+            const dbWardsForDept = (data.wardInstances || []).filter(
+              (w: any) =>
+                Number(w.floor_dept_assignment_id) === Number(dbFd.id) ||
+                (w.building_name === dbB.building_name &&
+                  w.floor_name === dbF.floor_name &&
+                  w.department_name === dbFd.department_name)
+            );
+
+            const wards: GeneratedWard[] = dbWardsForDept.map((dbW: any) => {
+              const roomsForWard = (data.rooms || []).filter(
+                (r: any) =>
+                  Number(r.ward_instance_id) === Number(dbW.id) ||
+                  (r.building_name === dbB.building_name &&
+                    r.floor_name === dbF.floor_name &&
+                    r.department_name === dbFd.department_name &&
+                    r.ward_name === dbW.ward_type)
+              );
+
+              const rooms: GeneratedRoom[] = roomsForWard.map((dbR: any) => {
+                const bedsInRoom = (data.beds || []).filter((b: any) => Number(b.room_id) === Number(dbR.id));
+                const beds: GeneratedBed[] = bedsInRoom.map((dbBed: any) => ({
+                  id: String(dbBed.id),
+                  bedNumber: dbBed.description || dbBed.bed_number,
+                  bedType: dbBed.bed_type || "Standard",
+                  charge: Number(dbBed.charge) || 0,
+                  equipment: dbBed.description?.split("(").pop()?.replace(")", "") || "",
+                  status: dbBed.status || "Available",
+                }));
+
+                return {
+                  id: String(dbR.id),
+                  roomNumber: dbR.description || dbR.code || `RM-${dbR.id}`,
+                  roomType: dbR.room_type || "General Ward Room",
+                  roomPurpose: dbR.room_purpose || "Patient Room",
+                  capacity: Number(dbR.capacity) || beds.length,
+                  rate: Number(dbR.rate) || 0,
+                  status: dbR.status || "Available",
+                  beds,
+                };
+              });
+
+              let bedsCount = 0;
+              let bedsPerRoomInput = 0;
+              if (roomsForWard.length > 0) {
+                const roomIds = roomsForWard.map((r: any) => Number(r.id));
+                const bedsInRooms = (data.beds || []).filter((b: any) => roomIds.includes(Number(b.room_id)));
+                bedsCount = bedsInRooms.length;
+                bedsPerRoomInput = Math.ceil(bedsCount / roomsForWard.length);
+              }
+
+              return {
+                id: String(dbW.id),
+                wardName: dbW.ward_type,
+                wardType: dbW.ward_type,
+                allocationType: (roomsForWard.length === 0 && bedsCount > 0) ? "beds" as const : "rooms" as const,
+                status: "Enabled" as const,
+                rooms,
+                roomsCountInput: roomsForWard.length,
+                bedsPerRoomInput: bedsPerRoomInput || 1,
+                roomTypeInput: roomsForWard[0]?.room_type || "General Ward Room",
+                bedsCountInput: bedsCount,
+              };
+            });
+
+            return {
+              departmentName: dbFd.department_name,
+              wards,
+            };
+          });
+
+          return {
+            floorId: String(dbF.id),
+            floorNumber: Number(dbF.floor_number),
+            floorName: dbF.floor_name,
+            departments,
+          };
+        });
+
+        return {
+          buildingId: String(dbB.id),
+          buildingName: dbB.building_name,
+          buildingCode: dbB.code || `BLD-${dbB.id}`,
+          floors,
+        };
+      });
+
+      setBuildings(mappedBuildings);
+      setGeneratedBuildings(mappedGenerated);
+
+      // Pre-fill builder selections to avoid empty view state
+      const firstB = mappedGenerated[0];
+      const firstF = firstB?.floors?.[0];
+      const firstDept = firstF?.departments?.[0]?.departmentName || "";
+      if (firstB) setBuilderBuildingId(firstB.buildingId);
+      if (firstF) setBuilderFloorId(firstF.floorId);
+      if (firstDept) setBuilderDeptName(firstDept);
+    } catch (e) {
+      console.error("Error rehydrating wizard state:", e);
+    }
+  }, []);
+
+  // Check on mount if infrastructure is already filled and saved in database
   useEffect(() => {
-    if (activeTab === "hierarchy") void loadHierarchy();
-  }, [activeTab, loadHierarchy]);
+    const checkInitialData = async () => {
+      try {
+        const res = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.buildings && data.buildings.length > 0) {
+            rehydrateWizardState(data);
+            setCurrentStep(4);
+          }
+        }
+      } catch (err) {
+        console.error("Initial infrastructure check failed:", err);
+      } finally {
+        setHasCheckedInit(true);
+      }
+    };
+    void checkInitialData();
+  }, [hname, rehydrateWizardState]);
+
+  useEffect(() => {
+    // Only trigger secondary fetches if initial Mount check has already completed
+    if (activeTab === "hierarchy" && hasCheckedInit) {
+      void loadHierarchy();
+    }
+  }, [activeTab, hasCheckedInit, loadHierarchy]);
 
   // Building Actions
   const handleAddBuilding = () => {
