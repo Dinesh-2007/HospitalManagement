@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
 import { getHospitalTimezone, getTodayInTimezone, getNowTimeShortInTimezone } from "../../../../lib/timezone";
+import { splitPhoneNumber } from "../../../../lib/phone";
 
 export const runtime = "nodejs";
 
@@ -97,6 +98,7 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
     // constraint already exists — ignore
   }
   await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENTS_TABLE)} ADD COLUMN IF NOT EXISTS mobile TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENTS_TABLE)} ADD COLUMN IF NOT EXISTS mobile_country_code TEXT`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENTS_TABLE)} ADD COLUMN IF NOT EXISTS dob DATE`);
 }
 
@@ -165,9 +167,15 @@ export async function POST(
 
       if (patientPhone) {
         // Check if patient exists by phone
+        const parsed = splitPhoneNumber(patientPhone);
+        const phone = parsed.phoneNumber;
+        const countryCode = parsed.countryCode;
         const existingByPhone = await pool.query(
-          `SELECT id, patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
-          [patientPhone]
+          `SELECT id, patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} 
+           WHERE (regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = $1 
+                  AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = ''))
+              OR regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($3, '\\D', '', 'g') LIMIT 1`,
+          [phone, countryCode, patientPhone]
         );
         if ((existingByPhone.rowCount ?? 0) > 0) {
           existingIdByPhone = existingByPhone.rows[0].id;
@@ -187,11 +195,14 @@ export async function POST(
           );
         } else {
           // Insert into patient_registration
+          const parsed = splitPhoneNumber(patientPhone);
+          const phone = parsed.phoneNumber;
+          const countryCode = parsed.countryCode;
           await pool.query(
-            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
-             VALUES ($1, $2, $3)
+            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (patient_id) DO NOTHING`,
-            [resolvedPatientId, patientName, patientPhone || null]
+            [resolvedPatientId, patientName, phone || null, countryCode || null]
           );
         }
       }

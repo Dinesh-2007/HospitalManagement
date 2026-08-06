@@ -518,11 +518,10 @@ export default function PharmacyDispensingPage() {
                   resetAddDispense();
                   setActiveView("add-dispense");
                 }}
-                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${
-                  activeView === "add-dispense" || activeView === "dispense-history"
-                    ? "bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500/25"
-                    : "bg-emerald-500 text-white hover:bg-emerald-600 focus:ring-emerald-500/25"
-                }`}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "add-dispense" || activeView === "dispense-history"
+                  ? "bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500/25"
+                  : "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                  }`}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -534,11 +533,10 @@ export default function PharmacyDispensingPage() {
               <button
                 type="button"
                 onClick={() => setActiveView("bills")}
-                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${
-                  activeView === "bills"
-                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                }`}
+                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "bills"
+                  ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                  }`}
               >
                 View Records
               </button>
@@ -548,11 +546,10 @@ export default function PharmacyDispensingPage() {
                 <button
                   type="button"
                   onClick={() => setActiveView("records")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${
-                    activeView === "records"
-                      ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                      : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                  }`}
+                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "records"
+                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                    }`}
                 >
                   Dispense
                 </button>
@@ -563,7 +560,7 @@ export default function PharmacyDispensingPage() {
           <div className="p-4 sm:p-6">
             {/* ── Global messages ──────────────────────────────────────────── */}
             {submitMessage ? (
-              <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-900/40 dark:bg-brand-950/40 dark:text-brand-200">
                 {submitMessage}
               </div>
             ) : null}
@@ -581,12 +578,12 @@ export default function PharmacyDispensingPage() {
                 {/* Step indicator */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">1</span>
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">1</span>
                     <span className="text-sm font-semibold text-slate-700 dark:text-white/90">Customer Lookup</span>
                     {addDispenseStep !== "phone" && (
                       <>
-                        <div className="h-px flex-1 bg-emerald-400" />
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">2</span>
+                        <div className="h-px flex-1 bg-brand-400" />
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">2</span>
                         <span className="text-sm font-semibold text-slate-700 dark:text-white/90">
                           {addDispenseStep === "found" ? "Patient Found" : "New Customer"}
                         </span>
@@ -632,7 +629,7 @@ export default function PharmacyDispensingPage() {
                         <button
                           type="submit"
                           disabled={addDispenseLoading || !isValidPhoneNumber(addDispensePhone)}
-                          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-600 focus:outline-hidden focus:ring-3 focus:ring-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {addDispenseLoading ? "Searching…" : "Search Customer"}
                         </button>
@@ -661,7 +658,7 @@ export default function PharmacyDispensingPage() {
                             value={addDispenseName}
                             onChange={(e) => setAddDispenseName(e.target.value)}
                             placeholder="Full name"
-                            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 focus:border-emerald-400 focus:outline-hidden focus:ring-3 focus:ring-emerald-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 focus:border-brand-400 focus:outline-hidden focus:ring-3 focus:ring-brand-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                           />
                         </div>
                         <div>
@@ -673,7 +670,7 @@ export default function PharmacyDispensingPage() {
                             type="date"
                             value={addDispenseDob}
                             onChange={(e) => setAddDispenseDob(e.target.value)}
-                            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 focus:border-emerald-400 focus:outline-hidden focus:ring-3 focus:ring-emerald-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 focus:border-brand-400 focus:outline-hidden focus:ring-3 focus:ring-brand-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                           />
                         </div>
                         <div className="sm:col-span-2">
@@ -710,7 +707,7 @@ export default function PharmacyDispensingPage() {
                               addDispenseDob
                             );
                           }}
-                          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-600 focus:outline-hidden focus:ring-3 focus:ring-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Proceed to Dispensing →
                         </button>
@@ -722,15 +719,15 @@ export default function PharmacyDispensingPage() {
                   {addDispenseStep === "found" && foundPatient && (
                     <div className="space-y-5">
                       {/* Patient card */}
-                      <div className="flex items-start gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/40 dark:bg-emerald-950/30">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+                      <div className="flex items-start gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-800/40 dark:bg-brand-950/30">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500 text-sm font-bold text-white">
                           {(foundPatient.patient_name ?? "P").charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-emerald-800 dark:text-emerald-200">
+                          <p className="font-semibold text-brand-800 dark:text-brand-200">
                             {foundPatient.patient_name ?? "—"}
                           </p>
-                          <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                          <p className="text-sm text-brand-600 dark:text-brand-400">
                             📱 {addDispensePhone}
                             {foundPatient.dob ? ` · DOB: ${formatDate(String(foundPatient.dob))}` : ""}
                           </p>
@@ -748,7 +745,7 @@ export default function PharmacyDispensingPage() {
                             addDispensePhone,
                             addDispenseDob
                           )}
-                          className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-emerald-600"
+                          className="rounded-lg bg-brand-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-brand-600"
                         >
                           + New Dispense
                         </button>
@@ -775,7 +772,7 @@ export default function PharmacyDispensingPage() {
                               {dispenseHistory.map((bill) => (
                                 <tr
                                   key={bill.id}
-                                  className="cursor-pointer transition hover:bg-emerald-50/60 dark:hover:bg-emerald-900/10"
+                                  className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
                                   onClick={() => openHistoryRecord(bill)}
                                 >
                                   <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-gray-300">
@@ -792,7 +789,7 @@ export default function PharmacyDispensingPage() {
                                   </td>
                                   <td className="px-4 py-3">
                                     {bill.pharmacy_only === "Yes" ? (
-                                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                      <span className="inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                                         Pharmacy Only
                                       </span>
                                     ) : (
@@ -802,7 +799,7 @@ export default function PharmacyDispensingPage() {
                                     )}
                                   </td>
                                   <td className="px-4 py-3 text-right">
-                                    <span className="text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
+                                    <span className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
                                       Use →
                                     </span>
                                   </td>
@@ -829,17 +826,17 @@ export default function PharmacyDispensingPage() {
             ) : null}
 
             {/* ════════════════════════════════════════════════════════════════
-                VIEW: Dispensing Form (shared for consultation & pharmacy-only)
-            ════════════════════════════════════════════════════════════════ */}
+                 VIEW: Dispensing Form (shared for consultation & pharmacy-only)
+             ════════════════════════════════════════════════════════════════ */}
             {activeView === "form" ? (
               <form onSubmit={handleSubmit} className="space-y-8">
                 {/* Pharmacy-Only badge */}
                 {isPharmacyOnly && (
-                  <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/40 dark:bg-emerald-950/30">
-                    <svg className="h-4 w-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <div className="flex items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 dark:border-brand-800/40 dark:bg-brand-950/30">
+                    <svg className="h-4 w-4 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    <span className="text-sm font-medium text-brand-700 dark:text-brand-300">
                       Pharmacy Only — This record will be tagged as Pharmacy Only in the patient's history.
                     </span>
                   </div>
@@ -868,7 +865,7 @@ export default function PharmacyDispensingPage() {
                         value={patientName}
                         onChange={(e) => setPatientName(e.target.value)}
                         placeholder="Patient name"
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-emerald-400 focus:outline-hidden focus:ring-3 focus:ring-emerald-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-400 focus:outline-hidden focus:ring-3 focus:ring-brand-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                       />
                     ) : (
                       <input
@@ -964,7 +961,7 @@ export default function PharmacyDispensingPage() {
                       <select
                         value={paymentStatus}
                         onChange={(e) => setPaymentStatus(e.target.value)}
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-emerald-400 focus:outline-hidden focus:ring-3 focus:ring-emerald-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-400 focus:outline-hidden focus:ring-3 focus:ring-brand-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
                       >
                         {paymentStatusOptions.map((option) => (
                           <option key={option} value={option}>{option}</option>
@@ -990,11 +987,7 @@ export default function PharmacyDispensingPage() {
                     <button
                       type="button"
                       onClick={addMedicineRow}
-                      className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 ${
-                        isPharmacyOnly
-                          ? "bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-500/25"
-                          : "bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
-                      }`}
+                      className="rounded-lg px-4 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
                     >
                       Add Row
                     </button>
@@ -1021,11 +1014,10 @@ export default function PharmacyDispensingPage() {
                                 readOnly={!isPharmacyOnly && row.medicineName.trim().length > 0}
                                 onChange={(e) => updateMedicineRow(row.id, "medicineName", e.target.value)}
                                 placeholder={`Medicine ${index + 1}`}
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
-                                  !isPharmacyOnly && row.medicineName.trim().length > 0
-                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
-                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
-                                }`}
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.medicineName.trim().length > 0
+                                  ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                  : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                  }`}
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -1035,11 +1027,10 @@ export default function PharmacyDispensingPage() {
                                 value={row.prescribedQty}
                                 readOnly={!isPharmacyOnly && row.prescribedQty.trim().length > 0}
                                 onChange={(e) => updateMedicineRow(row.id, "prescribedQty", e.target.value)}
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${
-                                  !isPharmacyOnly && row.prescribedQty.trim().length > 0
-                                    ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
-                                    : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
-                                }`}
+                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.prescribedQty.trim().length > 0
+                                  ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
+                                  : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
+                                  }`}
                               />
                             </td>
                             <td className="px-4 py-3">
@@ -1093,11 +1084,7 @@ export default function PharmacyDispensingPage() {
                     <button
                       type="submit"
                       disabled={isPharmacyOnly ? !patientName.trim() : (!tokenNumber || !patientName)}
-                      className={`rounded-lg px-5 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 disabled:cursor-not-allowed disabled:opacity-60 ${
-                        isPharmacyOnly
-                          ? "bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-500/25"
-                          : "bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
-                      }`}
+                      className="rounded-lg px-5 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 disabled:cursor-not-allowed disabled:opacity-60 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
                     >
                       {isPharmacyOnly ? "Save & Tag Pharmacy Only" : "Save Dispensing"}
                     </button>
@@ -1143,7 +1130,7 @@ export default function PharmacyDispensingPage() {
                         {dispensingBills.map((bill) => (
                           <tr
                             key={bill.id}
-                            className={bill.pharmacy_only === "Yes" ? "bg-emerald-50/40 dark:bg-emerald-950/10" : ""}
+                            className={bill.pharmacy_only === "Yes" ? "bg-brand-50/40 dark:bg-brand-950/10" : ""}
                           >
                             <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-gray-300">
                               {bill.token_number || "—"}
@@ -1159,7 +1146,7 @@ export default function PharmacyDispensingPage() {
                             </td>
                             <td className="px-4 py-3">
                               {bill.pharmacy_only === "Yes" ? (
-                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                <span className="inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                                   Pharmacy Only
                                 </span>
                               ) : (
@@ -1218,9 +1205,8 @@ export default function PharmacyDispensingPage() {
                             <tr
                               key={record.id}
                               onClick={() => openDispensingForm(record)}
-                              className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${
-                                selectedConsultationId === record.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
-                              }`}
+                              className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${selectedConsultationId === record.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
+                                }`}
                             >
                               <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
                                 {record.token_number || "—"}
@@ -1239,8 +1225,8 @@ export default function PharmacyDispensingPage() {
 
           </div>
         </div>
-      </div>
-    </PageLayout>
+      </div >
+    </PageLayout >
   );
 }
 

@@ -203,7 +203,7 @@ export default function BedAllocationPage() {
       .then((u) => {
         if (u) setCurrentUser(u);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [hname]);
 
   /* ── Load ALL hierarchy data & run initial auto-skip cascade ── */
@@ -256,7 +256,7 @@ export default function BedAllocationPage() {
         setSelectedWard(ws.length === 1 ? String(ws[0].ward_type) : "");
         setCurrentStep("beds");
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoading(false));
   }, [hname]);
 
@@ -553,8 +553,7 @@ export default function BedAllocationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Allocation failed.");
       setMessage(
-        `Bed allocated to ${
-          data.patientName || selectedPatient.patient_name
+        `Bed allocated to ${data.patientName || selectedPatient.patient_name
         } (${selectedPatient.patient_id}).`
       );
       // Refresh hierarchy to reflect updated bed statuses
@@ -563,7 +562,7 @@ export default function BedAllocationPage() {
       })
         .then((r) => r.json())
         .then((d) => setHierarchy(d))
-        .catch(() => {});
+        .catch(() => { });
       setSelectedBed(null);
       setSelectedPatient(null);
       setPatientSearchQuery("");
@@ -594,9 +593,9 @@ export default function BedAllocationPage() {
 
       <div className="space-y-5">
         {/* ────────────────────────────────────────
-            Breadcrumb + Step Indicator
+            Breadcrumb Row
            ──────────────────────────────────────── */}
-        <section className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] px-5 py-4">
+        <div className="py-2">
           {/* Breadcrumb row */}
           <div className="flex items-center gap-2 text-sm flex-wrap">
             {/* Back button */}
@@ -604,15 +603,15 @@ export default function BedAllocationPage() {
               <button
                 type="button"
                 onClick={handleGoBack}
-                className="mr-1 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition"
+                className="mr-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-sm font-semibold shadow-theme-xs"
                 title="Go back"
               >
                 <svg
-                  className="h-4 w-4"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 >
                   <path
                     strokeLinecap="round"
@@ -620,10 +619,11 @@ export default function BedAllocationPage() {
                     d="M15 19l-7-7 7-7"
                   />
                 </svg>
+                <span>BACK</span>
               </button>
             )}
 
-            <span className="font-medium text-gray-700 dark:text-gray-300">
+            <span className="font-semibold text-gray-800 dark:text-white">
               🏥 Bed Allocation
             </span>
 
@@ -658,52 +658,7 @@ export default function BedAllocationPage() {
               </span>
             ))}
           </div>
-
-          {/* Step indicator dots */}
-          <div className="mt-3 flex items-center gap-1">
-            {STEPS_ARR.map((step, idx) => {
-              const isActive = step === currentStep;
-              const isPassed =
-                STEPS_ARR.indexOf(step) < STEPS_ARR.indexOf(currentStep);
-              return (
-                <div key={step} className="flex items-center gap-1">
-                  {idx > 0 && (
-                    <div
-                      className={`h-0.5 w-5 sm:w-8 rounded transition-colors ${
-                        isPassed
-                          ? "bg-brand-500"
-                          : "bg-gray-200 dark:bg-gray-700"
-                      }`}
-                    />
-                  )}
-                  <div
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      isActive
-                        ? "bg-brand-500 text-white scale-110 shadow-md shadow-brand-500/25"
-                        : isPassed
-                        ? "bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300"
-                        : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
-                    }`}
-                    title={STEP_LABEL[step]}
-                  >
-                    {idx + 1}
-                  </div>
-                </div>
-              );
-            })}
-            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">
-              {currentStep === "block"
-                ? "Select Building"
-                : currentStep === "floor"
-                ? "Select Floor"
-                : currentStep === "department"
-                ? "Select Department"
-                : currentStep === "ward"
-                ? "Select Ward"
-                : "Select Bed"}
-            </span>
-          </div>
-        </section>
+        </div>
 
         {/* ────────────────────────────────────────
             Loading Spinner
@@ -751,16 +706,13 @@ export default function BedAllocationPage() {
                           key={String(b.id)}
                           type="button"
                           onClick={() => handleSelectBuilding(b)}
-                          className="bed-card-pop group relative aspect-square flex flex-col items-center justify-center rounded-2xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 p-4 transition-all hover:border-brand-400 hover:shadow-xl hover:shadow-brand-500/10 hover:-translate-y-1 active:scale-95 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800 dark:hover:border-brand-500"
+                          className="bed-card-pop group relative aspect-square flex flex-col items-center justify-center rounded-2xl border-2 border-gray-200 bg-white p-4 transition-all hover:border-brand-400 hover:shadow-xl hover:shadow-brand-500/10 hover:-translate-y-1 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500"
                           style={{ animationDelay: `${i * 60}ms` }}
                         >
-                          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-2xl group-hover:bg-brand-100 transition dark:bg-brand-950/50 dark:group-hover:bg-brand-900/40">
-                            🏥
-                          </div>
                           <span className="font-semibold text-gray-800 dark:text-white/90 text-sm text-center">
                             {String(b.building_name || b.code)}
                           </span>
-                          <div className="mt-2 flex items-center gap-1.5 text-xs">
+                          <div className="mt-2 flex items-center justify-center gap-1.5 text-xs">
                             <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
                               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                               {s.available}
@@ -802,40 +754,22 @@ export default function BedAllocationPage() {
                         key={String(f.id)}
                         type="button"
                         onClick={() => handleSelectFloor(f)}
-                        className="bed-card-pop group flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-[0.98] dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500"
+                        className="bed-card-pop group flex flex-col items-center justify-center rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-[0.98] dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500 text-center"
                         style={{ animationDelay: `${i * 60}ms` }}
                       >
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xl group-hover:bg-blue-100 transition dark:bg-blue-950/40 dark:group-hover:bg-blue-900/40">
-                          🏢
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <span className="font-semibold text-gray-800 dark:text-white/90 block truncate">
-                            {String(f.floor_name)}
+                        <span className="font-semibold text-gray-800 dark:text-white/90 block truncate">
+                          {String(f.floor_name)}
+                        </span>
+                        <div className="mt-1 flex items-center justify-center gap-2 text-xs">
+                          <span className="text-green-600 dark:text-green-400 inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                            {s.available} available
                           </span>
-                          <div className="mt-1 flex items-center gap-2 text-xs">
-                            <span className="text-green-600 dark:text-green-400 inline-flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                              {s.available} available
-                            </span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-gray-500 dark:text-gray-400">
-                              {s.total} total
-                            </span>
-                          </div>
+                          <span className="text-gray-400">•</span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {s.total} total
+                          </span>
                         </div>
-                        <svg
-                          className="h-5 w-5 text-gray-300 group-hover:text-brand-500 transition shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
                       </button>
                     );
                   })}
@@ -858,11 +792,11 @@ export default function BedAllocationPage() {
                     const s = stats(
                       hierarchy && selectedBuilding
                         ? bedsOfDept(
-                            hierarchy,
-                            dn,
-                            selectedBuilding,
-                            selectedFloor
-                          )
+                          hierarchy,
+                          dn,
+                          selectedBuilding,
+                          selectedFloor
+                        )
                         : []
                     );
                     return (
@@ -870,16 +804,13 @@ export default function BedAllocationPage() {
                         key={dn}
                         type="button"
                         onClick={() => handleSelectDepartment(dn)}
-                        className="bed-card-pop group flex flex-col items-center gap-3 rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500"
+                        className="bed-card-pop group flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500 text-center"
                         style={{ animationDelay: `${i * 60}ms` }}
                       >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-50 text-xl group-hover:bg-purple-100 transition dark:bg-purple-950/40 dark:group-hover:bg-purple-900/40">
-                          🏛️
-                        </div>
-                        <span className="font-semibold text-gray-800 dark:text-white/90 text-sm text-center">
+                        <span className="font-semibold text-gray-800 dark:text-white/90 text-sm">
                           {dn}
                         </span>
-                        <div className="flex items-center gap-1.5 text-xs">
+                        <div className="flex items-center justify-center gap-1.5 text-xs">
                           <span className="text-green-600 dark:text-green-400 inline-flex items-center gap-1">
                             <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                             {s.available}
@@ -913,12 +844,12 @@ export default function BedAllocationPage() {
                     const s = stats(
                       hierarchy && selectedBuilding
                         ? bedsOfWard(
-                            hierarchy,
-                            wt,
-                            selectedDepartment,
-                            selectedBuilding,
-                            selectedFloor
-                          )
+                          hierarchy,
+                          wt,
+                          selectedDepartment,
+                          selectedBuilding,
+                          selectedFloor
+                        )
                         : []
                     );
                     const pct =
@@ -930,21 +861,16 @@ export default function BedAllocationPage() {
                         key={wt}
                         type="button"
                         onClick={() => handleSelectWard(wt)}
-                        className="bed-card-pop group flex flex-col gap-3 rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500"
+                        className="bed-card-pop group flex flex-col gap-3 rounded-xl border-2 border-gray-200 bg-white p-5 transition-all hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/10 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-brand-500 text-center items-center justify-center"
                         style={{ animationDelay: `${i * 60}ms` }}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-lg group-hover:bg-amber-100 transition dark:bg-amber-950/40 dark:group-hover:bg-amber-900/40">
-                            🛏️
-                          </div>
-                          <span className="font-semibold text-gray-800 dark:text-white/90 text-sm text-left">
-                            {wt}
-                          </span>
-                        </div>
+                        <span className="font-semibold text-gray-800 dark:text-white/90 text-sm">
+                          {wt}
+                        </span>
                         {/* Occupancy progress bar */}
                         <div className="w-full">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-green-600 dark:text-green-400">
+                            <span className="text-green-600 dark:text-green-400 font-medium">
                               {s.available} free
                             </span>
                             <span className="text-gray-500 dark:text-gray-400">
@@ -968,6 +894,147 @@ export default function BedAllocationPage() {
             {/* ═══ BEDS Grid ═══ */}
             {currentStep === "beds" && (
               <div>
+                {/* Patient Assignment Panel (Allocating Bed) */}
+                {selectedBed && (
+                  <section className="mb-6 bed-step-in rounded-2xl border border-brand-200 dark:border-brand-800 bg-gradient-to-br from-brand-50/50 to-white dark:from-brand-950/20 dark:to-gray-900/80 p-6 space-y-4 shadow-lg shadow-brand-500/5">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-brand-100 dark:border-brand-900/50 pb-4">
+                      <div>
+                        <h4 className="text-base font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+                          Allocating: {String(selectedBed.description || selectedBed.bed_number)}
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {selectedBed.room_name
+                            ? `Room: ${String(selectedBed.room_name)} • `
+                            : ""}
+                          Ward: {String(selectedBed.ward_name)} • Rate: ₹
+                          {String(selectedBed.charge || selectedBed.rate || 0)}/day
+                        </p>
+                      </div>
+                      {currentUser && (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 self-start sm:self-auto font-medium">
+                          Staff: {currentUser}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Patient Lookup */}
+                    {!selectedPatient ? (
+                      <div className="relative space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">
+                          Search Registered Patient (by PID, Name, or Mobile) *
+                        </label>
+                        <input
+                          type="text"
+                          value={patientSearchQuery}
+                          onChange={(e) => setPatientSearchQuery(e.target.value)}
+                          placeholder="Type Patient ID (e.g. PID-0001), Name, or Mobile..."
+                          className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                        />
+
+                        {isSearchingPatient && (
+                          <p className="text-xs text-gray-500">
+                            Searching patient database...
+                          </p>
+                        )}
+
+                        {patientSearchResults.length > 0 && (
+                          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                            {patientSearchResults.map((p) => (
+                              <button
+                                key={p.patient_id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPatient(p);
+                                  setPatientSearchQuery("");
+                                  setPatientSearchResults([]);
+                                }}
+                                className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-brand-50 dark:hover:bg-brand-500/10 transition flex items-center justify-between"
+                              >
+                                <div>
+                                  <span className="font-semibold text-gray-800 dark:text-white">
+                                    {p.patient_name}
+                                  </span>
+                                  <span className="ml-2 text-xs text-brand-600 dark:text-brand-400 font-mono">
+                                    ({p.patient_id})
+                                  </span>
+                                </div>
+                                {p.mobile && (
+                                  <span className="text-xs text-gray-500">
+                                    📱 {p.mobile}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {patientSearchQuery.trim() &&
+                          !isSearchingPatient &&
+                          patientSearchResults.length === 0 && (
+                            <p className="text-xs text-red-500">
+                              No registered patient found matching &quot;
+                              {patientSearchQuery}&quot;. Please register the patient
+                              first.
+                            </p>
+                          )}
+                      </div>
+                    ) : (
+                      /* Selected Patient Card */
+                      <div className="rounded-lg border border-green-200 bg-green-50/60 p-4 dark:border-green-800 dark:bg-green-950/20 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-semibold text-green-800 dark:text-green-200 font-mono">
+                              {selectedPatient.patient_id}
+                            </span>
+                            <span className="font-bold text-gray-900 dark:text-white">
+                              {selectedPatient.patient_name}
+                            </span>
+                          </div>
+                          {selectedPatient.mobile && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                              Phone: {selectedPatient.mobile}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPatient(null)}
+                          className="text-xs text-red-600 hover:text-red-800 font-medium underline"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleAllocate}
+                        disabled={isAllocating || !selectedPatient}
+                        className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:opacity-50"
+                      >
+                        {isAllocating
+                          ? "Allocating Bed..."
+                          : "Confirm Bed Allocation"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBed(null);
+                          setSelectedPatient(null);
+                          setPatientSearchQuery("");
+                        }}
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </section>
+                )}
+
                 <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
@@ -1052,30 +1119,28 @@ export default function BedAllocationPage() {
                                   type="button"
                                   disabled={!isAvail}
                                   onClick={() => handleSelectBed(bed)}
-                                  className={`bed-card-pop relative flex flex-col items-center justify-center rounded-xl border-2 p-3 min-h-[76px] transition-all ${
-                                    isSel
-                                      ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30 ring-2 ring-brand-500/30 scale-105 shadow-lg"
-                                      : isAvail
+                                  className={`bed-card-pop relative flex flex-col items-center justify-center rounded-xl border-2 p-3 min-h-[76px] transition-all ${isSel
+                                    ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30 ring-2 ring-brand-500/30 scale-105 shadow-lg"
+                                    : isAvail
                                       ? "border-green-200 bg-green-50/50 hover:border-green-400 hover:shadow-md hover:-translate-y-0.5 cursor-pointer dark:border-green-900 dark:bg-green-950/20 dark:hover:border-green-500"
                                       : "border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-70 dark:border-gray-700 dark:bg-gray-900/50"
-                                  }`}
+                                    }`}
                                   style={{ animationDelay: `${i * 25}ms` }}
                                   title={
                                     isAvail
                                       ? `${String(
-                                          bed.description ||
-                                            bed.bed_number ||
-                                            bed.code
-                                        )} – Click to select`
+                                        bed.description ||
+                                        bed.bed_number ||
+                                        bed.code
+                                      )} – Click to select`
                                       : `${String(
-                                          bed.description ||
-                                            bed.bed_number ||
-                                            bed.code
-                                        )} – ${st}${
-                                          bed.patient_name
-                                            ? ` (${String(bed.patient_name)})`
-                                            : ""
-                                        }`
+                                        bed.description ||
+                                        bed.bed_number ||
+                                        bed.code
+                                      )} – ${st}${bed.patient_name
+                                        ? ` (${String(bed.patient_name)})`
+                                        : ""
+                                      }`
                                   }
                                 >
                                   <span
@@ -1085,24 +1150,23 @@ export default function BedAllocationPage() {
                                     }}
                                   />
                                   <span
-                                    className={`text-xs font-semibold truncate max-w-full ${
-                                      isAvail
-                                        ? "text-gray-800 dark:text-white/90"
-                                        : "text-gray-400 dark:text-gray-500"
-                                    }`}
+                                    className={`text-xs font-semibold truncate max-w-full ${isAvail
+                                      ? "text-gray-800 dark:text-white/90"
+                                      : "text-gray-400 dark:text-gray-500"
+                                      }`}
                                   >
                                     {String(
                                       bed.description ||
-                                        bed.bed_number ||
-                                        bed.code
+                                      bed.bed_number ||
+                                      bed.code
                                     )}
                                   </span>
-                                  {bed.bed_type && (
+                                  {!!bed.bed_type && (
                                     <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-full">
                                       {String(bed.bed_type)}
                                     </span>
                                   )}
-                                  {!isAvail && bed.patient_name && (
+                                  {!isAvail && !!bed.patient_name && (
                                     <span className="text-[10px] text-red-500 dark:text-red-400 truncate max-w-full mt-0.5">
                                       {String(bed.patient_name)}
                                     </span>
@@ -1121,148 +1185,7 @@ export default function BedAllocationPage() {
           </div>
         )}
 
-        {/* ────────────────────────────────────────
-            Patient Assignment Panel
-           ──────────────────────────────────────── */}
-        {selectedBed && (
-          <section className="bed-step-in rounded-2xl border border-brand-200 dark:border-brand-800 bg-gradient-to-br from-brand-50/50 to-white dark:from-brand-950/20 dark:to-gray-900/80 p-6 space-y-4 shadow-lg shadow-brand-500/5">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-brand-100 dark:border-brand-900/50 pb-4">
-              <div>
-                <h4 className="text-base font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-                  Allocating: {String(selectedBed.description || selectedBed.bed_number)}
-                </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {selectedBed.room_name
-                    ? `Room: ${String(selectedBed.room_name)} • `
-                    : ""}
-                  Ward: {String(selectedBed.ward_name)} • Rate: ₹
-                  {String(selectedBed.charge || selectedBed.rate || 0)}/day
-                </p>
-              </div>
-              {currentUser && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 self-start sm:self-auto font-medium">
-                  Staff: {currentUser}
-                </span>
-              )}
-            </div>
 
-            {/* Patient Lookup */}
-            {!selectedPatient ? (
-              <div className="relative space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Search Registered Patient (by PID, Name, or Mobile) *
-                </label>
-                <input
-                  type="text"
-                  value={patientSearchQuery}
-                  onChange={(e) => setPatientSearchQuery(e.target.value)}
-                  placeholder="Type Patient ID (e.g. PID-0001), Name, or Mobile..."
-                  className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                />
-
-                {isSearchingPatient && (
-                  <p className="text-xs text-gray-500">
-                    Searching patient database...
-                  </p>
-                )}
-
-                {patientSearchResults.length > 0 && (
-                  <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
-                    {patientSearchResults.map((p) => (
-                      <button
-                        key={p.patient_id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPatient(p);
-                          setPatientSearchQuery("");
-                          setPatientSearchResults([]);
-                        }}
-                        className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-brand-50 dark:hover:bg-brand-500/10 transition flex items-center justify-between"
-                      >
-                        <div>
-                          <span className="font-semibold text-gray-800 dark:text-white">
-                            {p.patient_name}
-                          </span>
-                          <span className="ml-2 text-xs text-brand-600 dark:text-brand-400 font-mono">
-                            ({p.patient_id})
-                          </span>
-                        </div>
-                        {p.mobile && (
-                          <span className="text-xs text-gray-500">
-                            📱 {p.mobile}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {patientSearchQuery.trim() &&
-                  !isSearchingPatient &&
-                  patientSearchResults.length === 0 && (
-                    <p className="text-xs text-red-500">
-                      No registered patient found matching &quot;
-                      {patientSearchQuery}&quot;. Please register the patient
-                      first.
-                    </p>
-                  )}
-              </div>
-            ) : (
-              /* Selected Patient Card */
-              <div className="rounded-lg border border-green-200 bg-green-50/60 p-4 dark:border-green-800 dark:bg-green-950/20 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-semibold text-green-800 dark:text-green-200 font-mono">
-                      {selectedPatient.patient_id}
-                    </span>
-                    <span className="font-bold text-gray-900 dark:text-white">
-                      {selectedPatient.patient_name}
-                    </span>
-                  </div>
-                  {selectedPatient.mobile && (
-                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                      Phone: {selectedPatient.mobile}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPatient(null)}
-                  className="text-xs text-red-600 hover:text-red-800 font-medium underline"
-                >
-                  Change
-                </button>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleAllocate}
-                disabled={isAllocating || !selectedPatient}
-                className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 disabled:opacity-50"
-              >
-                {isAllocating
-                  ? "Allocating Bed..."
-                  : "Confirm Bed Allocation"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedBed(null);
-                  setSelectedPatient(null);
-                  setPatientSearchQuery("");
-                }}
-                className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-              >
-                Cancel
-              </button>
-            </div>
-          </section>
-        )}
 
         {/* ── Success / Error Messages ── */}
         {message && (

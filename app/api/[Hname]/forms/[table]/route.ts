@@ -8,6 +8,7 @@ import {
 } from "../../../../../lib/master-form-table";
 import { getTenantDB } from "../../../../../lib/db";
 import { getCurrentUserRole } from "../../../../../app/actions/user";
+import { splitPhoneNumber } from "../../../../../lib/phone";
 import type { Pool } from "pg";
 import bcrypt from "bcrypt";
 
@@ -293,8 +294,21 @@ export async function POST(
     const pool = await getTenantDB(decodedHname);
 
     const body = (await request.json()) as PostBody;
-    const fields = body.fields ?? [];
+    const fields = [...(body.fields ?? [])];
     const values = { ...(body.values ?? {}) };
+
+    const tableName = resolveTableName(table, body.cardTitle);
+
+    if (tableName === "patient_registration") {
+      if (values.mobile) {
+        const parsed = splitPhoneNumber(String(values.mobile));
+        values.mobile = parsed.phoneNumber;
+        values.mobile_country_code = parsed.countryCode;
+        if (!fields.some((f) => f.id === "mobile_country_code")) {
+          fields.push({ id: "mobile_country_code", type: "text" });
+        }
+      }
+    }
 
     if (fields.length === 0) {
       return NextResponse.json(
@@ -302,8 +316,6 @@ export async function POST(
         { status: 400 },
       );
     }
-
-    const tableName = resolveTableName(table, body.cardTitle);
 
     if (
       tableName === "patient_registration" &&
@@ -513,12 +525,25 @@ export async function PUT(
     const pool = await getTenantDB(decodedHname);
 
     const body = (await request.json()) as PutBody;
-    const fields = body.fields ?? [];
-    const values = body.values ?? {};
+    const fields = [...(body.fields ?? [])];
+    const values = { ...(body.values ?? {}) };
     const id = body.id;
 
     if (!Number.isInteger(id) || Number(id) <= 0) {
       return NextResponse.json({ error: "A valid record id is required." }, { status: 400 });
+    }
+
+    const tableName = resolveTableName(table, body.cardTitle);
+
+    if (tableName === "patient_registration") {
+      if (values.mobile) {
+        const parsed = splitPhoneNumber(String(values.mobile));
+        values.mobile = parsed.phoneNumber;
+        values.mobile_country_code = parsed.countryCode;
+        if (!fields.some((f) => f.id === "mobile_country_code")) {
+          fields.push({ id: "mobile_country_code", type: "text" });
+        }
+      }
     }
 
     if (fields.length === 0) {
@@ -527,8 +552,6 @@ export async function PUT(
         { status: 400 },
       );
     }
-
-    const tableName = resolveTableName(table, body.cardTitle);
 
     if (!(await tableExists(pool, tableName))) {
       return NextResponse.json({ error: "Table does not exist." }, { status: 404 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
 import { getHospitalTimezone, getDateCompactInTimezone } from "../../../../lib/timezone";
+import { splitPhoneNumber } from "../../../../lib/phone";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,7 @@ async function ensurePatientTable(pool: Pool): Promise<void> {
   `);
   // Ensure optional columns used by this flow exist
   await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENT_TABLE)} ADD COLUMN IF NOT EXISTS dob DATE`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENT_TABLE)} ADD COLUMN IF NOT EXISTS mobile_country_code TEXT`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENT_TABLE)} ADD COLUMN IF NOT EXISTS patient_type TEXT`);
 }
 
@@ -101,9 +103,12 @@ export async function GET(
     await ensureDispensingTable(pool);
 
     // 1. Look up patient by phone
+    const parsed = splitPhoneNumber(phone);
     const patientResult = await pool.query(
-      `SELECT * FROM ${quoteIdentifier(PATIENT_TABLE)} WHERE mobile = $1 LIMIT 1`,
-      [phone]
+      `SELECT *, COALESCE(mobile_country_code, '') || COALESCE(mobile, '') AS mobile FROM ${quoteIdentifier(PATIENT_TABLE)} 
+       WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = ''))
+          OR mobile = $3 LIMIT 1`,
+      [parsed.phoneNumber, parsed.countryCode, phone]
     );
 
     const exists = (patientResult.rowCount ?? 0) > 0;
@@ -179,9 +184,12 @@ export async function POST(
 
     // 1. Ensure patient exists in patient_registration (create minimal record if not)
     if (patientPhone) {
+      const parsed = splitPhoneNumber(patientPhone);
       const existing = await pool.query(
-        `SELECT id FROM ${quoteIdentifier(PATIENT_TABLE)} WHERE mobile = $1 LIMIT 1`,
-        [patientPhone]
+        `SELECT id FROM ${quoteIdentifier(PATIENT_TABLE)} 
+         WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = ''))
+            OR mobile = $3 LIMIT 1`,
+        [parsed.phoneNumber, parsed.countryCode, patientPhone]
       );
 
       if ((existing.rowCount ?? 0) === 0) {
@@ -189,14 +197,15 @@ export async function POST(
         await pool.query(
           `
             INSERT INTO ${quoteIdentifier(PATIENT_TABLE)}
-              (patient_name, dob, mobile, patient_type)
-            VALUES ($1, $2, $3, $4)
+              (patient_name, dob, mobile, mobile_country_code, patient_type)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (mobile) DO NOTHING
           `,
           [
             patientName,
             patientDob || null,
-            patientPhone,
+            parsed.phoneNumber,
+            parsed.countryCode,
             "Pharmacy Only",
           ]
         );

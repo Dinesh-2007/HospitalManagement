@@ -60,15 +60,14 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
   }
 
   // Country selector styles
-  const countrySelectorClasses = `h-11 rounded-l-xl border shadow-theme-xs ${
-    error ? "border-error-500" : "border-gray-300 dark:border-gray-700"
-  } bg-gray-50 dark:bg-gray-800`;
+  const countrySelectorClasses = `h-11 rounded-l-xl border shadow-theme-xs ${error ? "border-error-500" : "border-gray-300 dark:border-gray-700"
+    } bg-gray-50 dark:bg-gray-800`;
 
   return (
     <div className="relative flex">
       {/* Hidden input for native form submission */}
       {name && <input type="hidden" name={name} value={value} />}
-      
+
       {/* We use inline styles via style props to override react-international-phone defaults 
           and let Tailwind handle the actual appearance via classNames. */}
       <PhoneInput
@@ -76,6 +75,8 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
         value={value}
         onChange={(phone) => onChange(phone)}
         disabled={disabled}
+        disableDialCodeAndPrefix={true}
+        showDisabledDialCodeAndPrefix={true}
         inputProps={{
           id,
           required,

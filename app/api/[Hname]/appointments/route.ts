@@ -490,7 +490,14 @@ async function buildPatientSelect(pool: Pool | PoolClient) {
           ON (a.patient_id IS NOT NULL AND p.patient_id = a.patient_id)
           OR (
             a.patient_phone IS NOT NULL
-            AND regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+            AND (
+              regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+              OR (
+                LENGTH(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g')) >= 10
+                AND LENGTH(regexp_replace(a.patient_phone, '\\D', '', 'g')) >= 10
+                AND RIGHT(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g'), 10) = RIGHT(regexp_replace(a.patient_phone, '\\D', '', 'g'), 10)
+              )
+            )
           )
       `
       : "",

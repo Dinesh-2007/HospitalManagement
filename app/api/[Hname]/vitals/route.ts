@@ -235,7 +235,7 @@ export async function GET(
                 p.id AS registration_id,
                 p.patient_id AS registration_patient_id,
                 p.patient_name AS registration_patient_name,
-                p.mobile,
+                COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, '') AS mobile,
                 p.dob AS registration_dob,
                 a.patient_type,
                 p.address,
@@ -283,7 +283,7 @@ export async function GET(
                     (a.patient_id IS NULL OR a.patient_id = '')
                     AND a.patient_phone IS NOT NULL
                     AND a.patient_phone <> ''
-                    AND regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                    AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
                   )
                 )
               LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
@@ -331,7 +331,7 @@ export async function GET(
             p.id AS registration_id,
             p.patient_id AS registration_patient_id,
             p.patient_name AS registration_patient_name,
-            p.mobile,
+            COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, '') AS mobile,
             p.dob AS registration_dob,
             a.patient_type,
             p.address,
@@ -379,7 +379,7 @@ export async function GET(
                 (a.patient_id IS NULL OR a.patient_id = '')
                 AND a.patient_phone IS NOT NULL
                 AND a.patient_phone <> ''
-                AND regexp_replace(COALESCE(p.mobile, ''), '\D', '', 'g') = regexp_replace(a.patient_phone, '\D', '', 'g')
+                AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\D', '', 'g') = regexp_replace(a.patient_phone, '\D', '', 'g')
               )
             )
           LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v

@@ -33,7 +33,8 @@ export async function GET(
        FROM ${quoteIdentifier(PATIENTS_TABLE)}
        WHERE
          LOWER(COALESCE(patient_id, '')) LIKE LOWER($1)
-         OR regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') LIKE regexp_replace($2, '\\D', '', 'g')
+          OR regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') LIKE '%' || regexp_replace($2, '\\D', '', 'g') || '%'
+          OR regexp_replace($2, '\\D', '', 'g') LIKE '%' || regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g')
          OR LOWER(COALESCE(patient_name, '')) LIKE LOWER($3)
        ORDER BY patient_id
        LIMIT 20`,

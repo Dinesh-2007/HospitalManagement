@@ -102,13 +102,6 @@ export default function PatientVitalsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const dateInputRef = useRef<HTMLInputElement | null>(null);
-
-  const dateLabel = useMemo(() => {
-    if (!date) return "Select date";
-    const [year, month, day] = date.split("-");
-    return `${day}-${month}-${year}`;
-  }, [date]);
 
   const buildVitalsUrl = useCallback((selectedDate: string, selectedDoctorName: string) => {
     const url = new URL(`/api/${encodeURIComponent(hname)}/vitals`, window.location.origin);
@@ -231,24 +224,6 @@ export default function PatientVitalsPage() {
         <div>
           <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Patient Vitals</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Today&apos;s doctors, patients, and vitals entry.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => dateInputRef.current?.showPicker?.()}
-            className="flex h-11 min-w-[160px] items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-800"
-          >
-            <span>{dateLabel}</span>
-            <span className="text-xs text-gray-400">{date ? "Change" : "Choose"}</span>
-          </button>
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="sr-only"
-            aria-label="Select appointment date"
-          />
         </div>
       </div>
       <div className="p-4 sm:p-6">

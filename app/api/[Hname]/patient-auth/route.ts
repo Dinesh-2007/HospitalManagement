@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantDB } from "../../../../lib/db";
 import { quoteIdentifier } from "../../../../lib/master-form-table";
+import { splitPhoneNumber } from "../../../../lib/phone";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,7 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
       phone_office TEXT,
       phone_resi TEXT,
       mobile TEXT UNIQUE,
+      mobile_country_code TEXT,
       hn_number TEXT,
       number_of_visits NUMERIC,
       last_visit_date_time TIMESTAMP,
@@ -54,6 +56,7 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
 
   await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS dob DATE`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS gender TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS mobile_country_code TEXT`);
 }
 
 export async function POST(
@@ -73,23 +76,25 @@ export async function POST(
       patient?: Record<string, unknown>;
     };
 
-    const phone = normalizePhone(body.phone);
+    const parsed = splitPhoneNumber(body.phone);
+    const phone = parsed.phoneNumber;
+    const countryCode = parsed.countryCode;
     const name = normalizeText(body.name);
 
-    if (!phone && !name) {
+    if (!body.phone && !name) {
       return NextResponse.json({ error: "Phone number is required." }, { status: 400 });
     }
 
     if (body.action === "signin") {
-      const result = phone
+      const result = body.phone
         ? await pool.query(
-            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
-            [phone],
-          )
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '')) OR mobile = $3 LIMIT 1`,
+          [phone, countryCode, body.phone],
+        )
         : await pool.query(
-            `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
-            [name],
-          );
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+          [name],
+        );
 
       return NextResponse.json({
         exists: (result.rowCount ?? 0) > 0,
@@ -100,8 +105,8 @@ export async function POST(
 
     const patient = body.patient ?? {};
     const existing = await pool.query(
-      `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
-      [phone],
+      `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '')) OR mobile = $3 LIMIT 1`,
+      [phone, countryCode, body.phone],
     );
 
     if ((existing.rowCount ?? 0) > 0) {
@@ -126,6 +131,7 @@ export async function POST(
           phone_office,
           phone_resi,
           mobile,
+          mobile_country_code,
           hn_number,
           number_of_visits,
           last_visit_date_time,
@@ -142,7 +148,7 @@ export async function POST(
           inactive_reason
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
         )
         RETURNING *
       `,
@@ -160,6 +166,7 @@ export async function POST(
         normalizeText(patient.phoneOffice),
         normalizeText(patient.phoneResi),
         phone,
+        countryCode,
         normalizeText(patient.hnNumber),
         patient.numberOfVisits ? Number(patient.numberOfVisits) : null,
         normalizeText(patient.lastVisitDateTime) || null,
@@ -208,13 +215,13 @@ export async function GET(
 
     const result = parentPhone
       ? await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE linked_patient_id = $1 ORDER BY created_at DESC`,
-          [parentPhone],
-        )
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE linked_patient_id = $1 ORDER BY created_at DESC`,
+        [parentPhone],
+      )
       : await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(linked_patient_id) = LOWER($1) ORDER BY created_at DESC`,
-          [parentName],
-        );
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(linked_patient_id) = LOWER($1) ORDER BY created_at DESC`,
+        [parentName],
+      );
 
     return NextResponse.json({ rows: result.rows ?? [] });
   } catch (error) {
@@ -233,17 +240,17 @@ export async function PUT(
     const pool = await getTenantDB(decodedHname);
     await ensurePatientTable(pool);
 
-  const body = (await request.json()) as {
-    phone?: string;
-    name?: string;
-    id?: number;
-    patient?: Record<string, unknown>;
-  };
+    const body = (await request.json()) as {
+      phone?: string;
+      name?: string;
+      id?: number;
+      patient?: Record<string, unknown>;
+    };
 
-  const phone = normalizePhone(body.phone);
-  const name = normalizeText(body.name);
-  const id = Number(body.id);
-  const patient = body.patient ?? {};
+    const phone = normalizePhone(body.phone);
+    const name = normalizeText(body.name);
+    const id = Number(body.id);
+    const patient = body.patient ?? {};
 
     if (!phone && !name && !Number.isInteger(id)) {
       return NextResponse.json({ error: "Phone number is required." }, { status: 400 });
@@ -251,18 +258,18 @@ export async function PUT(
 
     const existing = Number.isInteger(id)
       ? await pool.query(
-          `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
-          [id],
-        )
+        `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE id = $1 LIMIT 1`,
+        [id],
+      )
       : phone
         ? await pool.query(
-            `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
-            [phone],
-          )
+          `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE mobile = $1 LIMIT 1`,
+          [phone],
+        )
         : await pool.query(
-            `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
-            [name],
-          );
+          `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+          [name],
+        );
 
     if ((existing.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: "Patient not found." }, { status: 404 });
