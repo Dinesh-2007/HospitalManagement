@@ -64,6 +64,28 @@ type PatientRow = {
   gender?: string | null;
 };
 
+type ItemMasterMedicine = {
+  id: string;
+  code: string;
+  name: string;
+  genericName: string;
+  type: string;
+  strength: string;
+  uom: string;
+  stock: number;
+};
+
+type ItemMasterRow = {
+  id?: number | string | null;
+  item_code?: string | null;
+  item_name?: string | null;
+  item_category?: string | null;
+  purchase_uom?: string | null;
+  sale_uom?: string | null;
+  medicine_combination?: string | null;
+  current_stock?: number | string | null;
+};
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
@@ -165,6 +187,120 @@ export default function PharmacyDispensingPage() {
   const [addDispenseError, setAddDispenseError] = useState("");
   const [foundPatient, setFoundPatient] = useState<PatientRow | null>(null);
   const [dispenseHistory, setDispenseHistory] = useState<DispensingBillRecord[]>([]);
+
+  // ── Medicine selection modal state ───────────────────────────────────────────
+  const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
+  const [itemMasterMedicines, setItemMasterMedicines] = useState<ItemMasterMedicine[]>([]);
+  const [isLoadingItemMaster, setIsLoadingItemMaster] = useState(false);
+  const [itemMasterError, setItemMasterError] = useState<string | null>(null);
+  const [medicineSearchQuery, setMedicineSearchQuery] = useState("");
+  const [selectedMedicineIds, setSelectedMedicineIds] = useState<Set<string>>(new Set());
+  const [modalCurrentPage, setModalCurrentPage] = useState(1);
+  const modalItemsPerPage = 10;
+
+  const loadItemMasterMedicines = async () => {
+    if (!hname) return;
+    setIsLoadingItemMaster(true);
+    setItemMasterError(null);
+    try {
+      const response = await fetch(`/api/${hname}/forms/item_master_medicine`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { rows?: ItemMasterRow[]; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to load medicines from item master.");
+
+      const nextMedicines: ItemMasterMedicine[] = (data.rows ?? [])
+        .map((row, index) => {
+          const code = String(row.item_code ?? "").trim();
+          const name = String(row.item_name ?? "").trim();
+          if (!name) return null;
+          return {
+            id: String((row.id ?? code) || `medicine-${index}`),
+            code,
+            name,
+            genericName: String(row.medicine_combination ?? "").trim(),
+            type: String(row.item_category ?? "").trim(),
+            strength: "",
+            uom: String(row.sale_uom ?? row.purchase_uom ?? "").trim(),
+            stock: Number(row.current_stock ?? 0) || 0,
+          };
+        })
+        .filter((m): m is ItemMasterMedicine => m !== null);
+
+      setItemMasterMedicines(nextMedicines);
+    } catch (err: unknown) {
+      setItemMasterError(err instanceof Error ? err.message : "Failed to load medicines from item master.");
+      setItemMasterMedicines([]);
+    } finally {
+      setIsLoadingItemMaster(false);
+    }
+  };
+
+  const filteredItemMasterMedicines = useMemo(() => {
+    return itemMasterMedicines.filter(
+      (m) =>
+        m.name.toLowerCase().includes(medicineSearchQuery.toLowerCase()) ||
+        m.code.toLowerCase().includes(medicineSearchQuery.toLowerCase()) ||
+        m.genericName.toLowerCase().includes(medicineSearchQuery.toLowerCase())
+    );
+  }, [itemMasterMedicines, medicineSearchQuery]);
+
+  const modalTotalPages = Math.ceil(filteredItemMasterMedicines.length / modalItemsPerPage);
+  const currentModalMedicines = filteredItemMasterMedicines.slice(
+    (modalCurrentPage - 1) * modalItemsPerPage,
+    modalCurrentPage * modalItemsPerPage
+  );
+
+  const toggleMedicineSelection = (id: string) => {
+    const newSelected = new Set(selectedMedicineIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedMedicineIds(newSelected);
+  };
+
+  const toggleAllMedicineSelections = () => {
+    if (selectedMedicineIds.size === currentModalMedicines.length && currentModalMedicines.length > 0) {
+      setSelectedMedicineIds(new Set());
+    } else {
+      setSelectedMedicineIds(new Set(currentModalMedicines.map((m) => m.id)));
+    }
+  };
+
+  const handleAddSelectedMedicines = () => {
+    const medicinesToAdd = itemMasterMedicines.filter((m) => selectedMedicineIds.has(m.id));
+    if (medicinesToAdd.length === 0) return;
+
+    setMedicineRows((currentRows) => {
+      const isFirstRowEmpty =
+        currentRows.length === 1 &&
+        !currentRows[0].medicineName.trim() &&
+        !currentRows[0].prescribedQty.trim() &&
+        !currentRows[0].receivedQty.trim();
+
+      const newRowsToAdd = medicinesToAdd.map((m) =>
+        createMedicineRow({
+          medicineName: m.name,
+          prescribedQty: "",
+          receivedQty: "",
+          medicineAmount: "",
+        })
+      );
+
+      if (isFirstRowEmpty) {
+        return newRowsToAdd;
+      }
+      return [...currentRows, ...newRowsToAdd];
+    });
+
+    setIsMedicineModalOpen(false);
+    setSelectedMedicineIds(new Set());
+    setMedicineSearchQuery("");
+    setModalCurrentPage(1);
+  };
 
   // ─── Data loaders ────────────────────────────────────────────────────────────
 
@@ -985,13 +1121,28 @@ export default function PharmacyDispensingPage() {
                           : "Medicine name and prescribed quantity come from Doctor Consultation."}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addMedicineRow}
-                      className="rounded-lg px-4 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
-                    >
-                      Add Row
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMedicineModalOpen(true);
+                          void loadItemMasterMedicines();
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        ADD Medicine
+                      </button>
+                      <button
+                        type="button"
+                        onClick={addMedicineRow}
+                        className="rounded-lg px-4 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
+                      >
+                        Add Row
+                      </button>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
@@ -1099,66 +1250,58 @@ export default function PharmacyDispensingPage() {
             ════════════════════════════════════════════════════════════════ */}
             {activeView === "bills" ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-medium text-gray-800 dark:text-white/90">View Bills</h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Saved dispensing bills are listed here. "Pharmacy Only" records are highlighted.
-                  </p>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white/90">
+                    Dispensed Bills &amp; History
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => void refreshBills()}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    Refresh
+                  </button>
                 </div>
-
                 {isLoadingBills ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
-                    Loading bills…
-                  </div>
+                  <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">Loading bills...</p>
                 ) : dispensingBills.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
-                    No bills saved yet.
-                  </div>
+                  <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">No dispensing records found.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                     <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
                       <thead className="bg-slate-100 dark:bg-gray-950">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token Number</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Patient Name</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Payment Status</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Billing Amount</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Mobile</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Type</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Saved At</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Billing Amount</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Status</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Date</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                         {dispensingBills.map((bill) => (
-                          <tr
-                            key={bill.id}
-                            className={bill.pharmacy_only === "Yes" ? "bg-brand-50/40 dark:bg-brand-950/10" : ""}
-                          >
-                            <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-gray-300">
-                              {bill.token_number || "—"}
-                            </td>
+                          <tr key={bill.id}>
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
                             <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {bill.patient_name || "—"}
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {bill.payment_status || "—"}
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {bill.billing_amount != null ? `Rs. ${bill.billing_amount}` : "—"}
-                            </td>
-                            <td className="px-4 py-3">
-                              {bill.pharmacy_only === "Yes" ? (
-                                <span className="inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                              {bill.pharmacy_only === "1" || bill.pharmacy_only === "true" ? (
+                                <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
                                   Pharmacy Only
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-gray-800 dark:text-gray-400">
+                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
                                   Consultation
                                 </span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {bill.created_at ? new Date(bill.created_at).toLocaleString("en-IN") : "—"}
+                              Rs. {bill.billing_amount ? Number(bill.billing_amount).toFixed(2) : "0.00"}
                             </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.payment_status || "Pending"}</td>
+                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1169,23 +1312,17 @@ export default function PharmacyDispensingPage() {
             ) : null}
 
             {/* ════════════════════════════════════════════════════════════════
-                VIEW: Consultation Records (original "Dispense" tab)
+                VIEW: Consultation Records list
             ════════════════════════════════════════════════════════════════ */}
             {activeView === "records" ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
-                    Consultation Records
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white/90">
+                    Consultation Records Pending Dispensing
                   </h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Only patient details and token number are shown here. Click a row to open the dispensing form.
-                  </p>
                 </div>
-
                 {isLoadingRecords ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
-                    Loading consultation records…
-                  </div>
+                  <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">Loading consultation records...</p>
                 ) : consultationRecords.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
                     No doctor consultation records saved yet.
@@ -1230,8 +1367,190 @@ export default function PharmacyDispensingPage() {
 
           </div>
         </div>
-      </div >
-    </PageLayout >
+      </div>
+
+      {/* Select Medicines Modal Overlay */}
+      {isMedicineModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white shadow-2xl dark:bg-gray-900">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 p-5 dark:border-gray-800">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Select Medicines</h3>
+              <button
+                type="button"
+                onClick={() => setIsMedicineModalOpen(false)}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex flex-1 flex-col overflow-hidden p-5">
+              <div className="mb-4 flex items-center gap-4">
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search by medicine code or name"
+                    value={medicineSearchQuery}
+                    onChange={(e) => {
+                      setMedicineSearchQuery(e.target.value);
+                      setModalCurrentPage(1);
+                    }}
+                    className="h-10 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {itemMasterError ? (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                  {itemMasterError}
+                </div>
+              ) : null}
+
+              <div className="flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-md">
+                    <tr>
+                      <th className="px-4 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                          checked={selectedMedicineIds.size === currentModalMedicines.length && currentModalMedicines.length > 0}
+                          onChange={toggleAllMedicineSelections}
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Code</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Name</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Generic Name</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Type</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Strength</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UOM</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Stock Available</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
+                    {isLoadingItemMaster ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                          Loading medicines from Item Master...
+                        </td>
+                      </tr>
+                    ) : currentModalMedicines.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No medicines found in Item Master.</td>
+                      </tr>
+                    ) : (
+                      currentModalMedicines.map((medicine) => (
+                        <tr
+                          key={medicine.id}
+                          onClick={() => toggleMedicineSelection(medicine.id)}
+                          className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                              checked={selectedMedicineIds.has(medicine.id)}
+                              onChange={() => toggleMedicineSelection(medicine.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.code}</td>
+                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.name}</td>
+                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.genericName}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.type}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.strength}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.uom}</td>
+                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-300">{medicine.stock}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-800">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Showing {Math.min((modalCurrentPage - 1) * modalItemsPerPage + 1, filteredItemMasterMedicines.length)} to {Math.min(modalCurrentPage * modalItemsPerPage, filteredItemMasterMedicines.length)} of {filteredItemMasterMedicines.length} items
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setModalCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={modalCurrentPage === 1}
+                    className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    Prev
+                  </button>
+
+                  {Array.from({ length: Math.min(3, modalTotalPages) }).map((_, idx) => {
+                    let pageNum = modalCurrentPage;
+                    if (modalCurrentPage === 1) pageNum = idx + 1;
+                    else if (modalCurrentPage === modalTotalPages && modalTotalPages > 2) pageNum = modalTotalPages - 2 + idx;
+                    else pageNum = modalCurrentPage - 1 + idx;
+
+                    if (pageNum > modalTotalPages || pageNum < 1) return null;
+
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => setModalCurrentPage(pageNum)}
+                        className={`min-w-[32px] rounded border px-2 py-1.5 text-sm font-medium ${
+                          modalCurrentPage === pageNum
+                            ? 'border-brand-500 bg-brand-500 text-white'
+                            : 'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setModalCurrentPage((p) => Math.min(modalTotalPages, p + 1))}
+                    disabled={modalCurrentPage === modalTotalPages || modalTotalPages === 0}
+                    className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 p-5 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setIsMedicineModalOpen(false)}
+                className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddSelectedMedicines}
+                disabled={selectedMedicineIds.size === 0}
+                className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+              >
+                Add Selected ({selectedMedicineIds.size})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </PageLayout>
   );
 }
 
