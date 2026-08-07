@@ -204,7 +204,12 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const recordId = Number(searchParams.get("id") ?? 0);
 
-    const tableName = ensureSafeIdentifier(table, "table");
+    let tableName: string;
+    try {
+      tableName = ensureSafeIdentifier(table, "table");
+    } catch {
+      return NextResponse.json({ rows: [] });
+    }
 
     if (!(await tableExists(pool, tableName))) {
       return NextResponse.json({ rows: [] });
