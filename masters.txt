@@ -348,3 +348,8 @@ warehouse-master (app/[Hname]/masters/pharmacy-inventory-masters/warehouse-maste
 - id: activeFrom | label: Active From | type: datetime-local
 - id: inactiveDateFrom | label: Inactive Date From | type: datetime-local
 - id: inactiveReason | label: Inactive Reason | type: textarea | placeholder: "Enter inactive reason" | fullWidth: true
+
+assets (app/[Hname]/masters/pharmacy-inventory-masters/assets/)
+- id: code | label: Code | type: text | placeholder: "Enter code" | maxLength: 50 | pattern: "[a-zA-Z0-9]*"
+- id: description | label: Description | type: text | placeholder: "Enter description" | maxLength: 500 | pattern: "[a-zA-Z\\s]*"
+

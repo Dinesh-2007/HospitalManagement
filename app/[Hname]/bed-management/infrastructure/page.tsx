@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageLayout } from "../../../../components/page-layout";
+import { AssetMultiSelect } from "../../../../components/ui/asset-multi-select";
 
 type HierarchyData = {
   buildings: Array<Record<string, unknown>>;
@@ -304,6 +305,7 @@ export default function InfrastructurePage() {
   const [roomTypeOptions, setRoomTypeOptions] = useState<string[]>([]);
   const [roomPurposeOptions, setRoomPurposeOptions] = useState<string[]>([]);
   const [bedTypeOptions, setBedTypeOptions] = useState<string[]>([]);
+  const [assetOptions, setAssetOptions] = useState<string[]>([]);
 
   // Load LOV options
   useEffect(() => {
@@ -375,6 +377,37 @@ export default function InfrastructurePage() {
       }
     }
 
+    async function loadAssets() {
+      try {
+        const assetsList: string[] = [];
+        const res = await fetch(`/api/${hname}/forms/assets_master`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          for (const row of (data.rows ?? []) as Record<string, unknown>[]) {
+            const code = String(row.code ?? "").trim();
+            const desc = String(row.description ?? row.name ?? "").trim();
+            if (!code && !desc) continue;
+            const val = code && desc ? `${code} - ${desc}` : code || desc;
+            if (!assetsList.includes(val)) assetsList.push(val);
+          }
+        }
+        try {
+          const eqRes = await fetch(`/api/${hname}/forms/equipment_master`, { cache: "no-store" });
+          if (eqRes.ok) {
+            const eqData = await eqRes.json();
+            for (const row of (eqData.rows ?? []) as Record<string, unknown>[]) {
+              const code = String(row.code ?? row.equipment_code ?? "").trim();
+              const desc = String(row.description ?? row.equipment_name ?? row.name ?? "").trim();
+              if (!code && !desc) continue;
+              const val = code && desc ? `${code} - ${desc}` : code || desc;
+              if (!assetsList.includes(val)) assetsList.push(val);
+            }
+          }
+        } catch { /* ignore */ }
+        setAssetOptions(assetsList);
+      } catch { /* ignore */ }
+    }
+
     void loadDepartments();
     void loadOptions("ward_master", setWardOptions);
     void loadOptions("room_type_master", (opts) => {
@@ -384,6 +417,7 @@ export default function InfrastructurePage() {
     });
     void loadOptions("room_purpose_master", setRoomPurposeOptions);
     void loadBedTypes();
+    void loadAssets();
   }, [hname]);
 
   // Synchronize floors array when building floorsCount changes or on initial mount
@@ -2945,11 +2979,10 @@ export default function InfrastructurePage() {
 
                                   <div>
                                     <label className="block text-[10px] text-gray-500 mb-0.5">Equipment / Assets</label>
-                                    <input
-                                      type="text"
+                                    <AssetMultiSelect
                                       value={bed.equipment || ""}
-                                      onChange={(e) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom.id, bed.id, { equipment: e.target.value })}
-                                      className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded px-2 py-0.5"
+                                      onChange={(val) => updateBedInRoom(currentB!.buildingId, currentFl!.floorId, activeDeptName, currentWard!.id, currentRoom.id, bed.id, { equipment: val })}
+                                      options={assetOptions}
                                       placeholder="e.g. Ventilator, Syringe Pump"
                                     />
                                   </div>

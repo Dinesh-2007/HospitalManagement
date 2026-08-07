@@ -43,7 +43,7 @@ export const mastersData: NavigationSection[] = [
   },
   {
     title: "Pharmacy Inventory Masters",
-    href: "/masters/pharmacy-inventory-masters/ledger-master",
+    href: "/masters/pharmacy-inventory-masters/item-category",
     items: [
       { title: "Item Category", href: "/masters/pharmacy-inventory-masters/item-category" },
       { title: "Item UOM", href: "/masters/pharmacy-inventory-masters/item-uom" },
@@ -52,6 +52,7 @@ export const mastersData: NavigationSection[] = [
       { title: "Medicine Usage", href: "/masters/pharmacy-inventory-masters/medicine-usage" },
       { title: "Service", href: "/masters/pharmacy-inventory-masters/service" },
       { title: "Warehouse Master", href: "/masters/pharmacy-inventory-masters/warehouse-master" },
+      { title: "Assets", href: "/masters/pharmacy-inventory-masters/assets" },
     ],
   },
   {
