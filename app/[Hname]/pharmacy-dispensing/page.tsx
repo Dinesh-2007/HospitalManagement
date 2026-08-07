@@ -15,6 +15,7 @@ type ConsultationRecord = {
   prescription_lines?: string | null;
   prescription_data?: string | null;
   status?: string | null;
+  patient_type?: string | null;
 };
 
 type DispensingBillRecord = {
@@ -1196,6 +1197,7 @@ export default function PharmacyDispensingPage() {
                         <tr>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token Number</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Patient Details</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Type</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
@@ -1213,6 +1215,9 @@ export default function PharmacyDispensingPage() {
                               </td>
                               <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
                                 {record.patient_details || "—"}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                                {record.patient_type === "walk-in" ? "OP" : (record.patient_type || "OP").toUpperCase()}
                               </td>
                             </tr>
                           ))}

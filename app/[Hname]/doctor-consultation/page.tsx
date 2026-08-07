@@ -754,10 +754,38 @@ export default function DoctorConsultationPage() {
     void loadHistory();
   }, [hname, selectedPatientRow]);
 
-  // Upcoming = only patients who have completed vitals, sorted by time
+  // Upcoming = only patients who have completed vitals and are not completed, sorted by time
   const upcomingRows = useMemo(() => {
     return [...vitalsRows]
-      .filter((row) => isVitalsCompleted(row) && text(row, ["appointment_status"]) !== "Completed")
+      .filter((row) => {
+        if (!isVitalsCompleted(row)) return false;
+
+        const apptStatus = text(row, ["appointment_status"]);
+        if (apptStatus === "Completed" || apptStatus === "Conslt") return false;
+
+        const vToken = text(row, ["appointment_id"]);
+        const vName = patientName(row);
+        const vPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+        const vVitalsId = text(row, ["vitals_id"]);
+
+        const hasConsultationRecord = consultationRows.some((c) => {
+          const status = text(c, ["status"]);
+          if (status !== "Completed" && status !== "Draft") return false;
+          const cToken = text(c, ["tokenNumber", "token_number"]);
+          const cName = text(c, ["patientDetails", "patient_details"]);
+          const cPid = text(c, ["patient_id", "registration_patient_id"]);
+          const cVitalsId = text(c, ["vitals_id"]);
+
+          if (vToken && cToken && String(vToken) === String(cToken)) return true;
+          if (vVitalsId && cVitalsId && String(vVitalsId) === String(cVitalsId)) return true;
+          if (vPid && cPid && String(vPid).toLowerCase() === String(cPid).toLowerCase()) return true;
+          if (vName && cName && String(vName).toLowerCase() === String(cName).toLowerCase()) return true;
+
+          return false;
+        });
+
+        return !hasConsultationRecord;
+      })
       .sort((a, b) => {
         const timeA = text(a, ["appointment_time"]);
         const timeB = text(b, ["appointment_time"]);
@@ -766,7 +794,7 @@ export default function DoctorConsultationPage() {
         if (!timeB) return -1;
         return timeA.localeCompare(timeB);
       });
-  }, [vitalsRows]);
+  }, [vitalsRows, consultationRows]);
 
   const draftRows = useMemo(() => {
     let rows = consultationRows.filter(r => text(r, ["status"]) === "Draft");

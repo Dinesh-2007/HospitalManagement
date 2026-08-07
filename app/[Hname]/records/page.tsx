@@ -874,6 +874,7 @@ export default function RecordsPage() {
                                                 <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                                     <th className="px-5 py-4 text-left">Patient Name</th>
                                                     <th className="px-5 py-4 text-left">Patient ID</th>
+                                                    <th className="px-5 py-4 text-left">Type</th>
                                                     <th className="px-5 py-4 text-left">Total Visits</th>
                                                     <th className="px-5 py-4 text-left">Last Visit</th>
                                                 </tr>
@@ -900,6 +901,15 @@ export default function RecordsPage() {
                                                             {row.patient_id ? (
                                                                 <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-700">{row.patient_id}</span>
                                                             ) : "-"}
+                                                        </td>
+                                                        <td className="px-5 py-4">
+                                                            <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
+                                                                row.patient_type === 'IP' 
+                                                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' 
+                                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                            }`}>
+                                                                {row.patient_type === "walk-in" ? "OP" : (row.patient_type || "OP")}
+                                                            </span>
                                                         </td>
                                                         <td className="px-5 py-4">
                                                             <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
@@ -961,6 +971,7 @@ export default function RecordsPage() {
                                                 <th className="px-5 py-4 text-left">Visit Date</th>
                                                 <th className="px-5 py-4 text-left">Doctor/Dept</th>
                                                 <th className="px-5 py-4 text-left">Diagnosis</th>
+                                                <th className="px-5 py-4 text-left">Type</th>
                                                 <th className="px-5 py-4 text-left">Cons. Status</th>
                                             </tr>
                                         </thead>
@@ -981,6 +992,15 @@ export default function RecordsPage() {
                                                             <div className="text-[10px] text-gray-400 uppercase">{row.department}</div>
                                                         </td>
                                                         <td className="px-5 py-4 text-gray-600 max-w-[300px] truncate">{row.diagnosisName || "N/A"}</td>
+                                                        <td className="px-5 py-4">
+                                                            <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
+                                                                row.patientType === 'IP' 
+                                                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' 
+                                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                            }`}>
+                                                                {row.patientType === "walk-in" ? "OP" : (row.patientType || "OP")}
+                                                            </span>
+                                                        </td>
                                                         <td className="px-5 py-4">
                                                             {row.id ? (
                                                                 <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${row.status === "Completed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>

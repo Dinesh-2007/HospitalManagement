@@ -98,7 +98,8 @@ export async function GET(
         COUNT(a.id) as total_visits,
         MAX(a.appointment_date) as last_visit,
         MAX(a.department) as department,
-        MAX(a.status) as last_appointment_status
+        MAX(a.status) as last_appointment_status,
+        MAX(a.patient_type) as patient_type
       FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
       ${whereClause}
       GROUP BY a.patient_name

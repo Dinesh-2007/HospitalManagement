@@ -250,7 +250,7 @@ export async function GET(
         : "";
 
       rowsResult = await pool.query(
-        `SELECT dce.*, appt.check_in_time 
+        `SELECT dce.*, appt.check_in_time, appt.patient_type 
          FROM doctor_consultation_entry dce
          LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
          ${dceWhereClause}
