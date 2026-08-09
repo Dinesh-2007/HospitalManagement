@@ -32,7 +32,7 @@ type QueueTab = "Upcoming" | "Draft" | "Completed";
 type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "Consultation Billing" | "History";
 type PatientType = "OP" | "IP";
 
-const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "Consultation Billing", "History"];
+const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "History"];
 
 type VitalsRow = Record<string, unknown> & {
   vitals_id?: number | null;
@@ -588,6 +588,7 @@ export default function DoctorConsultationPage() {
   const [detailTab, setDetailTab] = useState<DetailTab>("Patient Details");
   const [doctorsList, setDoctorsList] = useState<{ name: string }[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState("");
+  const [userRole, setUserRole] = useState("");
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
 
   const [vitalsRows, setVitalsRows] = useState<VitalsRow[]>([]);
@@ -631,6 +632,9 @@ export default function DoctorConsultationPage() {
       if (!hname) return;
       try {
         const [user, role] = await Promise.all([getCurrentUser(hname), getCurrentUserRole(hname)]);
+        if (role) {
+          setUserRole(role);
+        }
 
         const response = await fetch(`/api/${encodeURIComponent(hname)}/forms/consultant_doctor_master`, { cache: "no-store" });
         const data = await response.json();
@@ -881,6 +885,11 @@ export default function DoctorConsultationPage() {
     setFormValues({ ...DEFAULT_FORM_VALUES, tokenNumber: text(row, ["appointment_id"]), patientDetails: patientName(row) });
     setErrorMessage("");
     setSuccessMessage("");
+    // Auto-select doctor for patient in admin side
+    const docName = text(row, ["doctor"]);
+    if (docName && userRole.toLowerCase() === "admin") {
+      setSelectedDoctor(docName);
+    }
   };
 
   const handleConsultationClick = (row: ConsultationRow) => {
@@ -894,6 +903,11 @@ export default function DoctorConsultationPage() {
     setSelectedPatientRow(matchedPatient ?? { appointment_id: tokenNumber, appointment_patient_name: selectedName });
     setDetailTab("Consultation Form");
     setEditingRecordId(row.id);
+    // Auto-select doctor for patient in admin side
+    const docName = text(row, ["doctor", "dutyDoctorName", "duty_doctor_name"]);
+    if (docName && userRole.toLowerCase() === "admin") {
+      setSelectedDoctor(docName);
+    }
     setFormValues({
       ...DEFAULT_FORM_VALUES,
       tokenNumber,
@@ -1069,7 +1083,7 @@ export default function DoctorConsultationPage() {
     );
   }
 
-  const isLastTab = detailTab === "Consultation Form";
+  const isLastTab = detailTab === "History";
 
   return (
     <>
@@ -1095,22 +1109,77 @@ export default function DoctorConsultationPage() {
 
           {/* Collapsed state: just show tab icons */}
           {leftPanelCollapsed ? (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setDetailTab("Consultation Billing")}
+                title="Billing Dashboard"
+                className={`p-2 rounded-lg border transition ${detailTab === "Consultation Billing"
+                    ? "border-blue-500 bg-blue-50 text-blue-500 dark:border-blue-400 dark:bg-blue-900/20"
+                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"
+                  }`}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
             </div>
           ) : (
             <>
+              {/* Consultation Billing Navigation Button */}
+              <button
+                type="button"
+                onClick={() => setDetailTab("Consultation Billing")}
+                className={`w-full flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition shadow-xs ${detailTab === "Consultation Billing"
+                    ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-800/50"
+                  }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-1.5 rounded-md ${detailTab === "Consultation Billing"
+                      ? "bg-blue-500 text-white"
+                      : "bg-blue-105/10 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                    }`}>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 5v2H5a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className={`text-sm font-semibold leading-none mb-1 ${detailTab === "Consultation Billing"
+                        ? "text-blue-700 dark:text-blue-300"
+                        : "text-gray-800 dark:text-gray-200"
+                      }`}>
+                      Billing Dashboard
+                    </div>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-none">
+                      Manage fees & payments
+                    </span>
+                  </div>
+                </div>
+                <div className={`flex h-5 w-5 items-center justify-center rounded-full ${detailTab === "Consultation Billing"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600"
+                  }`}>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </button>
+
               {/* Doctor selector */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Doctor</label>
-                <select
-                  value={selectedDoctor}
-                  onChange={e => setSelectedDoctor(e.target.value)}
-                  className="mt-1 block h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:text-white"
-                >
-                  <option value="">All Doctors</option>
-                  {doctorsList.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                </select>
-              </div>
+              {userRole.toLowerCase() === "admin" && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-350">Select Doctor</label>
+                  <select
+                    value={selectedDoctor}
+                    onChange={e => setSelectedDoctor(e.target.value)}
+                    className="mt-1 block h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:text-white"
+                  >
+                    <option value="">All Doctors</option>
+                    {doctorsList.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
+              )}
 
               {/* Queue tab switcher */}
               <div className="flex shrink-0 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
@@ -1206,32 +1275,34 @@ export default function DoctorConsultationPage() {
         <div className={`col-span-1 flex flex-col h-[calc(100vh-8rem)] rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 transition-all duration-300 ${leftPanelCollapsed ? "lg:col-span-11 xl:col-span-11" : "lg:col-span-9 xl:col-span-9"}`}>
 
           {/* Tab bar with Next button */}
-          <div className="border-b border-gray-100 px-6 pt-4 dark:border-gray-800 flex items-center justify-between shrink-0">
-            <div className="flex gap-6">
-              {DETAIL_TABS.map(tab => (
+          {detailTab !== "Consultation Billing" && (
+            <div className="border-b border-gray-100 px-6 pt-4 dark:border-gray-800 flex items-center justify-between shrink-0">
+              <div className="flex gap-6">
+                {DETAIL_TABS.map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setDetailTab(tab)}
+                    className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${detailTab === tab ? "border-brand-500 text-brand-500 dark:border-brand-400 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              {!isLastTab && (
                 <button
-                  key={tab}
                   type="button"
-                  onClick={() => setDetailTab(tab)}
-                  className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${detailTab === tab ? "border-brand-500 text-brand-500 dark:border-brand-400 dark:text-brand-400" : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
+                  onClick={goToNextTab}
+                  className="mb-1 flex items-center gap-1.5 rounded-lg border border-brand-500 px-3 py-1.5 text-xs font-semibold text-brand-500 hover:bg-brand-50 transition dark:hover:bg-brand-900/20"
                 >
-                  {tab}
+                  Next
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
-              ))}
+              )}
             </div>
-            {!isLastTab && (
-              <button
-                type="button"
-                onClick={goToNextTab}
-                className="mb-1 flex items-center gap-1.5 rounded-lg border border-brand-500 px-3 py-1.5 text-xs font-semibold text-brand-500 hover:bg-brand-50 transition dark:hover:bg-brand-900/20"
-              >
-                Next
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
-          </div>
+          )}
 
           <div className="p-6 flex-1 overflow-y-auto">
 
@@ -1310,396 +1381,407 @@ export default function DoctorConsultationPage() {
 
             {/* Consultation Form tab */}
             {detailTab === "Consultation Form" && (
-              <form className="flex flex-col gap-8" onSubmit={e => e.preventDefault()}>
-                {successMessage && <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
-                {errorMessage && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
+              !selectedPatientRow ? (
+                <div className="flex flex-col items-center justify-center h-[50vh] text-center p-8 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 dark:bg-gray-800/10 dark:border-gray-800">
+                  <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">No Patient Selected</h3>
+                  <p className="mt-1 text-xs text-gray-500">Please select a patient from the queue first to start the consultation.</p>
+                </div>
+              ) : (
+                <form className="flex flex-col gap-8" onSubmit={e => e.preventDefault()}>
+                  {successMessage && <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{successMessage}</div>}
+                  {errorMessage && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div>}
 
-                {/* Section 1: Clinical Assessment */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    1. Clinical Assessment
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Allergies</label>
-                      <div className="flex gap-4">
-                        {(["Yes", "No"]).map(opt => (
-                          <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="allergies"
-                              value={opt}
-                              checked={formValues.allergies === opt}
-                              onChange={() => updateFormValue("allergies", opt)}
-                              className="h-4 w-4 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
-                            />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">{opt}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    {formValues.allergies === "Yes" && (
+                  {/* Section 1: Clinical Assessment */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      1. Clinical Assessment
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Specify Allergies</label>
-                        <MultiSelectDropdown
-                          options={allergyOptions}
-                          value={formValues.allergiesDetail}
-                          onChange={val => updateFormValue("allergiesDetail", val)}
-                          placeholder="Select Allergy..."
-                        />
-                      </div>
-                    )}
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Present Illness</label>
-                      <textarea value={formValues.presentIllness} onChange={e => updateFormValue("presentIllness", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Past History</label>
-                      <textarea value={formValues.patientPastHistory} onChange={e => updateFormValue("patientPastHistory", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient past history..." />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Provisional Diagnosis</label>
-                      <textarea value={formValues.provisionalDiagnosis} onChange={e => updateFormValue("provisionalDiagnosis", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter provisional diagnosis..." />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
-                      <MultiSelectDropdown
-                        options={symptomOptions}
-                        value={formValues.symptoms}
-                        onChange={val => updateFormValue("symptoms", val)}
-                        placeholder="Select Symptoms..."
-                      />
-                    </div>
-                    <div className="relative">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">ICD-11 Search</label>
-                      <input
-                        type="text"
-                        value={icdQuery}
-                        onChange={e => setIcdQuery(e.target.value)}
-                        onFocus={() => { if (icdResults.length > 0) setShowIcdDropdown(true); }}
-                        onBlur={() => setTimeout(() => setShowIcdDropdown(false), 200)}
-                        className="h-10 w-full rounded-lg border border-gray-300 px-3 pr-10 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-white"
-                        placeholder="Type to search ICD-11..."
-                        autoComplete="off"
-                      />
-                      <svg className="absolute right-3 top-9 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      {isIcdSearching && (
-                        <div className="absolute right-3 top-9 text-xs text-brand-500">Searching...</div>
-                      )}
-                      {showIcdDropdown && icdResults.length > 0 && (
-                        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                          {icdResults.map((res: any) => (
-                            <button
-                              key={res.id}
-                              type="button"
-                              onClick={() => handleIcdSelect(res)}
-                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                            >
-                              <span className="font-semibold">{res.theCode ? `[${res.theCode}] ` : ""}</span>
-                              <span dangerouslySetInnerHTML={{ __html: res.title }} />
-                            </button>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Allergies</label>
+                        <div className="flex gap-4">
+                          {(["Yes", "No"]).map(opt => (
+                            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="allergies"
+                                value={opt}
+                                checked={formValues.allergies === opt}
+                                onChange={() => updateFormValue("allergies", opt)}
+                                className="h-4 w-4 text-brand-500 focus:ring-brand-500 dark:border-gray-600 dark:bg-gray-800"
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">{opt}</span>
+                            </label>
                           ))}
                         </div>
+                      </div>
+                      {formValues.allergies === "Yes" && (
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Specify Allergies</label>
+                          <MultiSelectDropdown
+                            options={allergyOptions}
+                            value={formValues.allergiesDetail}
+                            onChange={val => updateFormValue("allergiesDetail", val)}
+                            placeholder="Select Allergy..."
+                          />
+                        </div>
                       )}
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
-                      <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Investigations */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    2. Investigations
-                  </h3>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Lab Investigations</label>
-                      <textarea value={formValues.labInvestigations} onChange={e => updateFormValue("labInvestigations", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter lab tests..." />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Screening & Imaging</label>
-                      <ScreeningImagingTable
-                        value={formValues.screeningImaging}
-                        onChange={val => updateFormValue("screeningImaging", val)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 3: Treatment */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    3. Treatment
-                  </h3>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">General Treatment Note</label>
-                      <textarea
-                        value={formValues.treatment}
-                        onChange={e => updateFormValue("treatment", e.target.value)}
-                        rows={4}
-                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                        placeholder="Enter general treatment instructions..."
-                      />
-                    </div>
-                    <div>
-                      <DoctorTreatmentNoteGroup
-                        doctors={doctorsList.map(d => d.name)}
-                        value={formValues.treatmentDoctors}
-                        onChange={val => updateFormValue("treatmentDoctors", val)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 4: Prescription */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800 flex items-center justify-between">
-                    4. Prescription
-                  </h3>
-                  <div className="space-y-2">
-                    <PrescriptionTable
-                      value={formValues.prescriptionData}
-                      onChange={val => updateFormValue("prescriptionData", val)}
-                      isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
-                      onSendToPharmacy={handleSendToPharmacy}
-                      isSubmitting={isSubmitting}
-                    />
-                    <div className="mt-4">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Prescription Notes / Instructions</label>
-                      <textarea
-                        value={formValues.prescriptionNotes}
-                        onChange={e => updateFormValue("prescriptionNotes", e.target.value)}
-                        rows={3}
-                        className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                        placeholder="Enter additional prescription details or special instructions..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 5: Advice */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    5. Advice
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
-                      <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Instructions</label>
-                      <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
-                      <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Category</label>
-                      <div className="flex gap-4">
-                        {(["OP", "IP"] as PatientType[]).map(type => (
-                          <label
-                            key={type}
-                            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 transition-all select-none ${patientType === type
-                              ? type === "OP" ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20" : "border-purple-500 bg-purple-50 dark:border-purple-400 dark:bg-purple-900/20"
-                              : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"}`}
-                          >
-                            <input type="radio" name="patientType" value={type} checked={patientType === type} onChange={() => setPatientType(type)} className="sr-only" />
-                            <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${patientType === type ? (type === "OP" ? "border-blue-500" : "border-purple-500") : "border-gray-400 dark:border-gray-500"}`}>
-                              {patientType === type && <span className={`h-2 w-2 rounded-full ${type === "OP" ? "bg-blue-500" : "bg-purple-500"}`} />}
-                            </span>
-                            <span className={`text-sm font-medium ${patientType === type ? (type === "OP" ? "text-blue-700 dark:text-blue-300" : "text-purple-700 dark:text-purple-300") : "text-gray-600 dark:text-gray-400"}`}>
-                              {type === "OP" ? "OP — Outpatient" : "IP — Inpatient"}
-                            </span>
-                          </label>
-                        ))}
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Present Illness</label>
+                        <textarea value={formValues.presentIllness} onChange={e => updateFormValue("presentIllness", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                       </div>
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome</label>
-                      <select value={formValues.patientOutcome} onChange={e => updateFormValue("patientOutcome", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
-                        <option value="">Select Outcome</option>
-                        <option value="Improved">Improved</option>
-                        <option value="Unchanged">Unchanged</option>
-                        <option value="Worsened">Worsened</option>
-                        <option value="Died">Died</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome Notes</label>
-                      <textarea value={formValues.patientOutcomeNotes} onChange={e => updateFormValue("patientOutcomeNotes", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient outcome notes..." />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 6: Disposition */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    6. Disposition
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Disposition</label>
-                      <select value={formValues.disposition} onChange={e => updateFormValue("disposition", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
-                        <option value="">Select Disposition</option>
-                        <option value="Admission">Admission</option>
-                        <option value="Discharge">Discharge</option>
-                        <option value="LAMA">LAMA</option>
-                        <option value="Transferred / Refer to other hospital">Transferred / Refer to other hospital</option>
-                      </select>
-                    </div>
-
-                    {formValues.disposition === "Transferred / Refer to other hospital" && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Referral / Transfer Details</label>
-                          <textarea
-                            value={formValues.referralDetails}
-                            onChange={e => updateFormValue("referralDetails", e.target.value)}
-                            rows={3}
-                            className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            placeholder="Enter hospital name, reason for transfer, or notes..."
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Transfer Date & Time</label>
-                          <input
-                            type="datetime-local"
-                            value={formValues.referralDateTime}
-                            onChange={e => updateFormValue("referralDateTime", e.target.value)}
-                            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                          />
-                        </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Past History</label>
+                        <textarea value={formValues.patientPastHistory} onChange={e => updateFormValue("patientPastHistory", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient past history..." />
                       </div>
-                    )}
-
-                  </div>
-                </div>
-
-                {/* Section 7: Others */}
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                  <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                    7. Others
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Duty Doctor Name (View Only)</label>
-                      <input
-                        type="text"
-                        value={selectedDoctor || formValues.dutyDoctorName || ""}
-                        readOnly
-                        disabled
-                        className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500 cursor-not-allowed dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Medical Officer</label>
-                      <select
-                        value={formValues.medicalOfficer}
-                        onChange={e => updateFormValue("medicalOfficer", e.target.value)}
-                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                      >
-                        <option value="">Select Medical Officer</option>
-                        {doctorsList.map(doc => (
-                          <option key={doc.name} value={doc.name}>{doc.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Attender Signature</label>
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-3">
-                          <label className="flex h-10 flex-1 cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-600 transition hover:border-brand-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
-                            <span className="truncate text-xs">
-                              {formValues.attenderSignature ? "Signature Uploaded" : "Upload Signature Image..."}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={e => handleSignatureUpload(e.target.files?.[0] ?? null)}
-                            />
-                          </label>
-                          {formValues.attenderSignature && (
-                            <button
-                              type="button"
-                              onClick={() => updateFormValue("attenderSignature", "")}
-                              className="text-xs font-semibold text-red-500 hover:text-red-700"
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                        {formValues.attenderSignature && (
-                          <div className="relative mt-1 h-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-950 flex items-center justify-center">
-                            <img
-                              src={formValues.attenderSignature}
-                              alt="Attender Signature Preview"
-                              className="max-h-full max-w-full object-contain"
-                            />
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Provisional Diagnosis</label>
+                        <textarea value={formValues.provisionalDiagnosis} onChange={e => updateFormValue("provisionalDiagnosis", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter provisional diagnosis..." />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
+                        <MultiSelectDropdown
+                          options={symptomOptions}
+                          value={formValues.symptoms}
+                          onChange={val => updateFormValue("symptoms", val)}
+                          placeholder="Select Symptoms..."
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">ICD-11 Search</label>
+                        <input
+                          type="text"
+                          value={icdQuery}
+                          onChange={e => setIcdQuery(e.target.value)}
+                          onFocus={() => { if (icdResults.length > 0) setShowIcdDropdown(true); }}
+                          onBlur={() => setTimeout(() => setShowIcdDropdown(false), 200)}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 pr-10 text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-white"
+                          placeholder="Type to search ICD-11..."
+                          autoComplete="off"
+                        />
+                        <svg className="absolute right-3 top-9 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        {isIcdSearching && (
+                          <div className="absolute right-3 top-9 text-xs text-brand-500">Searching...</div>
+                        )}
+                        {showIcdDropdown && icdResults.length > 0 && (
+                          <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                            {icdResults.map((res: any) => (
+                              <button
+                                key={res.id}
+                                type="button"
+                                onClick={() => handleIcdSelect(res)}
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                              >
+                                <span className="font-semibold">{res.theCode ? `[${res.theCode}] ` : ""}</span>
+                                <span dangerouslySetInnerHTML={{ __html: res.title }} />
+                              </button>
+                            ))}
                           </div>
                         )}
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Records Handed Over By</label>
-                      <select
-                        value={formValues.recordsHandledOverBy}
-                        onChange={e => updateFormValue("recordsHandledOverBy", e.target.value)}
-                        className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                      >
-                        <option value="">Select Doctor</option>
-                        {doctorsList.map(doc => (
-                          <option key={doc.name} value={doc.name}>{doc.name}</option>
-                        ))}
-                      </select>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Diagnosis Name</label>
+                        <input type="text" value={formValues.diagnosisName} onChange={e => updateFormValue("diagnosisName", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Form Actions */}
-                <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormValues({ ...DEFAULT_FORM_VALUES });
-                      setPatientType("OP");
-                      setEditingRecordId(null);
-                    }}
-                    className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition shadow-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting || !selectedDoctor}
-                    onClick={() => saveForm("Draft")}
-                    className="rounded-lg border border-brand-500 px-5 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 transition shadow-sm dark:hover:bg-brand-900/20"
-                    title={!selectedDoctor ? "Please select a doctor first" : "Save as draft"}
-                  >
-                    {isSubmitting ? "Saving..." : "Save as Draft"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSubmitting || !selectedDoctor}
-                    onClick={() => saveForm("Completed")}
-                    className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition shadow-sm"
-                    title={!selectedDoctor ? "Please select a doctor first" : "Save and mark completed"}
-                  >
-                    {isSubmitting ? "Saving..." : "Save"}
-                  </button>
-                </div>
-              </form>
+                  {/* Section 2: Investigations */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      2. Investigations
+                    </h3>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Lab Investigations</label>
+                        <textarea value={formValues.labInvestigations} onChange={e => updateFormValue("labInvestigations", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter lab tests..." />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Screening & Imaging</label>
+                        <ScreeningImagingTable
+                          value={formValues.screeningImaging}
+                          onChange={val => updateFormValue("screeningImaging", val)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Treatment */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      3. Treatment
+                    </h3>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">General Treatment Note</label>
+                        <textarea
+                          value={formValues.treatment}
+                          onChange={e => updateFormValue("treatment", e.target.value)}
+                          rows={4}
+                          className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          placeholder="Enter general treatment instructions..."
+                        />
+                      </div>
+                      <div>
+                        <DoctorTreatmentNoteGroup
+                          doctors={doctorsList.map(d => d.name)}
+                          value={formValues.treatmentDoctors}
+                          onChange={val => updateFormValue("treatmentDoctors", val)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 4: Prescription */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800 flex items-center justify-between">
+                      4. Prescription
+                    </h3>
+                    <div className="space-y-2">
+                      <PrescriptionTable
+                        value={formValues.prescriptionData}
+                        onChange={val => updateFormValue("prescriptionData", val)}
+                        isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
+                        onSendToPharmacy={handleSendToPharmacy}
+                        isSubmitting={isSubmitting}
+                      />
+                      <div className="mt-4">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Prescription Notes / Instructions</label>
+                        <textarea
+                          value={formValues.prescriptionNotes}
+                          onChange={e => updateFormValue("prescriptionNotes", e.target.value)}
+                          rows={3}
+                          className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                          placeholder="Enter additional prescription details or special instructions..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 5: Advice */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      5. Advice
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Remarks</label>
+                        <textarea value={formValues.remarks} onChange={e => updateFormValue("remarks", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Instructions</label>
+                        <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
+                        <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Category</label>
+                        <div className="flex gap-4">
+                          {(["OP", "IP"] as PatientType[]).map(type => (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => setPatientType(type)}
+                              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 transition-all select-none focus:outline-none ${patientType === type
+                                ? type === "OP" ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20" : "border-purple-500 bg-purple-50 dark:border-purple-400 dark:bg-purple-900/20"
+                                : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"}`}
+                            >
+                              <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${patientType === type ? (type === "OP" ? "border-blue-500" : "border-purple-500") : "border-gray-400 dark:border-gray-500"}`}>
+                                {patientType === type && <span className={`h-2 w-2 rounded-full ${type === "OP" ? "bg-blue-500" : "bg-purple-500"}`} />}
+                              </span>
+                              <span className={`text-sm font-medium ${patientType === type ? (type === "OP" ? "text-blue-700 dark:text-blue-300" : "text-purple-700 dark:text-purple-300") : "text-gray-600 dark:text-gray-400"}`}>
+                                {type === "OP" ? "OP — Outpatient" : "IP — Inpatient"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome</label>
+                        <select value={formValues.patientOutcome} onChange={e => updateFormValue("patientOutcome", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                          <option value="">Select Outcome</option>
+                          <option value="Improved">Improved</option>
+                          <option value="Unchanged">Unchanged</option>
+                          <option value="Worsened">Worsened</option>
+                          <option value="Died">Died</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome Notes</label>
+                        <textarea value={formValues.patientOutcomeNotes} onChange={e => updateFormValue("patientOutcomeNotes", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient outcome notes..." />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 6: Disposition */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      6. Disposition
+                    </h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Disposition</label>
+                        <select value={formValues.disposition} onChange={e => updateFormValue("disposition", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                          <option value="">Select Disposition</option>
+                          <option value="Admission">Admission</option>
+                          <option value="Discharge">Discharge</option>
+                          <option value="LAMA">LAMA</option>
+                          <option value="Transferred / Refer to other hospital">Transferred / Refer to other hospital</option>
+                        </select>
+                      </div>
+
+                      {formValues.disposition === "Transferred / Refer to other hospital" && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Referral / Transfer Details</label>
+                            <textarea
+                              value={formValues.referralDetails}
+                              onChange={e => updateFormValue("referralDetails", e.target.value)}
+                              rows={3}
+                              className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                              placeholder="Enter hospital name, reason for transfer, or notes..."
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Transfer Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              value={formValues.referralDateTime}
+                              onChange={e => updateFormValue("referralDateTime", e.target.value)}
+                              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+
+                  {/* Section 7: Others */}
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                      7. Others
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Duty Doctor Name (View Only)</label>
+                        <input
+                          type="text"
+                          value={selectedDoctor || formValues.dutyDoctorName || ""}
+                          readOnly
+                          disabled
+                          className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500 cursor-not-allowed dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Medical Officer</label>
+                        <select
+                          value={formValues.medicalOfficer}
+                          onChange={e => updateFormValue("medicalOfficer", e.target.value)}
+                          className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        >
+                          <option value="">Select Medical Officer</option>
+                          {doctorsList.map(doc => (
+                            <option key={doc.name} value={doc.name}>{doc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Attender Signature</label>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-3">
+                            <label className="flex h-10 flex-1 cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-600 transition hover:border-brand-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                              <span className="truncate text-xs">
+                                {formValues.attenderSignature ? "Signature Uploaded" : "Upload Signature Image..."}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => handleSignatureUpload(e.target.files?.[0] ?? null)}
+                              />
+                            </label>
+                            {formValues.attenderSignature && (
+                              <button
+                                type="button"
+                                onClick={() => updateFormValue("attenderSignature", "")}
+                                className="text-xs font-semibold text-red-500 hover:text-red-700"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          {formValues.attenderSignature && (
+                            <div className="relative mt-1 h-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-950 flex items-center justify-center">
+                              <img
+                                src={formValues.attenderSignature}
+                                alt="Attender Signature Preview"
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Records Handed Over By</label>
+                        <select
+                          value={formValues.recordsHandledOverBy}
+                          onChange={e => updateFormValue("recordsHandledOverBy", e.target.value)}
+                          className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        >
+                          <option value="">Select Doctor</option>
+                          {doctorsList.map(doc => (
+                            <option key={doc.name} value={doc.name}>{doc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form Actions */}
+                  <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormValues({ ...DEFAULT_FORM_VALUES });
+                        setPatientType("OP");
+                        setEditingRecordId(null);
+                      }}
+                      className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition shadow-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || !selectedDoctor}
+                      onClick={() => saveForm("Draft")}
+                      className="rounded-lg border border-brand-500 px-5 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 transition shadow-sm dark:hover:bg-brand-900/20"
+                      title={!selectedDoctor ? "Please select a doctor first" : "Save as draft"}
+                    >
+                      {isSubmitting ? "Saving..." : "Save as Draft"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || !selectedDoctor}
+                      onClick={() => saveForm("Completed")}
+                      className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition shadow-sm"
+                      title={!selectedDoctor ? "Please select a doctor first" : "Save and mark completed"}
+                    >
+                      {isSubmitting ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </form>
+              )
             )}
           </div>
         </div>

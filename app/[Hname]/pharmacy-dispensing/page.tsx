@@ -153,6 +153,7 @@ export default function PharmacyDispensingPage() {
   const [pricingMap, setPricingMap] = useState<Record<string, number>>({});
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ── Dispensing form fields ──────────────────────────────────────────────────
   const [selectedConsultationId, setSelectedConsultationId] = useState<number | null>(null);
@@ -446,6 +447,7 @@ export default function PharmacyDispensingPage() {
     setMedicineRows([{ id: 1, medicineName: "", prescribedQty: "", receivedQty: "", medicineAmount: "" }]);
     setSubmitMessage(null);
     setSubmitError(null);
+    setIsSubmitting(false);
   };
 
   const resetAddDispense = () => {
@@ -565,6 +567,8 @@ export default function PharmacyDispensingPage() {
   /** Standard consultation-based submit */
   const handleConsultationSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setSubmitMessage(null);
     setSubmitError(null);
     try {
@@ -591,12 +595,15 @@ export default function PharmacyDispensingPage() {
       setActiveView("bills");
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to save dispensing record.");
+      setIsSubmitting(false);
     }
   };
 
   /** Pharmacy-only submit */
   const handlePharmacyOnlySubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setSubmitMessage(null);
     setSubmitError(null);
     try {
@@ -622,6 +629,7 @@ export default function PharmacyDispensingPage() {
       setActiveView("bills");
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to save dispense record.");
+      setIsSubmitting(false);
     }
   };
 
@@ -647,7 +655,7 @@ export default function PharmacyDispensingPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Add Dispense — primary CTA */}
+              {/* Walk-in (formerly Add Dispense) */}
               <button
                 type="button"
                 id="btn-add-dispense"
@@ -655,42 +663,28 @@ export default function PharmacyDispensingPage() {
                   resetAddDispense();
                   setActiveView("add-dispense");
                 }}
-                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "add-dispense" || activeView === "dispense-history"
-                  ? "bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500/25"
-                  : "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                  }`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 border-slate-300 focus:ring-slate-500/25"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-                Add Dispense
+                Walk-in
               </button>
 
-              {/* View Records */}
+              {/* View Records / Dispense Toggle Button */}
               <button
                 type="button"
-                onClick={() => setActiveView("bills")}
-                className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "bills"
-                  ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                  }`}
+                onClick={() => {
+                  if (activeView === "records") {
+                    setActiveView("bills");
+                  } else {
+                    setActiveView("records");
+                  }
+                }}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 border-slate-300 focus:ring-slate-500/25"
               >
-                View Records
+                {activeView === "records" ? "Records" : "Dispense"}
               </button>
-
-              {/* Dispense (consultation-based) */}
-              {activeView !== "form" ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveView("records")}
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-medium transition focus:outline-hidden focus:ring-3 ${activeView === "records"
-                    ? "bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/25"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-                    }`}
-                >
-                  Dispense
-                </button>
-              ) : null}
             </div>
           </div>
 
@@ -1235,10 +1229,10 @@ export default function PharmacyDispensingPage() {
                     </button>
                     <button
                       type="submit"
-                      disabled={isPharmacyOnly ? !patientName.trim() : (!tokenNumber || !patientName)}
+                      disabled={isSubmitting || (isPharmacyOnly ? !patientName.trim() : (!tokenNumber || !patientName))}
                       className="rounded-lg px-5 py-2.5 text-sm font-medium text-white transition focus:outline-hidden focus:ring-3 disabled:cursor-not-allowed disabled:opacity-60 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500/25"
                     >
-                      {isPharmacyOnly ? "Save & Tag Pharmacy Only" : "Save Dispensing"}
+                      {isSubmitting ? "Saving..." : (isPharmacyOnly ? "Save & Tag Pharmacy Only" : "Save Dispensing")}
                     </button>
                   </div>
                 </div>
@@ -1506,11 +1500,10 @@ export default function PharmacyDispensingPage() {
                         key={pageNum}
                         type="button"
                         onClick={() => setModalCurrentPage(pageNum)}
-                        className={`min-w-[32px] rounded border px-2 py-1.5 text-sm font-medium ${
-                          modalCurrentPage === pageNum
+                        className={`min-w-[32px] rounded border px-2 py-1.5 text-sm font-medium ${modalCurrentPage === pageNum
                             ? 'border-brand-500 bg-brand-500 text-white'
                             : 'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
-                        }`}
+                          }`}
                       >
                         {pageNum}
                       </button>
