@@ -1399,8 +1399,13 @@ export async function POST(
 
       const patientId = bed.patient_id;
 
-      // Release the bed using the vacate helper (sets status to Cleaning/Available, clears patient)
-      await vacateBed(pool, bed, performedBy, "Bed cancelled / patient discharged");
+      // Directly set status to Available and clear patient fields so the tile turns green immediately
+      await pool.query(
+        `UPDATE ${quoteIdentifier(TABLE_NAMES.BED)}
+         SET status = 'Available', patient_id = NULL, patient_name = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [bedId]
+      );
 
       // Close billing line if patient was tracked
       if (patientId) {
@@ -1417,6 +1422,18 @@ export async function POST(
 
       if (bed.room_id) await updateRoomStatus(pool, Number(bed.room_id));
 
+      return NextResponse.json({ success: true });
+    }
+
+    // Reset all Cleaning beds (no active patient) back to Available
+    if (action === "resetCleaning") {
+      await pool.query(
+        `UPDATE ${quoteIdentifier(TABLE_NAMES.BED)}
+         SET status = 'Available', patient_id = NULL, patient_name = NULL, updated_at = NOW()
+         WHERE status = 'Cleaning'
+           AND (patient_id IS NULL OR patient_id = '')`,
+        []
+      );
       return NextResponse.json({ success: true });
     }
 

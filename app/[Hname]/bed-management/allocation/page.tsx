@@ -221,11 +221,17 @@ export default function BedAllocationPage() {
   useEffect(() => {
     if (!hname) return;
     setIsLoading(true);
-    fetch(`/api/${hname}/infrastructure?action=hierarchy`, {
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((data: HierarchyData) => {
+    (async () => {
+      try {
+        // Reset any beds stuck at "Cleaning" (no active patient) back to Available
+        await fetch(`/api/${hname}/infrastructure`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "resetCleaning" }),
+        }).catch(() => {});
+
+        const r = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
+        const data: HierarchyData = await r.json();
         setHierarchy(data);
         const blds = data.buildings ?? [];
 
@@ -266,9 +272,10 @@ export default function BedAllocationPage() {
         }
         setSelectedWard(ws.length === 1 ? String(ws[0].ward_type) : "");
         setCurrentStep("beds");
-      })
-      .catch(() => { })
-      .finally(() => setIsLoading(false));
+      } catch { /* ignore */ } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [hname]);
 
   /* ─────────────────────────────────────────────
@@ -554,6 +561,22 @@ export default function BedAllocationPage() {
     return () => clearTimeout(timer);
   }, [patientSearchQuery, selectedPatient, hname]);
 
+  /* ── Shared: await-able hierarchy refresh ── */
+  async function refreshHierarchy() {
+    try {
+      // First reset any beds stuck at "Cleaning" back to Available
+      await fetch(`/api/${hname}/infrastructure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resetCleaning" }),
+      }).catch(() => {});
+      // Then fetch fresh hierarchy
+      const r = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
+      const d = await r.json();
+      setHierarchy(d);
+    } catch { /* ignore */ }
+  }
+
   /* ── Cancel bed (deallocate) ── */
   async function handleCancelBed(bed: Row) {
     setOccupiedBedModal(null);
@@ -571,11 +594,8 @@ export default function BedAllocationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Cancellation failed.");
       setMessage(`Bed ${String(bed.description || bed.bed_number || bed.code)} has been cancelled successfully.`);
-      // Refresh hierarchy
-      fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => setHierarchy(d))
-        .catch(() => {});
+      // Await the refresh so building counts update immediately
+      await refreshHierarchy();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cancellation failed.");
     }
@@ -639,11 +659,8 @@ export default function BedAllocationPage() {
       setTransferTargetBed(null);
       setShowTransferConfirm(false);
       setCurrentStep("block");
-      // Refresh hierarchy
-      fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => setHierarchy(d))
-        .catch(() => {});
+      // Await the refresh so building counts update immediately
+      await refreshHierarchy();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transfer failed.");
       setShowTransferConfirm(false);
