@@ -1381,6 +1381,45 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    // Deallocate (cancel) a bed – returns it to Available and marks allocation as Discharged
+    if (action === "deallocate") {
+      const { bedId } = body;
+      if (!bedId) {
+        return NextResponse.json({ error: "bedId is required." }, { status: 400 });
+      }
+
+      const performedBy = await getSessionUser(Hname);
+
+      const bedResult = await pool.query(
+        `SELECT * FROM ${quoteIdentifier(TABLE_NAMES.BED)} WHERE id = $1`,
+        [bedId]
+      );
+      const bed = bedResult.rows[0];
+      if (!bed) return NextResponse.json({ error: "Bed not found." }, { status: 404 });
+
+      const patientId = bed.patient_id;
+
+      // Release the bed using the vacate helper (sets status to Cleaning/Available, clears patient)
+      await vacateBed(pool, bed, performedBy, "Bed cancelled / patient discharged");
+
+      // Close billing line if patient was tracked
+      if (patientId) {
+        await closeBillingLine(pool, Number(bedId), String(patientId));
+      }
+
+      // Mark active allocation as Discharged
+      await pool.query(
+        `UPDATE ${quoteIdentifier(TABLE_NAMES.BED_ALLOCATION)}
+         SET status = 'Discharged', discharged_at = NOW(), updated_at = NOW()
+         WHERE bed_id = $1 AND status = 'Active'`,
+        [bedId]
+      );
+
+      if (bed.room_id) await updateRoomStatus(pool, Number(bed.room_id));
+
+      return NextResponse.json({ success: true });
+    }
+
     // Update bed status
     if (action === "updateBedStatus") {
       const { bedId, newStatus, changedByName, changedByRole, reason } = body;

@@ -196,6 +196,17 @@ export default function BedAllocationPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Occupied bed action modal ──
+  const [occupiedBedModal, setOccupiedBedModal] = useState<Row | null>(null);
+
+  // ── Transfer mode ──
+  type TransferMode = "idle" | "selecting"; // idle = not transferring, selecting = picking new bed
+  const [transferMode, setTransferMode] = useState<TransferMode>("idle");
+  const [transferSourceBed, setTransferSourceBed] = useState<Row | null>(null); // the occupied bed being transferred FROM
+  const [transferTargetBed, setTransferTargetBed] = useState<Row | null>(null); // new bed picked by user
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+
   /* ── Load session user ── */
   useEffect(() => {
     if (!hname) return;
@@ -363,7 +374,20 @@ export default function BedAllocationPage() {
   }
 
   function handleSelectBed(bed: Row) {
-    if (String(bed.status || "Available") !== "Available") return;
+    const st = String(bed.status || "Available");
+    if (st !== "Available") {
+      // In transfer mode – occupied beds are not selectable as destination
+      if (transferMode === "selecting") return;
+      // Normal mode – show the cancel/transfer modal
+      setOccupiedBedModal(bed);
+      return;
+    }
+    if (transferMode === "selecting") {
+      // User picked a new bed for the transfer
+      setTransferTargetBed(bed);
+      setShowTransferConfirm(true);
+      return;
+    }
     setSelectedBed(bed);
     setMessage(null);
     setError(null);
@@ -529,6 +553,104 @@ export default function BedAllocationPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [patientSearchQuery, selectedPatient, hname]);
+
+  /* ── Cancel bed (deallocate) ── */
+  async function handleCancelBed(bed: Row) {
+    setOccupiedBedModal(null);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/${hname}/infrastructure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deallocate",
+          bedId: Number(bed.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cancellation failed.");
+      setMessage(`Bed ${String(bed.description || bed.bed_number || bed.code)} has been cancelled successfully.`);
+      // Refresh hierarchy
+      fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setHierarchy(d))
+        .catch(() => {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancellation failed.");
+    }
+  }
+
+  /* ── Enter transfer mode ── */
+  function handleStartTransfer(bed: Row) {
+    setOccupiedBedModal(null);
+    setTransferSourceBed(bed);
+    setTransferMode("selecting");
+    setTransferTargetBed(null);
+    setShowTransferConfirm(false);
+    setSelectedBed(null);
+    setSelectedPatient(null);
+    setPatientSearchQuery("");
+    setMessage(null);
+    setError(null);
+    // Reset drill-down back to building step so user can pick a new bed
+    setSelectedBuilding(null);
+    setSelectedFloor(null);
+    setSelectedDepartment("");
+    setSelectedWard("");
+    setCurrentStep("block");
+  }
+
+  /* ── Abort transfer mode ── */
+  function handleCancelTransfer() {
+    setTransferMode("idle");
+    setTransferSourceBed(null);
+    setTransferTargetBed(null);
+    setShowTransferConfirm(false);
+    setCurrentStep("block");
+  }
+
+  /* ── Confirm and execute transfer ── */
+  async function handleConfirmTransfer() {
+    if (!transferSourceBed || !transferTargetBed) return;
+    setIsTransferring(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/${hname}/infrastructure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "transfer",
+          patientId: transferSourceBed.patient_id,
+          patientName: transferSourceBed.patient_name,
+          oldBedId: Number(transferSourceBed.id),
+          newBedId: Number(transferTargetBed.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Transfer failed.");
+      setMessage(
+        `Patient ${String(transferSourceBed.patient_name)} successfully transferred to ${String(transferTargetBed.description || transferTargetBed.bed_number || transferTargetBed.code)}.`
+      );
+      // Reset transfer mode
+      setTransferMode("idle");
+      setTransferSourceBed(null);
+      setTransferTargetBed(null);
+      setShowTransferConfirm(false);
+      setCurrentStep("block");
+      // Refresh hierarchy
+      fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setHierarchy(d))
+        .catch(() => {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Transfer failed.");
+      setShowTransferConfirm(false);
+    } finally {
+      setIsTransferring(false);
+    }
+  }
 
   /* ── Allocate bed ── */
   async function handleAllocate() {
@@ -1035,6 +1157,30 @@ export default function BedAllocationPage() {
                   </section>
                 )}
 
+                {/* Transfer mode inline banner */}
+                {transferMode === "selecting" && transferSourceBed && (
+                  <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4 flex items-center gap-3 bed-step-in">
+                    <svg className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        Transfer mode — Select a new bed for {String(transferSourceBed.patient_name || "the patient")}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        Currently in: {String(transferSourceBed.description || transferSourceBed.bed_number || transferSourceBed.code)}. Click any <span className="font-semibold">green (available)</span> bed to transfer.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCancelTransfer}
+                      className="shrink-0 rounded-lg border border-amber-400 dark:border-amber-600 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
@@ -1117,13 +1263,15 @@ export default function BedAllocationPage() {
                                 <button
                                   key={String(bed.id)}
                                   type="button"
-                                  disabled={!isAvail}
+                                  disabled={!isAvail && transferMode === "selecting"}
                                   onClick={() => handleSelectBed(bed)}
                                   className={`bed-card-pop relative flex flex-col items-center justify-center rounded-xl border-2 p-3 min-h-[76px] transition-all ${isSel
                                     ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30 ring-2 ring-brand-500/30 scale-105 shadow-lg"
                                     : isAvail
                                       ? "border-green-200 bg-green-50/50 hover:border-green-400 hover:shadow-md hover:-translate-y-0.5 cursor-pointer dark:border-green-900 dark:bg-green-950/20 dark:hover:border-green-500"
-                                      : "border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-70 dark:border-gray-700 dark:bg-gray-900/50"
+                                      : transferMode === "selecting"
+                                        ? "border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-50 dark:border-gray-700 dark:bg-gray-900/50"
+                                        : "border-red-200 bg-red-50/50 hover:border-red-400 hover:shadow-md hover:-translate-y-0.5 cursor-pointer dark:border-red-900 dark:bg-red-950/20 dark:hover:border-red-500"
                                     }`}
                                   style={{ animationDelay: `${i * 25}ms` }}
                                   title={
@@ -1199,6 +1347,138 @@ export default function BedAllocationPage() {
           </p>
         )}
       </div>
+
+      {/* ══════════════════════════════════════════════
+          Occupied Bed – Action Modal (Cancel / Transfer)
+         ══════════════════════════════════════════════ */}
+      {occupiedBedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 shadow-2xl p-6 space-y-5 bed-step-in">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                  🛏️ {String(occupiedBedModal.description || occupiedBedModal.bed_number || occupiedBedModal.code)}
+                </h3>
+                {occupiedBedModal.patient_name && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-1 font-medium">
+                    Occupied by: {String(occupiedBedModal.patient_name)}
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {occupiedBedModal.room_name ? `Room: ${String(occupiedBedModal.room_name)} • ` : ""}
+                  Ward: {String(occupiedBedModal.ward_name || "-")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOccupiedBedModal(null)}
+                className="ml-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-gray-100 dark:border-gray-800" />
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => handleStartTransfer(occupiedBedModal)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 focus:outline-none focus:ring-3 focus:ring-brand-500/30 shadow-md shadow-brand-500/20"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Transfer Bed
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCancelBed(occupiedBedModal)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-5 py-3 text-sm font-semibold text-red-700 dark:text-red-400 transition hover:bg-red-100 dark:hover:bg-red-900/40 focus:outline-none focus:ring-3 focus:ring-red-500/20"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Cancel Bed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          Transfer Mode – Banner
+         ══════════════════════════════════════════════ */}
+      {transferMode === "selecting" && transferSourceBed && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-lg px-4">
+          <div className="rounded-2xl border border-brand-200 dark:border-brand-700 bg-white dark:bg-gray-900 shadow-2xl p-4 flex items-center gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                🔄 Transferring: {String(transferSourceBed.patient_name || "-")}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                From: {String(transferSourceBed.description || transferSourceBed.bed_number || "")} — Select a new <span className="font-semibold text-green-600 dark:text-green-400">available</span> bed below
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelTransfer}
+              className="shrink-0 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          Confirm Transfer Modal
+         ══════════════════════════════════════════════ */}
+      {showTransferConfirm && transferSourceBed && transferTargetBed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 shadow-2xl p-6 space-y-5 bed-step-in">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Confirm Transfer</h3>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 p-4 space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">Patient</span>
+                <span className="text-gray-900 dark:text-white font-semibold">{String(transferSourceBed.patient_name || "-")}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">From</span>
+                <span className="text-red-600 dark:text-red-400 font-medium">{String(transferSourceBed.description || transferSourceBed.bed_number || transferSourceBed.code)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">To</span>
+                <span className="text-green-600 dark:text-green-400 font-medium">{String(transferTargetBed.description || transferTargetBed.bed_number || transferTargetBed.code)}</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleConfirmTransfer}
+                disabled={isTransferring}
+                className="flex-1 inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus:ring-3 focus:ring-brand-500/30 shadow-md shadow-brand-500/20"
+              >
+                {isTransferring ? "Transferring..." : "Confirm Transfer"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowTransferConfirm(false); setTransferTargetBed(null); }}
+                disabled={isTransferring}
+                className="flex-1 inline-flex items-center justify-center rounded-xl border border-gray-300 dark:border-gray-700 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }
