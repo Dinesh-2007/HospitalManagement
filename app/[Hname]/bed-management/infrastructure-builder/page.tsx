@@ -690,12 +690,14 @@ export default function InfrastructureBuilderPage() {
     }
     async function loadBedTypes() {
       try {
-        const r = await fetch(`/api/${hname}/forms/bed_master`, { cache: "no-store" });
+        const r = await fetch(`/api/${hname}/forms/bed_type_master`, { cache: "no-store" });
         if (!r.ok) return;
         const d = await r.json() as { rows?: Rec[] };
         const seen = new Set<string>(); const types: string[] = [];
         for (const row of (d.rows ?? [])) {
-          const bt = String(row.bed_type ?? "").trim();
+          const code = String(row.code ?? "").trim();
+          const desc = String(row.description ?? "").trim();
+          const bt = desc ? `${code} - ${desc}` : code;
           if (bt && !seen.has(bt)) { seen.add(bt); types.push(bt); }
         }
         setBedTypeOptions(types);

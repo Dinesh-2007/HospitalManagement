@@ -229,6 +229,7 @@ export default function InfrastructurePage() {
   });
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
   const [selectedFloorId, setSelectedFloorId] = useState<string>("");
+  const [editingBuildings, setEditingBuildings] = useState<string[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<GeneratorResult | null>(null);
@@ -355,13 +356,15 @@ export default function InfrastructurePage() {
 
     async function loadBedTypes() {
       try {
-        const res = await fetch(`/api/${hname}/forms/bed_master`, { cache: "no-store" });
+        const res = await fetch(`/api/${hname}/forms/bed_type_master`, { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         const seen = new Set<string>();
         const types: string[] = [];
         for (const row of (data.rows ?? []) as Record<string, unknown>[]) {
-          const bt = String(row.bed_type ?? "").trim();
+          const code = String(row.code ?? "").trim();
+          const desc = String(row.description ?? "").trim();
+          const bt = desc ? `${code} - ${desc}` : code;
           if (bt && !seen.has(bt)) {
             seen.add(bt);
             types.push(bt);
@@ -709,6 +712,7 @@ export default function InfrastructurePage() {
     };
     setBuildings((prev) => [...prev, newBld]);
     setSelectedBuildingId(newBld.id);
+    setEditingBuildings((prev) => [...prev, newBld.id]);
   };
 
   const handleUpdateBuilding = (id: string, field: keyof BuildingConfig, value: unknown) => {
@@ -2101,8 +2105,9 @@ export default function InfrastructurePage() {
                           <input
                             type="text"
                             value={b.name}
+                            disabled={!editingBuildings.includes(b.id)}
                             onChange={(e) => handleUpdateBuilding(b.id, "name", e.target.value)}
-                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800"
                           />
                         </div>
                         <div>
@@ -2110,8 +2115,9 @@ export default function InfrastructurePage() {
                           <input
                             type="text"
                             value={b.code}
+                            disabled={!editingBuildings.includes(b.id)}
                             onChange={(e) => handleUpdateBuilding(b.id, "code", e.target.value)}
-                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800"
                           />
                         </div>
                       </div>
@@ -2122,8 +2128,9 @@ export default function InfrastructurePage() {
                           <input
                             type="text"
                             value={b.description}
+                            disabled={!editingBuildings.includes(b.id)}
                             onChange={(e) => handleUpdateBuilding(b.id, "description", e.target.value)}
-                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800"
                           />
                         </div>
                         <div>
@@ -2133,10 +2140,31 @@ export default function InfrastructurePage() {
                             min={1}
                             max={20}
                             value={b.floorsCount}
+                            disabled={!editingBuildings.includes(b.id)}
                             onChange={(e) => handleUpdateBuilding(b.id, "floorsCount", Number(e.target.value))}
-                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-xs disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:disabled:bg-gray-800"
                           />
                         </div>
+                      </div>
+
+                      <div className="flex justify-end pt-2">
+                        {editingBuildings.includes(b.id) ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditingBuildings((prev) => prev.filter((id) => id !== b.id))}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-600 transition"
+                          >
+                            Save
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingBuildings((prev) => [...prev, b.id])}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
+                          >
+                            Edit
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -445,10 +445,22 @@ async function createBed(
     description?: string;
   }
 ) {
-  const bedName = data.description || generateBedName(data.bedIndex);
-  const code = data.description
-    ? `${data.roomName.replace(/\s+/g, "")}-B${data.description.replace(/\s+/g, "")}`
-    : `${data.roomName.replace(/\s+/g, "")}-B${data.bedIndex + 1}`;
+  const bldPrefix = (data.buildingName || "XX").substring(0, 2).toUpperCase();
+  const deptPrefix = (data.departmentName || "XX").substring(0, 2).toUpperCase();
+  
+  // Get the current count of beds in this building & department
+  const countRes = await pool.query(
+    `SELECT COUNT(*) as count FROM ${quoteIdentifier(TABLE_NAMES.BED)} WHERE building_name = $1 AND department_name = $2`,
+    [data.buildingName, data.departmentName]
+  );
+  const currentCount = parseInt(countRes.rows[0].count, 10);
+  const bedNumStr = (currentCount + 1).toString().padStart(3, '0');
+  
+  const uniqueId = `${bldPrefix}${deptPrefix}${bedNumStr}`;
+  
+  const bedName = uniqueId;
+  const code = uniqueId;
+  
   const result = await pool.query(
     `INSERT INTO ${quoteIdentifier(TABLE_NAMES.BED)}
        (code, description, bed_number, bed_type, rate, charge, status, ward,

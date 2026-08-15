@@ -36,7 +36,7 @@ export const mastersData: NavigationSection[] = [
       { title: "Room Type", href: "/masters/lab-hospital-facility-masters/room-type" },
       { title: "Room Purpose", href: "/masters/lab-hospital-facility-masters/room-purpose" },
       { title: "Room Master", href: "/masters/lab-hospital-facility-masters/room-master" },
-      { title: "Bed", href: "/masters/lab-hospital-facility-masters/bed" },
+      { title: "Bed Type", href: "/masters/lab-hospital-facility-masters/bed-type" },
       { title: "Operation Theater", href: "/masters/lab-hospital-facility-masters/operation-theater" },
       { title: "Equipment Master", href: "/masters/lab-hospital-facility-masters/equipment-master" },
     ],

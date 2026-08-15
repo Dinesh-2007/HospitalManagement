@@ -11,47 +11,47 @@ export default function BedPage() {
   const params = useParams();
   const hname = params?.Hname as string;
   const [wardOptions, setWardOptions] = useState<string[]>([]);
+  const [bedTypeOptions, setBedTypeOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    async function loadWardOptions() {
+    async function loadOptions() {
       if (!hname) {
         return;
       }
 
       try {
-        const response = await fetch(`/api/${hname}/forms/ward_master`, {
-          method: "GET",
-          cache: "no-store",
-        });
+        const [wardRes, bedTypeRes] = await Promise.all([
+          fetch(`/api/${hname}/forms/ward_master`, { method: "GET", cache: "no-store" }),
+          fetch(`/api/${hname}/forms/bed_type_master`, { method: "GET", cache: "no-store" })
+        ]);
 
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as {
-          rows?: Array<Record<string, unknown>>;
-        };
-
-        const options = (data.rows ?? [])
-          .map((row) => {
+        if (wardRes.ok) {
+          const data = (await wardRes.json()) as { rows?: Array<Record<string, unknown>> };
+          const options = (data.rows ?? []).map(row => {
             const code = String(row.code ?? "").trim();
             const description = String(row.description ?? "").trim();
-
-            if (!code) {
-              return "";
-            }
-
+            if (!code) return "";
             return description ? `${code} - ${description}` : code;
-          })
-          .filter(Boolean);
+          }).filter(Boolean);
+          setWardOptions(options);
+        }
 
-        setWardOptions(options);
+        if (bedTypeRes.ok) {
+          const data = (await bedTypeRes.json()) as { rows?: Array<Record<string, unknown>> };
+          const options = (data.rows ?? []).map(row => {
+            const code = String(row.code ?? "").trim();
+            const description = String(row.description ?? "").trim();
+            if (!code) return "";
+            return description ? `${code} - ${description}` : code;
+          }).filter(Boolean);
+          setBedTypeOptions(options);
+        }
       } catch (error) {
-        console.error("Failed to load ward options", error);
+        console.error("Failed to load options", error);
       }
     }
 
-    void loadWardOptions();
+    void loadOptions();
   }, [hname]);
 
   const bedFields: MastersFormField[] = useMemo(
@@ -63,18 +63,7 @@ export default function BedPage() {
         id: "bedType",
         label: "Bed Type",
         type: "select",
-        options: [
-          "Standard",
-          "Semi-Fowler",
-          "Fowler",
-          "ICU Bed",
-          "Pediatric Bed",
-          "Bariatric Bed",
-          "Motorized",
-          "Manual",
-          "Air Mattress",
-          "Stretcher",
-        ],
+        options: bedTypeOptions,
       },
       { id: "rate", label: "Rate", type: "number" },
       { id: "charge", label: "Charge Per Day", type: "number" },
@@ -111,7 +100,7 @@ export default function BedPage() {
         fullWidth: true,
       },
     ],
-    [wardOptions],
+    [wardOptions, bedTypeOptions],
   );
 
   return (
