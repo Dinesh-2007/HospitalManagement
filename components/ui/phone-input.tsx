@@ -75,8 +75,6 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
         value={value}
         onChange={(phone) => onChange(phone)}
         disabled={disabled}
-        disableDialCodeAndPrefix={true}
-        showDisabledDialCodeAndPrefix={true}
         inputProps={{
           id,
           required,

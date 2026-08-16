@@ -1,7 +1,10 @@
-// Uses validation functions from react-international-phone or libphonenumber-js
+// Uses libphonenumber-js for accurate country calling code detection
+
+import { parsePhoneNumber } from "libphonenumber-js";
 
 /**
- * Splits a phone number into its country code and local digits.
+ * Splits a phone number into its country calling code and local subscriber digits.
+ * Uses libphonenumber-js for accurate parsing of real-world country codes.
  * For example: "+919876543210" -> { countryCode: "+91", phoneNumber: "9876543210" }
  * If there is no country code/not standard E.164, countryCode is empty and phoneNumber is all digits.
  */
@@ -9,8 +12,22 @@ export function splitPhoneNumber(phone?: string | null): { countryCode: string; 
   if (!phone) return { countryCode: "", phoneNumber: "" };
 
   const trimmed = phone.trim();
+
+  // Try libphonenumber-js first for accurate country code extraction
   if (trimmed.startsWith("+")) {
-    // E.164 dial codes are 1 to 4 digits (e.g. +1, +44, +91, +1246)
+    try {
+      const parsed = parsePhoneNumber(trimmed);
+      if (parsed && parsed.countryCallingCode) {
+        const countryCode = `+${parsed.countryCallingCode}`;
+        // nationalNumber is the subscriber number without the country calling code
+        const phoneNumber = parsed.nationalNumber;
+        return { countryCode, phoneNumber };
+      }
+    } catch {
+      // Fall through to regex fallback below
+    }
+
+    // Regex fallback if libphonenumber-js cannot parse (e.g. partial/unknown number)
     const match = trimmed.match(/^(\+\d{1,4})(.*)$/);
     if (match) {
       const countryCode = match[1];
