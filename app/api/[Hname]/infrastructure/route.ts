@@ -311,6 +311,34 @@ async function ensureInfrastructureTables(pool: Pool) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  if (await tableExists(pool, "doctor_consultation_entry")) {
+    await ensureColumn(pool, "doctor_consultation_entry", "rno", "TEXT");
+    await ensureColumn(pool, "doctor_consultation_entry", "care_plans", "JSONB");
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS patient_care_plan_execution (
+      id BIGSERIAL PRIMARY KEY,
+      patient_id TEXT NOT NULL,
+      patient_name TEXT,
+      consultation_id BIGINT,
+      care_plan_id TEXT,
+      executed_at TIMESTAMPTZ DEFAULT NOW(),
+      executed_by TEXT,
+      remarks TEXT,
+      height_cm NUMERIC,
+      weight_kg NUMERIC,
+      temperature NUMERIC,
+      pulse_rate INTEGER,
+      respiratory_rate INTEGER,
+      systolic_bp INTEGER,
+      diastolic_bp INTEGER,
+      spo2 INTEGER,
+      blood_sugar NUMERIC,
+      bmi NUMERIC
+    )
+  `);
 }
 
 /* ─── Shared creation functions (used by both manual and bulk generator) ─── */
@@ -834,8 +862,31 @@ export async function GET(
         blocked: Number(stats.blocked) || 0,
         occupancyPercent: total > 0 ? Math.round((occupied / total) * 100) : 0,
         departmentWise: deptWise.rows,
-        wardWise: wardWise.rows,
       });
+    }
+
+    // Unallocated Inpatients list
+    if (action === "unallocated_inpatients") {
+      const tableExistsResult = await pool.query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.tables 
+           WHERE table_schema = 'public' AND table_name = 'doctor_consultation_entry'
+         ) AS exists`
+      );
+      if (!tableExistsResult.rows[0]?.exists) {
+        return NextResponse.json({ rows: [] });
+      }
+
+      const unallocated = await pool.query(
+        `SELECT dce.*, appt.patient_phone, appt.patient_id as appt_patient_id, appt.patient_name as appt_patient_name
+         FROM doctor_consultation_entry dce
+         LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+         WHERE (dce.patient_type = 'IP' OR dce.patientType = 'IP' OR appt.patient_type = 'IP')
+           AND (dce.rno IS NULL OR dce.rno = '')
+           AND (dce.status IS NULL OR dce.status <> 'Completed')
+         ORDER BY dce.id DESC LIMIT 100`
+      );
+      return NextResponse.json({ rows: unallocated.rows });
     }
 
     // Allocations list
@@ -982,6 +1033,43 @@ export async function GET(
       }
 
       return NextResponse.json({ rows: [] });
+    }
+
+    if (action === "care_plans") {
+      const queryDate = searchParams.get("date") || new Date().toISOString().split("T")[0];
+
+      const dceTableExists = await tableExists(pool, "doctor_consultation_entry");
+      if (!dceTableExists) {
+        return NextResponse.json({ consultations: [], executions: [] });
+      }
+
+      // Fetch active inpatient consultations that have care plans configured
+      const consultations = await pool.query(
+        `SELECT dce.id AS consultation_id, dce.token_number AS patient_id, 
+                dce.patient_details AS patient_name, dce.care_plans, dce.rno,
+                ba.bed_name, ba.ward_name, ba.room_name, ba.floor_name, ba.building_name
+         FROM doctor_consultation_entry dce
+         LEFT JOIN bed_allocation ba ON ba.patient_id = dce.token_number AND ba.status = 'Active'
+         WHERE dce.patient_type = 'IP' 
+           AND dce.care_plans IS NOT NULL 
+           AND dce.care_plans::text <> '[]'
+           AND dce.care_plans::text <> ''
+           AND dce.care_plans::text <> 'null'
+         ORDER BY dce.id DESC`
+      );
+
+      // Fetch execution records for the target date
+      const executions = await pool.query(
+        `SELECT * FROM patient_care_plan_execution 
+         WHERE executed_at::date = $1::date
+         ORDER BY executed_at DESC`,
+        [queryDate]
+      );
+
+      return NextResponse.json({
+        consultations: consultations.rows,
+        executions: executions.rows
+      });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
@@ -1272,7 +1360,7 @@ export async function POST(
 
     // Allocate a bed — Stage 1: patient validation + Stage 2: billing line
     if (action === "allocate") {
-      const { bedId, patientId, patientName } = body;
+      const { bedId, patientId, patientName, tokenNumber, consultationId } = body;
       if (!bedId || !patientId || !patientName) {
         return NextResponse.json(
           { error: "bedId, patientId, and patientName are required." },
@@ -1337,6 +1425,38 @@ export async function POST(
 
       // Update room status
       await updateRoomStatus(pool, Number(bed.room_id));
+
+      // Update patient's rno column inside doctor_consultation_entry table (if table exists)
+      if (await tableExists(pool, "doctor_consultation_entry")) {
+        const bedRef = bed.description || bed.bed_number || `Bed ${bedId}`;
+        if (consultationId) {
+          await pool.query(
+            `UPDATE doctor_consultation_entry SET rno = $1 WHERE id = $2`,
+            [bedRef, consultationId]
+          );
+        } else if (tokenNumber) {
+          await pool.query(
+            `UPDATE doctor_consultation_entry SET rno = $1 WHERE token_number::text = $2::text`,
+            [bedRef, tokenNumber]
+          );
+        } else {
+          // Fallback update by patientId logic
+          await pool.query(
+            `UPDATE doctor_consultation_entry 
+             SET rno = $1 
+             WHERE id IN (
+               SELECT dce.id 
+               FROM doctor_consultation_entry dce
+               LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+               WHERE (appt.patient_id = $2 OR dce.patient_id = $2 OR dce.patient_details LIKE $3)
+                 AND (dce.rno IS NULL OR dce.rno = '')
+               ORDER BY dce.id DESC 
+               LIMIT 1
+             )`,
+            [bedRef, patientId, `%${validatedName}%`]
+          );
+        }
+      }
 
       return NextResponse.json({ success: true, patientName: validatedName });
     }
@@ -1429,6 +1549,25 @@ export async function POST(
       if (oldBed.room_id) await updateRoomStatus(pool, Number(oldBed.room_id));
       if (newBed.room_id) await updateRoomStatus(pool, Number(newBed.room_id));
 
+      // Update patient's rno column inside doctor_consultation_entry table (if table exists)
+      if (await tableExists(pool, "doctor_consultation_entry")) {
+        const bedRef = newBed.description || newBed.bed_number || `Bed ${newBedId}`;
+        await pool.query(
+          `UPDATE doctor_consultation_entry 
+           SET rno = $1 
+           WHERE id IN (
+             SELECT dce.id 
+             FROM doctor_consultation_entry dce
+             LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+             WHERE (appt.patient_id = $2 OR dce.patient_id = $2 OR dce.patient_details LIKE $3)
+               AND dce.rno = $4
+             ORDER BY dce.id DESC 
+             LIMIT 1
+           )`,
+          [bedRef, patientId, `%${patientName}%`, oldBed.description || oldBed.bed_number || `Bed ${oldBedId}`]
+        );
+      }
+
       return NextResponse.json({ success: true });
     }
 
@@ -1470,6 +1609,24 @@ export async function POST(
          WHERE bed_id = $1 AND status = 'Active'`,
         [bedId]
       );
+
+      // Clear rno column from doctor_consultation_entry (so patient goes back to queue)
+      if (patientId && (await tableExists(pool, "doctor_consultation_entry"))) {
+        await pool.query(
+          `UPDATE doctor_consultation_entry 
+           SET rno = NULL 
+           WHERE id IN (
+             SELECT dce.id 
+             FROM doctor_consultation_entry dce
+             LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+             WHERE (appt.patient_id = $1 OR dce.patient_id = $1)
+               AND dce.rno = $2
+             ORDER BY dce.id DESC 
+             LIMIT 1
+           )`,
+          [patientId, bed.description || bed.bed_number || `Bed ${bedId}`]
+        );
+      }
 
       if (bed.room_id) await updateRoomStatus(pool, Number(bed.room_id));
 
@@ -1681,6 +1838,24 @@ export async function POST(
           performedBy, dischargeReason,
         ]
       );
+
+      // Clear rno column from doctor_consultation_entry on discharge
+      if (await tableExists(pool, "doctor_consultation_entry")) {
+        await pool.query(
+          `UPDATE doctor_consultation_entry 
+           SET rno = NULL 
+           WHERE id IN (
+             SELECT dce.id 
+             FROM doctor_consultation_entry dce
+             LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
+             WHERE (appt.patient_id = $1 OR dce.patient_id = $1)
+               AND dce.rno = $2
+             ORDER BY dce.id DESC 
+             LIMIT 1
+           )`,
+          [patientId, bed.description || bed.bed_number || `Bed ${bed.id}`]
+        );
+      }
 
       if (bed.room_id) await updateRoomStatus(pool, Number(bed.room_id));
 
@@ -2066,6 +2241,115 @@ export async function POST(
       await pool.query(`DELETE FROM ${quoteIdentifier(TABLE_NAMES.BED)} WHERE id=$1`, [id]);
       if (bed?.room_id) await updateRoomStatus(pool, Number(bed.room_id));
       return NextResponse.json({ success: true });
+    }
+
+    if (action === "execute_care_plan") {
+      const {
+        patientId,
+        patientName,
+        consultationId,
+        carePlanId,
+        executedBy,
+        remarks,
+        heightCm,
+        weightKg,
+        temperature,
+        pulseRate,
+        respiratoryRate,
+        systolicBp,
+        diastolicBp,
+        spo2,
+        bloodSugar,
+        bmi,
+      } = body;
+
+      if (!patientId || !carePlanId) {
+        return NextResponse.json({ error: "patientId and carePlanId are required" }, { status: 400 });
+      }
+
+      await pool.query("BEGIN");
+      try {
+        const executionResult = await pool.query(
+          `INSERT INTO patient_care_plan_execution (
+            patient_id, patient_name, consultation_id, care_plan_id,
+            executed_by, remarks, height_cm, weight_kg, temperature,
+            pulse_rate, respiratory_rate, systolic_bp, diastolic_bp,
+            spo2, blood_sugar, bmi
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          RETURNING *`,
+          [
+            patientId,
+            patientName || null,
+            consultationId ? Number(consultationId) : null,
+            carePlanId,
+            executedBy || null,
+            remarks || null,
+            heightCm ? Number(heightCm) : null,
+            weightKg ? Number(weightKg) : null,
+            temperature ? Number(temperature) : null,
+            pulseRate ? Math.trunc(Number(pulseRate)) : null,
+            respiratoryRate ? Math.trunc(Number(respiratoryRate)) : null,
+            systolicBp ? Math.trunc(Number(systolicBp)) : null,
+            diastolicBp ? Math.trunc(Number(diastolicBp)) : null,
+            spo2 ? Math.trunc(Number(spo2)) : null,
+            bloodSugar ? Number(bloodSugar) : null,
+            bmi ? Number(bmi) : null,
+          ]
+        );
+
+        const hasVitals = heightCm || weightKg || temperature || pulseRate || respiratoryRate || systolicBp || diastolicBp || spo2 || bloodSugar || bmi;
+        if (hasVitals && await tableExists(pool, "vitals")) {
+          const patientRes = await pool.query("SELECT dob, gender FROM patient WHERE id::text = $1::text", [patientId]);
+          const patientInfo = patientRes.rows[0];
+
+          let dob = null;
+          let age = null;
+          let gender = null;
+          if (patientInfo) {
+            dob = patientInfo.dob;
+            gender = patientInfo.gender;
+            if (dob) {
+              const birthYear = new Date(dob).getFullYear();
+              const currentYear = new Date().getFullYear();
+              age = String(currentYear - birthYear);
+            }
+          }
+
+          await pool.query(
+            `INSERT INTO vitals (
+              patient_id, patient_name, dob, age, gender,
+              height_cm, weight_kg, temperature, pulse_rate,
+              respiratory_rate, systolic_bp, diastolic_bp, spo2,
+              blood_sugar, bmi, remarks, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+            [
+              patientId,
+              patientName || null,
+              dob,
+              age,
+              gender || null,
+              heightCm ? Number(heightCm) : null,
+              weightKg ? Number(weightKg) : null,
+              temperature ? Number(temperature) : null,
+              pulseRate ? Math.trunc(Number(pulseRate)) : null,
+              respiratoryRate ? Math.trunc(Number(respiratoryRate)) : null,
+              systolicBp ? Math.trunc(Number(systolicBp)) : null,
+              diastolicBp ? Math.trunc(Number(diastolicBp)) : null,
+              spo2 ? Math.trunc(Number(spo2)) : null,
+              bloodSugar ? Number(bloodSugar) : null,
+              bmi ? Number(bmi) : null,
+              remarks ? `Care Plan Execution: ${remarks}` : "Care Plan Execution",
+              "Completed"
+            ]
+          );
+        }
+
+        await pool.query("COMMIT");
+        return NextResponse.json({ success: true, row: executionResult.rows[0] });
+      } catch (error) {
+        await pool.query("ROLLBACK");
+        throw error;
+      }
     }
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });

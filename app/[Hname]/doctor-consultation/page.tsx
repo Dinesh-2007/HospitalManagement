@@ -542,6 +542,176 @@ function DoctorTreatmentNoteGroup({
   );
 }
 
+interface CarePlanRow {
+  time: string;
+  ampm: string;
+  description: string;
+  frequency: string;
+  startDate: string;
+}
+
+function CarePlanTable({
+  value,
+  onChange,
+  todayDate
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  todayDate: string;
+}) {
+  let rows: CarePlanRow[] = [];
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    if (Array.isArray(parsed)) {
+      rows = parsed.map((item: any): CarePlanRow | null => {
+        if (item && typeof item === "object") {
+          return {
+            time: String(item.time || "08:00"),
+            ampm: String(item.ampm || "AM"),
+            description: String(item.description || ""),
+            frequency: String(item.frequency || "Daily"),
+            startDate: String(item.startDate || todayDate || new Date().toISOString().split("T")[0])
+          };
+        }
+        return null;
+      }).filter((item): item is CarePlanRow => item !== null);
+    }
+  } catch {
+    rows = [];
+  }
+
+  const handleAddRow = () => {
+    const newRows = [...rows, { time: "08:00", ampm: "AM", description: "", frequency: "Daily", startDate: todayDate || new Date().toISOString().split("T")[0] }];
+    onChange(JSON.stringify(newRows));
+  };
+
+  const handleRemoveRow = (index: number) => {
+    const newRows = rows.filter((_, idx) => idx !== index);
+    onChange(JSON.stringify(newRows));
+  };
+
+  const handleUpdateRow = (index: number, field: keyof CarePlanRow, val: string) => {
+    const newRows = rows.map((row, idx) => {
+      if (idx === index) {
+        return { ...row, [field]: val };
+      }
+      return row;
+    });
+    onChange(JSON.stringify(newRows));
+  };
+
+  return (
+    <div className="space-y-4 mt-2">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+          <thead className="bg-gray-50 dark:bg-gray-800/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-16">#</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-44">Time</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Description</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-48">Frequency</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300 w-40">Start Date</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 dark:text-gray-300 w-24">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  No care plan items added yet. Click "+ Add Care Plan Row" to begin.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, index) => (
+                <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">
+                    {index + 1}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={row.time}
+                        onChange={e => handleUpdateRow(index, "time", e.target.value)}
+                        placeholder="e.g. 08:00"
+                        className="h-9 w-20 rounded-lg border border-gray-300 bg-transparent px-2 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      />
+                      <select
+                        value={row.ampm}
+                        onChange={e => handleUpdateRow(index, "ampm", e.target.value)}
+                        className="h-9 rounded-lg border border-gray-300 bg-transparent px-2 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <textarea
+                      value={row.description}
+                      onChange={e => handleUpdateRow(index, "description", e.target.value)}
+                      placeholder="Enter care instructions (e.g. Administer pain medication, monitor vitals)..."
+                      rows={2}
+                      className="w-full rounded-lg border border-gray-300 p-2 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={row.frequency}
+                      onChange={e => handleUpdateRow(index, "frequency", e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    >
+                      <option value="Daily">Daily</option>
+                      <option value="Twice Daily">Twice Daily (BID)</option>
+                      <option value="Thrice Daily">Thrice Daily (TID)</option>
+                      <option value="Every 4 Hours">Every 4 Hours</option>
+                      <option value="Every 6 Hours">Every 6 Hours</option>
+                      <option value="Every 8 Hours">Every 8 Hours</option>
+                      <option value="Every 12 Hours">Every 12 Hours</option>
+                      <option value="As Needed (PRN)">As Needed (PRN)</option>
+                      <option value="Once Weekly">Once Weekly</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="date"
+                      value={row.startDate}
+                      onChange={e => handleUpdateRow(index, "startDate", e.target.value)}
+                      className="h-9 w-full rounded-lg border border-gray-300 bg-transparent px-2 text-xs focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRow(index)}
+                      className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition"
+                      title="Remove Row"
+                    >
+                      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <button
+        type="button"
+        onClick={handleAddRow}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-900/40 dark:bg-brand-950/20 dark:text-brand-300 dark:hover:bg-brand-950/40 transition"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Add Care Plan Row
+      </button>
+    </div>
+  );
+}
+
 const DEFAULT_FORM_VALUES = {
   tokenNumber: "",
   patientDetails: "",
@@ -572,6 +742,7 @@ const DEFAULT_FORM_VALUES = {
   prescriptionData: "",
   prescriptionNotes: "",
   sended: "",
+  carePlans: "[]",
 };
 
 export default function DoctorConsultationPage() {
@@ -939,6 +1110,7 @@ export default function DoctorConsultationPage() {
       prescriptionData: text(row, ["prescriptionData", "prescription_data"]),
       prescriptionNotes: text(row, ["prescriptionNotes", "prescription_notes"]) || "",
       sended: text(row, ["sended"]),
+      carePlans: text(row, ["carePlans", "care_plans"]) || "[]",
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -953,7 +1125,10 @@ export default function DoctorConsultationPage() {
       const payload = {
         id: editingRecordId,
         cardTitle: "Doctor Consultation Entry",
-        fields: Object.keys(DEFAULT_FORM_VALUES).filter(k => !["tokenNumber", "patientDetails", "sended"].includes(k)).map(k => ({ id: k, type: "text" })).concat([
+        fields: Object.keys(DEFAULT_FORM_VALUES).filter(k => !["tokenNumber", "patientDetails", "sended"].includes(k)).map(k => ({
+          id: k,
+          type: k === "carePlans" ? "multiselect" : "text"
+        })).concat([
           { id: "status", type: "text" },
           { id: "doctor", type: "text" },
           { id: "tokenNumber", type: "text" },
@@ -1115,8 +1290,8 @@ export default function DoctorConsultationPage() {
                 onClick={() => setDetailTab("Consultation Billing")}
                 title="Billing Dashboard"
                 className={`p-2 rounded-lg border transition ${detailTab === "Consultation Billing"
-                    ? "border-blue-500 bg-blue-50 text-blue-500 dark:border-blue-400 dark:bg-blue-900/20"
-                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"
+                  ? "border-blue-500 bg-blue-50 text-blue-500 dark:border-blue-400 dark:bg-blue-900/20"
+                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"
                   }`}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1131,14 +1306,14 @@ export default function DoctorConsultationPage() {
                 type="button"
                 onClick={() => setDetailTab("Consultation Billing")}
                 className={`w-full flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition shadow-xs ${detailTab === "Consultation Billing"
-                    ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20"
-                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-800/50"
+                  ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20"
+                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-800/50"
                   }`}
               >
                 <div className="flex items-center gap-2.5">
                   <div className={`p-1.5 rounded-md ${detailTab === "Consultation Billing"
-                      ? "bg-blue-500 text-white"
-                      : "bg-blue-105/10 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                    ? "bg-blue-500 text-white"
+                    : "bg-blue-105/10 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
                     }`}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 5v2H5a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1146,8 +1321,8 @@ export default function DoctorConsultationPage() {
                   </div>
                   <div>
                     <div className={`text-sm font-semibold leading-none mb-1 ${detailTab === "Consultation Billing"
-                        ? "text-blue-700 dark:text-blue-300"
-                        : "text-gray-800 dark:text-gray-200"
+                      ? "text-blue-700 dark:text-blue-300"
+                      : "text-gray-800 dark:text-gray-200"
                       }`}>
                       Billing Dashboard
                     </div>
@@ -1157,8 +1332,8 @@ export default function DoctorConsultationPage() {
                   </div>
                 </div>
                 <div className={`flex h-5 w-5 items-center justify-center rounded-full ${detailTab === "Consultation Billing"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600"
                   }`}>
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -1603,6 +1778,16 @@ export default function DoctorConsultationPage() {
                           ))}
                         </div>
                       </div>
+                      {patientType === "IP" && (
+                        <div className="md:col-span-2 rounded-xl border border-purple-200 bg-purple-50/25 p-5 dark:border-purple-900/30 dark:bg-purple-950/10">
+                          <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-300 mb-2">Care Plan (Inpatient)</h4>
+                          <CarePlanTable
+                            value={formValues.carePlans || "[]"}
+                            onChange={val => updateFormValue("carePlans", val)}
+                            todayDate={todayDateFromCtx}
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Outcome</label>
                         <select value={formValues.patientOutcome} onChange={e => updateFormValue("patientOutcome", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">

@@ -181,6 +181,11 @@ export default function BedAllocationPage() {
   const [hierarchy, setHierarchy] = useState<HierarchyData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [activeTab, setActiveTab] = useState<"direct" | "queue">("direct");
+  const [queueAllocationPatient, setQueueAllocationPatient] = useState<any | null>(null);
+  const [unallocatedInpatients, setUnallocatedInpatients] = useState<any[]>([]);
+  const [isQueueLoading, setIsQueueLoading] = useState(false);
+
   const [currentStep, setCurrentStep] = useState<StepId>("block");
   const [selectedBuilding, setSelectedBuilding] = useState<Row | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<Row | null>(null);
@@ -200,6 +205,54 @@ export default function BedAllocationPage() {
   const [isAllocating, setIsAllocating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchUnallocated = async () => {
+    setIsQueueLoading(true);
+    try {
+      const r = await fetch(`/api/${hname}/infrastructure?action=unallocated_inpatients`, { cache: "no-store" });
+      const d = await r.json();
+      setUnallocatedInpatients(d.rows || []);
+    } catch {
+      setUnallocatedInpatients([]);
+    } finally {
+      setIsQueueLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hname) {
+      fetchUnallocated();
+    }
+  }, [hname]);
+
+  const handleSelectFromQueue = (patient: any) => {
+    const pid = patient.patient_id || patient.appt_patient_id || "N/A";
+    const pName = patient.patient_name || patient.appt_patient_name || "Unknown Patient";
+    const mobile = patient.patient_phone || patient.mobile || "";
+
+    setQueueAllocationPatient({
+      id: patient.id,
+      patient_id: pid,
+      patient_name: pName,
+      token_number: patient.token_number,
+      mobile: mobile,
+    });
+
+    setSelectedPatient({
+      patient_id: pid,
+      patient_name: pName,
+      mobile: mobile,
+    });
+
+    setSelectedBed(null);
+    setPatientSearchQuery("");
+    setActiveTab("direct");
+    setCurrentStep("block");
+    setSelectedBuilding(null);
+    setSelectedFloor(null);
+    setSelectedDepartment("");
+    setSelectedWard("");
+  };
 
   // ── Occupied bed action modal ──
   const [occupiedBedModal, setOccupiedBedModal] = useState<Row | null>(null);
@@ -233,7 +286,7 @@ export default function BedAllocationPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "resetCleaning" }),
-        }).catch(() => {});
+        }).catch(() => { });
 
         // Migrate existing beds to the new [BuildCode][FloorNum]R[RoomNum]B[BedIndex] ID format
         await fetch(`/api/${hname}/infrastructure`, {
@@ -581,7 +634,7 @@ export default function BedAllocationPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "resetCleaning" }),
-      }).catch(() => {});
+      }).catch(() => { });
       // Then fetch fresh hierarchy
       const r = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
       const d = await r.json();
@@ -691,6 +744,7 @@ export default function BedAllocationPage() {
     setError(null);
     setMessage(null);
     try {
+      const isQueueAlloc = !!queueAllocationPatient;
       const res = await fetch(`/api/${hname}/infrastructure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -699,6 +753,12 @@ export default function BedAllocationPage() {
           bedId: Number(selectedBed.id),
           patientId: selectedPatient.patient_id,
           patientName: selectedPatient.patient_name,
+          ...(isQueueAlloc
+            ? {
+              tokenNumber: queueAllocationPatient.token_number,
+              consultationId: queueAllocationPatient.id,
+            }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -707,13 +767,13 @@ export default function BedAllocationPage() {
         `Bed allocated to ${data.patientName || selectedPatient.patient_name
         } (${selectedPatient.patient_id}).`
       );
+      // Reset queue patient if we allocated from queue
+      if (isQueueAlloc) {
+        setQueueAllocationPatient(null);
+        fetchUnallocated();
+      }
       // Refresh hierarchy to reflect updated bed statuses
-      fetch(`/api/${hname}/infrastructure?action=hierarchy`, {
-        cache: "no-store",
-      })
-        .then((r) => r.json())
-        .then((d) => setHierarchy(d))
-        .catch(() => { });
+      await refreshHierarchy();
       setSelectedBed(null);
       setSelectedPatient(null);
       setPatientSearchQuery("");
@@ -823,7 +883,79 @@ export default function BedAllocationPage() {
         {/* ────────────────────────────────────────
             Step Content
            ──────────────────────────────────────── */}
+        {/* Tab Selection */}
         {!isLoading && (
+          <div className="flex border-b border-gray-200 dark:border-gray-800 gap-6 mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("direct");
+                setError(null);
+                setMessage(null);
+              }}
+              className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === "direct"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}
+            >
+              Direct Bed Management
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("queue");
+                setError(null);
+                setMessage(null);
+                fetchUnallocated();
+              }}
+              className={`pb-3 text-sm font-semibold border-b-2 transition flex items-center gap-2 ${activeTab === "queue"
+                ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}
+            >
+              <span>Bed Allocation Queue</span>
+              {unallocatedInpatients.length > 0 && (
+                <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 font-mono">
+                  {unallocatedInpatients.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Active Queue Allocation Banner */}
+        {!isLoading && activeTab === "direct" && queueAllocationPatient && (
+          <div className="mb-4 rounded-xl border border-brand-300 bg-brand-50/50 dark:bg-brand-950/20 dark:border-brand-800 p-4 flex items-center justify-between shadow-theme-xs">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🛏️</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">
+                  Allocating Bed for patient:{" "}
+                  <span className="text-brand-600 dark:text-brand-400 font-bold">
+                    {queueAllocationPatient.patient_name}
+                  </span>{" "}
+                  ({queueAllocationPatient.patient_id})
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Token: {queueAllocationPatient.token_number} • Select any available green bed to assign.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setQueueAllocationPatient(null);
+                setSelectedPatient(null);
+                setSelectedBed(null);
+              }}
+              className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-gray-800 transition"
+            >
+              Cancel Queue Mode
+            </button>
+          </div>
+        )}
+
+        {!isLoading && activeTab === "direct" && (
           <div key={currentStep} className="bed-step-in">
             {/* ═══ BLOCK (Building) Selection ═══ */}
             {currentStep === "block" && (
@@ -1354,6 +1486,109 @@ export default function BedAllocationPage() {
           </div>
         )}
 
+        {!isLoading && activeTab === "queue" && (
+          <div className="bed-step-in space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+                  Unallocated Inpatients Queue
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  List of admissions marked as Inpatient (IP) who do not have a bed assignment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchUnallocated}
+                disabled={isQueueLoading}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-sm font-semibold shadow-theme-xs disabled:opacity-50"
+              >
+                <svg
+                  className={`h-4 w-4 ${isQueueLoading ? "animate-spin" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 16.5m-3.072 1.5H21v-5"
+                  />
+                </svg>
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {isQueueLoading && unallocatedInpatients.length === 0 ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-gray-700 dark:border-t-brand-400" />
+              </div>
+            ) : unallocatedInpatients.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800 p-16 text-center">
+                <span className="text-4xl text-gray-400">🎉</span>
+                <p className="text-gray-500 dark:text-gray-400 font-medium mt-3">
+                  All caught up!
+                </p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                  There are no unallocated Inpatient admissions in the queue.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-theme-xs">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-850 text-left text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-950 text-gray-700 dark:text-gray-300 font-semibold uppercase text-[11px] tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3">Token No</th>
+                      <th className="px-5 py-3">Patient Details</th>
+                      <th className="px-5 py-3">Contact</th>
+                      <th className="px-5 py-3">Doctor</th>
+                      <th className="px-5 py-3">Date / Type</th>
+                      <th className="px-5 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80 text-gray-600 dark:text-gray-400 font-medium">
+                    {unallocatedInpatients.map((p) => {
+                      const tokenNo = String(p.token_number || "-");
+                      const pid = String(p.patient_id || p.appt_patient_id || "N/A");
+                      const pName = String(p.patient_name || p.appt_patient_name || "Unknown");
+                      const mobile = String(p.patient_phone || p.mobile || "-");
+                      const doc = String(p.doctor_name || p.doctor || "-");
+                      const created = p.created_at ? new Date(p.created_at).toLocaleString() : "-";
+
+                      return (
+                        <tr key={String(p.id)} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors">
+                          <td className="px-5 py-4 font-mono text-xs text-gray-900 dark:text-white font-bold">{tokenNo}</td>
+                          <td className="px-5 py-4">
+                            <div className="font-semibold text-gray-900 dark:text-white">{pName}</div>
+                            <div className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">ID: {pid}</div>
+                          </td>
+                          <td className="px-5 py-4 font-mono text-xs">{mobile}</td>
+                          <td className="px-5 py-4 text-gray-800 dark:text-gray-200">{doc}</td>
+                          <td className="px-5 py-4">
+                            <div className="text-xs text-gray-900 dark:text-white">{created}</div>
+                            <div className="text-[10px] text-brand-600 dark:text-brand-400 uppercase mt-0.5 font-bold font-mono">Inpatient (IP)</div>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectFromQueue(p)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 hover:shadow-md hover:shadow-brand-500/10 active:scale-95 transition-all"
+                            >
+                              <span>Allocate Bed</span>
+                              <span>🛏️</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
 
 
         {/* ── Success / Error Messages ── */}
@@ -1384,7 +1619,7 @@ export default function BedAllocationPage() {
                     {bedLabel(occupiedBedModal)}
                   </span>
                 </h3>
-                {occupiedBedModal.patient_name && (
+                {!!occupiedBedModal.patient_name && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1 font-medium">
                     Occupied by: {String(occupiedBedModal.patient_name)}
                   </p>

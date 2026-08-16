@@ -176,6 +176,12 @@ async function ensureTable(pool: Pool, tableName: string, fields: ApiField[]) {
       `ALTER TABLE ${quotedTable} ADD COLUMN ${quoteIdentifier(columnName)} ${getColumnType(field.type)}`,
     );
   }
+
+  if (tableName === "doctor_consultation_entry" && !existingColumns.has("rno")) {
+    await pool.query(
+      `ALTER TABLE ${quotedTable} ADD COLUMN rno TEXT`
+    );
+  }
 }
 
 async function tableExists(pool: Pool, tableName: string) {
