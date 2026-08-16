@@ -163,6 +163,11 @@ const ANIM_CSS = `
 .bed-card-pop{animation:bedCardPop .25s ease-out both}
 `;
 
+/** Returns the best human-readable label for a bed row */
+function bedLabel(bed: Row): string {
+  return String(bed.bed_id || bed.description || bed.bed_number || bed.code || "Bed");
+}
+
 /* ═══════════════════════════════════════════════════════════
    Bed Allocation Page – Step-by-step hospital structure
    ═══════════════════════════════════════════════════════════ */
@@ -228,6 +233,13 @@ export default function BedAllocationPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "resetCleaning" }),
+        }).catch(() => {});
+
+        // Migrate existing beds to the new [BuildCode][FloorNum]R[RoomNum]B[BedIndex] ID format
+        await fetch(`/api/${hname}/infrastructure`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "migrateBedIds" }),
         }).catch(() => {});
 
         const r = await fetch(`/api/${hname}/infrastructure?action=hierarchy`, { cache: "no-store" });
@@ -593,7 +605,7 @@ export default function BedAllocationPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Cancellation failed.");
-      setMessage(`Bed ${String(bed.description || bed.bed_number || bed.code)} has been cancelled successfully.`);
+      setMessage(`Bed ${bedLabel(bed)} has been cancelled successfully.`);
       // Await the refresh so building counts update immediately
       await refreshHierarchy();
     } catch (err) {
@@ -1041,7 +1053,10 @@ export default function BedAllocationPage() {
                       <div>
                         <h4 className="text-base font-semibold text-gray-800 dark:text-white/90 flex items-center gap-2">
                           <span className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-                          Allocating: {String(selectedBed.description || selectedBed.bed_number)}
+                          Allocating:{" "}
+                            <span className="font-mono text-brand-600 dark:text-brand-400">
+                              {bedLabel(selectedBed)}
+                            </span>
                         </h4>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {selectedBed.room_name
@@ -1185,7 +1200,7 @@ export default function BedAllocationPage() {
                         Transfer mode — Select a new bed for {String(transferSourceBed.patient_name || "the patient")}
                       </p>
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                        Currently in: {String(transferSourceBed.description || transferSourceBed.bed_number || transferSourceBed.code)}. Click any <span className="font-semibold">green (available)</span> bed to transfer.
+                        Currently in: <span className="font-mono font-semibold">{bedLabel(transferSourceBed)}</span>. Click any <span className="font-semibold">green (available)</span> bed to transfer.
                       </p>
                     </div>
                     <button
@@ -1293,16 +1308,8 @@ export default function BedAllocationPage() {
                                   style={{ animationDelay: `${i * 25}ms` }}
                                   title={
                                     isAvail
-                                      ? `${String(
-                                        bed.description ||
-                                        bed.bed_number ||
-                                        bed.code
-                                      )} – Click to select`
-                                      : `${String(
-                                        bed.description ||
-                                        bed.bed_number ||
-                                        bed.code
-                                      )} – ${st}${bed.patient_name
+                                      ? `${bedLabel(bed)} – Click to select`
+                                      : `${bedLabel(bed)} – ${st}${bed.patient_name
                                         ? ` (${String(bed.patient_name)})`
                                         : ""
                                       }`
@@ -1315,16 +1322,13 @@ export default function BedAllocationPage() {
                                     }}
                                   />
                                   <span
-                                    className={`text-xs font-semibold truncate max-w-full ${isAvail
-                                      ? "text-gray-800 dark:text-white/90"
-                                      : "text-gray-400 dark:text-gray-500"
-                                      }`}
+                                    className={`text-xs font-bold font-mono truncate max-w-full leading-tight ${
+                                      isAvail
+                                        ? "text-gray-800 dark:text-white/90"
+                                        : "text-gray-400 dark:text-gray-500"
+                                    }`}
                                   >
-                                    {String(
-                                      bed.description ||
-                                      bed.bed_number ||
-                                      bed.code
-                                    )}
+                                    {bedLabel(bed)}
                                   </span>
                                   {!!bed.bed_type && (
                                     <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-full">
@@ -1375,7 +1379,10 @@ export default function BedAllocationPage() {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                  🛏️ {String(occupiedBedModal.description || occupiedBedModal.bed_number || occupiedBedModal.code)}
+                  🛏️{" "}
+                  <span className="font-mono text-brand-600 dark:text-brand-400">
+                    {bedLabel(occupiedBedModal)}
+                  </span>
                 </h3>
                 {occupiedBedModal.patient_name && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1 font-medium">
@@ -1468,11 +1475,11 @@ export default function BedAllocationPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">From</span>
-                <span className="text-red-600 dark:text-red-400 font-medium">{String(transferSourceBed.description || transferSourceBed.bed_number || transferSourceBed.code)}</span>
+                <span className="text-red-600 dark:text-red-400 font-mono font-semibold">{bedLabel(transferSourceBed)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-gray-700 dark:text-gray-300 w-16 shrink-0">To</span>
-                <span className="text-green-600 dark:text-green-400 font-medium">{String(transferTargetBed.description || transferTargetBed.bed_number || transferTargetBed.code)}</span>
+                <span className="text-green-600 dark:text-green-400 font-mono font-semibold">{bedLabel(transferTargetBed)}</span>
               </div>
             </div>
             <div className="flex gap-3">

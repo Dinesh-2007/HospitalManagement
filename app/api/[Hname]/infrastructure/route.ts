@@ -161,6 +161,7 @@ async function ensureInfrastructureTables(pool: Pool) {
       code TEXT,
       description TEXT,
       bed_number TEXT,
+      bed_id TEXT,
       bed_type TEXT DEFAULT 'Standard',
       rate NUMERIC DEFAULT 0,
       charge NUMERIC DEFAULT 0,
@@ -190,6 +191,7 @@ async function ensureInfrastructureTables(pool: Pool) {
   await ensureColumn(pool, TABLE_NAMES.BED, "department_name", "TEXT");
   await ensureColumn(pool, TABLE_NAMES.BED, "ward_name", "TEXT");
   await ensureColumn(pool, TABLE_NAMES.BED, "room_name", "TEXT");
+  await ensureColumn(pool, TABLE_NAMES.BED, "bed_id", "TEXT");
 
   // Bed Allocation
   await pool.query(`
@@ -429,6 +431,43 @@ async function createRoom(
   return result.rows[0];
 }
 
+/**
+ * Generates a structured Bed ID in the format:
+ *   {BuildCode}{FloorNum}R{RoomNum}B{BedNum}
+ * Example: A2R5B2  → Building A, Floor 2, Room 5, Bed 2
+ *          B0R3B1  → Building B, Ground Floor, Room 3, Bed 1
+ *
+ * BuildCode  = first letter of building name, uppercase (e.g. "A" for "Alpha", "M" for "Main")
+ * FloorNum   = floor number digit; Ground Floor → "G", Floor N → N as a number
+ * R{RoomNum} = 'R' + numeric part of room name (e.g. "Room 105" → R105)
+ * B{BedNum}  = 'B' + bed index within room (1-based)
+ */
+function generateStructuredBedId(
+  buildingName: string,
+  floorName: string,
+  roomName: string,
+  bedIndexInRoom: number  // 1-based
+): string {
+  // Building code: first alphabetic character, uppercase
+  const buildCode = (buildingName || "X").replace(/[^a-zA-Z]/g, "").charAt(0).toUpperCase() || "X";
+
+  // Floor number: extract digits from floorName; Ground Floor → "G"
+  const floorLower = (floorName || "").toLowerCase();
+  let floorPart: string;
+  if (floorLower.includes("ground") || floorLower === "g" || floorLower === "gf" || floorLower === "0") {
+    floorPart = "G";
+  } else {
+    const floorDigits = (floorName || "").replace(/[^0-9]/g, "");
+    floorPart = floorDigits || "0";
+  }
+
+  // Room number: extract numeric portion from room name (e.g. "Room 105" → "105", "R-3" → "3")
+  const roomDigits = (roomName || "").replace(/[^0-9]/g, "");
+  const roomPart = roomDigits || "1";
+
+  return `${buildCode}${floorPart}R${roomPart}B${bedIndexInRoom}`;
+}
+
 async function createBed(
   pool: Pool,
   data: {
@@ -445,32 +484,32 @@ async function createBed(
     description?: string;
   }
 ) {
-  const bldPrefix = (data.buildingName || "XX").substring(0, 2).toUpperCase();
-  const deptPrefix = (data.departmentName || "XX").substring(0, 2).toUpperCase();
-  
-  // Get the current count of beds in this building & department
+  // Count existing beds in this specific room to determine bed index within the room
   const countRes = await pool.query(
-    `SELECT COUNT(*) as count FROM ${quoteIdentifier(TABLE_NAMES.BED)} WHERE building_name = $1 AND department_name = $2`,
-    [data.buildingName, data.departmentName]
+    `SELECT COUNT(*) as count FROM ${quoteIdentifier(TABLE_NAMES.BED)} WHERE room_id = $1`,
+    [data.roomId]
   );
-  const currentCount = parseInt(countRes.rows[0].count, 10);
-  const bedNumStr = (currentCount + 1).toString().padStart(3, '0');
-  
-  const uniqueId = `${bldPrefix}${deptPrefix}${bedNumStr}`;
-  
-  const bedName = uniqueId;
-  const code = uniqueId;
-  
+  const bedIndexInRoom = parseInt(countRes.rows[0].count, 10) + 1;
+
+  // Generate structured Bed ID: e.g. A2R101B1, BG R205B3
+  const bedId = generateStructuredBedId(
+    data.buildingName,
+    data.floorName,
+    data.roomName,
+    bedIndexInRoom
+  );
+
   const result = await pool.query(
     `INSERT INTO ${quoteIdentifier(TABLE_NAMES.BED)}
-       (code, description, bed_number, bed_type, rate, charge, status, ward,
+       (code, description, bed_number, bed_id, bed_type, rate, charge, status, ward,
         room_id, building_name, floor_name, department_name, ward_name, room_name)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
-      code,
-      bedName,
-      bedName,
+      bedId,
+      bedId,
+      bedId,
+      bedId,
       data.bedType || "Standard",
       data.charge || 0,
       data.charge || 0,
@@ -1447,6 +1486,53 @@ export async function POST(
         []
       );
       return NextResponse.json({ success: true });
+    }
+
+    // Migrate all existing beds to the new structured Bed ID format
+    // [BuildCode][FloorNum]R[RoomNum]B[BedIndex]  e.g. A2R101B3
+    if (action === "migrateBedIds") {
+      // Fetch all beds ordered by room and creation order so we can assign
+      // a stable per-room index (bed 1, bed 2, … per room)
+      const allBeds = await pool.query(
+        `SELECT id, room_id, building_name, floor_name, room_name
+         FROM ${quoteIdentifier(TABLE_NAMES.BED)}
+         ORDER BY room_id ASC, id ASC`
+      );
+
+      // Group bed IDs by room_id so we can number beds within each room
+      const roomGroups = new Map<string, Array<{ id: number; building_name: string; floor_name: string; room_name: string }>>();
+      for (const row of allBeds.rows) {
+        const key = String(row.room_id ?? "no_room");
+        if (!roomGroups.has(key)) roomGroups.set(key, []);
+        roomGroups.get(key)!.push({
+          id: Number(row.id),
+          building_name: String(row.building_name ?? ""),
+          floor_name: String(row.floor_name ?? ""),
+          room_name: String(row.room_name ?? ""),
+        });
+      }
+
+      let updated = 0;
+      for (const beds of roomGroups.values()) {
+        for (let i = 0; i < beds.length; i++) {
+          const b = beds[i];
+          const newBedId = generateStructuredBedId(
+            b.building_name,
+            b.floor_name,
+            b.room_name,
+            i + 1  // 1-based index within the room
+          );
+          await pool.query(
+            `UPDATE ${quoteIdentifier(TABLE_NAMES.BED)}
+             SET code = $1, description = $1, bed_number = $1, bed_id = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [newBedId, b.id]
+          );
+          updated++;
+        }
+      }
+
+      return NextResponse.json({ success: true, updated });
     }
 
     // Update bed status
