@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PrescriptionTable } from "./prescription-table";
 import { getCurrentUser, getCurrentUserRole } from "../../actions/user";
-import { ConsultationBillingDashboard } from "../../../components/consultation-billing-dashboard";
+
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 
 function normalizeDoctorProfileRow(row: Record<string, unknown> | null) {
@@ -29,7 +29,7 @@ async function loadDoctorProfile(hname: string, username: string) {
 }
 
 type QueueTab = "Upcoming" | "Draft" | "Completed";
-type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "Consultation Billing" | "History";
+type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "History";
 type PatientType = "OP" | "IP";
 
 const DETAIL_TABS: DetailTab[] = ["Patient Details", "Vitals", "Consultation Form", "History"];
@@ -1285,61 +1285,11 @@ export default function DoctorConsultationPage() {
           {/* Collapsed state: just show tab icons */}
           {leftPanelCollapsed ? (
             <div className="flex flex-col items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setDetailTab("Consultation Billing")}
-                title="Billing Dashboard"
-                className={`p-2 rounded-lg border transition ${detailTab === "Consultation Billing"
-                  ? "border-blue-500 bg-blue-50 text-blue-500 dark:border-blue-400 dark:bg-blue-900/20"
-                  : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600"
-                  }`}
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </button>
+
             </div>
           ) : (
             <>
-              {/* Consultation Billing Navigation Button */}
-              <button
-                type="button"
-                onClick={() => setDetailTab("Consultation Billing")}
-                className={`w-full flex items-center justify-between gap-3 rounded-lg border p-3 text-left transition shadow-xs ${detailTab === "Consultation Billing"
-                  ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20"
-                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-800/50"
-                  }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className={`p-1.5 rounded-md ${detailTab === "Consultation Billing"
-                    ? "bg-blue-500 text-white"
-                    : "bg-blue-105/10 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-                    }`}>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 5v2H5a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className={`text-sm font-semibold leading-none mb-1 ${detailTab === "Consultation Billing"
-                      ? "text-blue-700 dark:text-blue-300"
-                      : "text-gray-800 dark:text-gray-200"
-                      }`}>
-                      Billing Dashboard
-                    </div>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-none">
-                      Manage fees & payments
-                    </span>
-                  </div>
-                </div>
-                <div className={`flex h-5 w-5 items-center justify-center rounded-full ${detailTab === "Consultation Billing"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600"
-                  }`}>
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
+
 
               {/* Doctor selector */}
               {userRole.toLowerCase() === "admin" && (
@@ -1450,8 +1400,7 @@ export default function DoctorConsultationPage() {
         <div className={`col-span-1 flex flex-col h-[calc(100vh-8rem)] rounded-2xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900/50 transition-all duration-300 ${leftPanelCollapsed ? "lg:col-span-11 xl:col-span-11" : "lg:col-span-9 xl:col-span-9"}`}>
 
           {/* Tab bar with Next button */}
-          {detailTab !== "Consultation Billing" && (
-            <div className="border-b border-gray-100 px-6 pt-4 dark:border-gray-800 flex items-center justify-between shrink-0">
+          <div className="border-b border-gray-100 px-6 pt-4 dark:border-gray-800 flex items-center justify-between shrink-0">
               <div className="flex gap-6">
                 {DETAIL_TABS.map(tab => (
                   <button
@@ -1477,7 +1426,7 @@ export default function DoctorConsultationPage() {
                 </button>
               )}
             </div>
-          )}
+
 
           <div className="p-6 flex-1 overflow-y-auto">
 
@@ -1546,11 +1495,7 @@ export default function DoctorConsultationPage() {
                   )
                 )}
 
-                {detailTab === "Consultation Billing" && (
-                  <div className="-mx-4 -mt-4">
-                    <ConsultationBillingDashboard />
-                  </div>
-                )}
+
               </div>
             )}
 
