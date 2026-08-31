@@ -75,8 +75,12 @@ function calculateAge(dob: string) {
   if (!dob) return null;
   const birth = new Date(dob);
   if (isNaN(birth.getTime())) return null;
-  const diff = Date.now() - birth.getTime();
-  const age = new Date(diff).getUTCFullYear() - 1970;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
   return isFinite(age) && age >= 0 ? age : null;
 }
 
@@ -334,15 +338,20 @@ export default function PatientVitalsPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              setSelectedRow(row);
-                              setIsEditing(!done);
-                              setForm({
-                                patientId: text(row, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
-                                patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-                                mobile: text(row, ["mobile", "patient_phone"]),
-                                dob: text(row, ["registration_dob", "dob"]).slice(0, 10),
-                                age: text(row, ["age"]),
-                                gender: text(row, ["gender"]),
+                                const dobVal = text(row, ["registration_dob", "dob", "vitals_dob"]).slice(0, 10);
+                                const rawAge = text(row, ["age", "vitals_age"]);
+                                const calcAge = rawAge || (dobVal ? String(calculateAge(dobVal) ?? "") : "");
+                                const genderVal = text(row, ["gender", "registration_gender", "vitals_gender"]);
+
+                                setSelectedRow(row);
+                                setIsEditing(!done);
+                                setForm({
+                                  patientId: text(row, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
+                                  patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
+                                  mobile: text(row, ["mobile", "patient_phone"]),
+                                  dob: dobVal,
+                                  age: calcAge,
+                                  gender: genderVal,
                                 heightCm: text(row, ["height_cm"]),
                                 weightKg: text(row, ["weight_kg"]),
                                 temperature: text(row, ["temperature"]),
@@ -554,14 +563,19 @@ export default function PatientVitalsPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (selectedSummary?.completed) {
+                          if (selectedSummary?.completed && selectedRow) {
+                            const dobVal = text(selectedRow, ["registration_dob", "dob", "vitals_dob"]).slice(0, 10);
+                            const rawAge = text(selectedRow, ["age", "vitals_age"]);
+                            const calcAge = rawAge || (dobVal ? String(calculateAge(dobVal) ?? "") : "");
+                            const genderVal = text(selectedRow, ["gender", "registration_gender", "vitals_gender"]);
+
                             setForm({
-                              patientId: text(selectedRow!, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
-                              patientName: text(selectedRow!, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
-                              mobile: text(selectedRow!, ["mobile", "patient_phone"]),
-                              dob: text(selectedRow!, ["registration_dob", "dob"]).slice(0, 10),
-                              age: text(selectedRow!, ["age"]),
-                              gender: text(selectedRow!, ["gender"]),
+                              patientId: text(selectedRow, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
+                              patientName: text(selectedRow, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
+                              mobile: text(selectedRow, ["mobile", "patient_phone"]),
+                              dob: dobVal,
+                              age: calcAge,
+                              gender: genderVal,
                               heightCm: text(selectedRow!, ["height_cm"]),
                               weightKg: text(selectedRow!, ["weight_kg"]),
                               temperature: text(selectedRow!, ["temperature"]),

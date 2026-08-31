@@ -88,7 +88,7 @@ export async function POST(
     if (body.action === "signin") {
       const result = body.phone
         ? await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '')) OR mobile = $3 LIMIT 1`,
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '' OR $2 = '')) OR (mobile_country_code || mobile) = $3 OR mobile = $3 LIMIT 1`,
           [phone, countryCode, body.phone],
         )
         : await pool.query(
@@ -105,7 +105,7 @@ export async function POST(
 
     const patient = body.patient ?? {};
     const existing = await pool.query(
-      `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '')) OR mobile = $3 LIMIT 1`,
+      `SELECT id FROM ${quoteIdentifier(TABLE_NAME)} WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = '' OR $2 = '')) OR (mobile_country_code || mobile) = $3 OR mobile = $3 LIMIT 1`,
       [phone, countryCode, body.phone],
     );
 

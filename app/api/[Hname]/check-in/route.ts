@@ -380,11 +380,12 @@ export async function POST(
             [resolvedPatientId, existingIdByPhone]
           );
         } else {
+          const parsedPhone = splitPhoneNumber(apptRecord.patient_phone);
           await pool.query(
-            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile)
-             VALUES ($1, $2, $3)
+            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (patient_id) DO NOTHING`,
-            [resolvedPatientId, apptRecord.patient_name, apptRecord.patient_phone || null]
+            [resolvedPatientId, apptRecord.patient_name, parsedPhone.phoneNumber || null, parsedPhone.countryCode || null]
           );
         }
       }

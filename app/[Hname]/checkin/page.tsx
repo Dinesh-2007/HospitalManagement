@@ -746,18 +746,6 @@ export default function CheckInPage() {
               </div>
             )}
 
-            <div className="mb-4 text-sm text-gray-600 pt-4 border-t border-gray-100 dark:border-gray-800">
-              Generate QR code for print?
-              <div className="flex items-center gap-4 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="wantsQrCode" value="yes" checked={wantsQrCode === "yes"} onChange={(e) => setWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> Yes
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="wantsQrCode" value="no" checked={wantsQrCode === "no"} onChange={(e) => setWantsQrCode(e.target.value as any)} className="text-brand-600 focus:ring-brand-500 h-4 w-4" /> No
-                </label>
-              </div>
-            </div>
-
             <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 dark:border-gray-800">
               <button type="button" onClick={() => setAttendantCheckInRow(null)} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
                 Cancel
@@ -767,10 +755,6 @@ export default function CheckInPage() {
                 onClick={() => {
                   if (hasAttendant === "") {
                     setError("Please select whether there is an attendant.");
-                    return;
-                  }
-                  if (wantsQrCode === "") {
-                    setError("Please select whether to generate a QR code.");
                     return;
                   }
                   if (hasAttendant === "yes" && (!attendantName || !attendantPhone || !attendantGender || !attendantRelation)) {
@@ -785,7 +769,7 @@ export default function CheckInPage() {
                     attendantRelation
                   });
                 }}
-                disabled={hasAttendant === "" || wantsQrCode === "" || checkingIn === attendantCheckInRow.appointment_id}
+                disabled={hasAttendant === "" || checkingIn === attendantCheckInRow.appointment_id}
                 className="rounded-lg bg-brand-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50"
               >
                 {checkingIn === attendantCheckInRow.appointment_id ? "Checking..." : "Complete Check-in"}
