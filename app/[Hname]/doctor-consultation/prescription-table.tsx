@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PencilIcon, TrashBinIcon } from "../../../components/icons";
 
@@ -202,7 +202,12 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [isLoadingMedicines, setIsLoadingMedicines] = useState(true);
   const [medicineLoadError, setMedicineLoadError] = useState<string | null>(null);
-  
+
+  // Inline medicine name autocomplete state (per row)
+  const [nameInputs, setNameInputs] = useState<Record<string, string>>({});
+  const [openDropdownRowId, setOpenDropdownRowId] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
   // Modal state
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -281,6 +286,17 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
       isMounted = false;
     };
   }, [hname]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdownRowId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const filteredMedicines = useMemo(() => {
     return medicines.filter(
@@ -445,6 +461,35 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
     });
   };
 
+  const selectMedicineForRow = (rowId: string, medicine: Medicine) => {
+    if (isSended) return;
+    setRows((currentRows) => {
+      const updatedRows = currentRows.map((row) =>
+        row.id === rowId ? { ...row, medicine } : row
+      );
+      onChange?.(serializeRows(updatedRows));
+      return updatedRows;
+    });
+    setNameInputs((prev) => ({ ...prev, [rowId]: medicine.name }));
+    setOpenDropdownRowId(null);
+  };
+
+  const handleNameInputChange = (rowId: string, inputValue: string) => {
+    if (isSended) return;
+    setNameInputs((prev) => ({ ...prev, [rowId]: inputValue }));
+    setOpenDropdownRowId(inputValue.trim() ? rowId : null);
+    // Clear the medicine selection if user clears the field
+    if (!inputValue.trim()) {
+      setRows((currentRows) => {
+        const updatedRows = currentRows.map((row) =>
+          row.id === rowId ? { ...row, medicine: { ...row.medicine, name: "", id: "", code: "" } } : row
+        );
+        onChange?.(serializeRows(updatedRows));
+        return updatedRows;
+      });
+    }
+  };
+
   const editableInputClass = (minWidth: string, isEditing: boolean) =>
     `w-full ${minWidth} rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
       isEditing && !isSended
@@ -537,13 +582,49 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
                       <input type="text" readOnly value={index + 1} className={lineNumberInputClass} />
                     </td>
                     <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={row.medicine.name}
-                        placeholder="Selected medicine name"
-                        className={editableInputClass("min-w-[160px]", false)}
-                      />
+                      <div className="relative min-w-[180px]" ref={openDropdownRowId === row.id ? dropdownRef : null}>
+                        <input
+                          type="text"
+                          value={nameInputs[row.id] ?? row.medicine.name}
+                          placeholder="Type to search medicine…"
+                          readOnly={isSended}
+                          onChange={(e) => handleNameInputChange(row.id, e.target.value)}
+                          onFocus={() => {
+                            const current = nameInputs[row.id] ?? row.medicine.name;
+                            if (current.trim()) setOpenDropdownRowId(row.id);
+                          }}
+                          className={`w-full rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
+                            isSended
+                              ? "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300"
+                              : "border-gray-300 bg-transparent focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:bg-gray-900"
+                          }`}
+                        />
+                        {openDropdownRowId === row.id && (() => {
+                          const query = (nameInputs[row.id] ?? "").toLowerCase();
+                          const filtered = medicines.filter(
+                            (m) =>
+                              m.name.toLowerCase().includes(query) ||
+                              m.code.toLowerCase().includes(query) ||
+                              m.genericName.toLowerCase().includes(query)
+                          ).slice(0, 8);
+                          return filtered.length > 0 ? (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
+                              <ul className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                                {filtered.map((m) => (
+                                  <li
+                                    key={m.id}
+                                    onMouseDown={(e) => { e.preventDefault(); selectMedicineForRow(row.id, m); }}
+                                    className="flex flex-col px-3 py-2 cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+                                  >
+                                    <span className="text-sm font-medium text-gray-900 dark:text-white">{m.name}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{m.type}{m.genericName ? ` · ${m.genericName}` : ""}{m.uom ? ` · ${m.uom}` : ""}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <input
