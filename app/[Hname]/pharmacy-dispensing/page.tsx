@@ -40,6 +40,7 @@ type MedicineRow = {
   medicineName: string;
   prescribedQty: string;
   receivedQty: string;
+  perUnitPrice: string;
   medicineAmount: string;
 };
 
@@ -109,6 +110,7 @@ function parsePrescriptionLines(value?: string | null): Omit<MedicineRow, "id">[
       medicineName: line.medicineName || line.genericName || "",
       prescribedQty: line.totalQty || line.prescribedQty || "",
       receivedQty: "",
+      perUnitPrice: "",
       medicineAmount: "",
     }));
   } catch {
@@ -171,12 +173,13 @@ export default function PharmacyDispensingPage() {
     medicineName: "",
     prescribedQty: "",
     receivedQty: "",
+    perUnitPrice: "",
     medicineAmount: "",
     ...overrides,
   });
 
   const [medicineRows, setMedicineRows] = useState<MedicineRow[]>([
-    { id: 1, medicineName: "", prescribedQty: "", receivedQty: "", medicineAmount: "" },
+    { id: 1, medicineName: "", prescribedQty: "", receivedQty: "", perUnitPrice: "", medicineAmount: "" },
   ]);
 
   // ── Add Dispense flow state ─────────────────────────────────────────────────
@@ -287,6 +290,7 @@ export default function PharmacyDispensingPage() {
           medicineName: m.name,
           prescribedQty: "",
           receivedQty: "",
+          perUnitPrice: "",
           medicineAmount: "",
         })
       );
@@ -401,6 +405,7 @@ export default function PharmacyDispensingPage() {
           const receivedQty = Number(row.receivedQty);
           return {
             ...row,
+            perUnitPrice: sellingPrice > 0 ? formatMoney(sellingPrice) : "",
             medicineAmount:
               Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
                 ? formatMoney(sellingPrice * receivedQty)
@@ -420,6 +425,7 @@ export default function PharmacyDispensingPage() {
         const receivedQty = Number(nextRow.receivedQty);
         return {
           ...nextRow,
+          perUnitPrice: sellingPrice > 0 ? formatMoney(sellingPrice) : "",
           medicineAmount:
             Number.isFinite(receivedQty) && receivedQty > 0 && sellingPrice > 0
               ? formatMoney(sellingPrice * receivedQty)
@@ -444,7 +450,7 @@ export default function PharmacyDispensingPage() {
     setIsPharmacyOnly(false);
     setPharmacyPatientPhone("");
     setPharmacyPatientDob("");
-    setMedicineRows([{ id: 1, medicineName: "", prescribedQty: "", receivedQty: "", medicineAmount: "" }]);
+    setMedicineRows([{ id: 1, medicineName: "", prescribedQty: "", receivedQty: "", perUnitPrice: "", medicineAmount: "" }]);
     setSubmitMessage(null);
     setSubmitError(null);
     setIsSubmitting(false);
@@ -1146,6 +1152,7 @@ export default function PharmacyDispensingPage() {
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Medicine Name</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Prescribed Qty</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Received Qty</th>
+                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Per Unit Price</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Medicine Amount</th>
                           <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300" />
                         </tr>
@@ -1190,6 +1197,15 @@ export default function PharmacyDispensingPage() {
                             </td>
                             <td className="px-4 py-3">
                               <input
+                                type="text"
+                                readOnly
+                                value={row.perUnitPrice ? `Rs. ${row.perUnitPrice}` : ""}
+                                placeholder="—"
+                                className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
                                 type="number"
                                 min="0"
                                 step="0.01"
@@ -1198,6 +1214,7 @@ export default function PharmacyDispensingPage() {
                                 className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
                               />
                             </td>
+
                             <td className="px-4 py-3">
                               <button
                                 type="button"
