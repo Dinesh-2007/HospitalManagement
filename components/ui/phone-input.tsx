@@ -88,27 +88,66 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
     ALL_COUNTRIES.find((c) => c.iso2 === selectedIso2) ||
     ALL_COUNTRIES.find((c) => c.iso2 === "in")!;
 
-  // Extract subscriber digits from value
+  // Extract subscriber digits from value (strictly 10 digits max)
   const getSubscriberNumber = (val: string, dialCode: string) => {
     if (!val) return "";
-    if (val.startsWith(dialCode)) {
-      return val.slice(dialCode.length).replace(/\D/g, "");
-    }
-    if (val.startsWith("+")) {
-      // Strips leading country code if starts with +
-      const match = ALL_COUNTRIES.find((c) => val.startsWith(c.dialCode));
+    let raw = val.trim();
+    if (raw.startsWith(dialCode)) {
+      raw = raw.slice(dialCode.length);
+    } else if (raw.startsWith("+")) {
+      const match = ALL_COUNTRIES.find((c) => raw.startsWith(c.dialCode));
       if (match) {
-        return val.slice(match.dialCode.length).replace(/\D/g, "");
+        raw = raw.slice(match.dialCode.length);
+      }
+    } else {
+      const dialDigits = dialCode.replace("+", "");
+      const cleanDigits = raw.replace(/\D/g, "");
+      if (cleanDigits.length > 10 && cleanDigits.startsWith(dialDigits)) {
+        raw = cleanDigits.slice(dialDigits.length);
       }
     }
-    return val.replace(/\D/g, "");
+    return raw.replace(/\D/g, "").slice(0, 10);
   };
 
   const subscriberNumber = getSubscriberNumber(value, currentCountry.dialCode);
 
   // Handle subscriber number input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawDigits = e.target.value.replace(/\D/g, "");
+    const inputVal = e.target.value;
+
+    // Check if pasted value starts with + or contains full E.164 country code
+    if (inputVal.startsWith("+")) {
+      try {
+        const parsed = parsePhoneNumber(inputVal);
+        if (parsed && parsed.country) {
+          const found = ALL_COUNTRIES.find((c) => c.iso2 === parsed.country?.toLowerCase());
+          if (found) {
+            setSelectedIso2(found.iso2);
+            const subDigits = (parsed.nationalNumber || "").replace(/\D/g, "").slice(0, 10);
+            onChange(subDigits ? `${found.dialCode}${subDigits}` : "");
+            return;
+          }
+        }
+      } catch {
+        const found = ALL_COUNTRIES.find((c) => inputVal.startsWith(c.dialCode));
+        if (found) {
+          setSelectedIso2(found.iso2);
+          const subDigits = inputVal.slice(found.dialCode.length).replace(/\D/g, "").slice(0, 10);
+          onChange(subDigits ? `${found.dialCode}${subDigits}` : "");
+          return;
+        }
+      }
+    }
+
+    let rawDigits = inputVal.replace(/\D/g, "");
+
+    // If rawDigits has dialCode digits prefix (e.g. 919876543210) and is longer than 10 digits
+    const dialDigits = currentCountry.dialCode.replace("+", "");
+    if (rawDigits.length > 10 && rawDigits.startsWith(dialDigits)) {
+      rawDigits = rawDigits.slice(dialDigits.length);
+    }
+
+    rawDigits = rawDigits.slice(0, 10);
     const fullNumber = rawDigits ? `${currentCountry.dialCode}${rawDigits}` : "";
     onChange(fullNumber);
   };
@@ -176,7 +215,7 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
         </svg>
       </button>
 
-      {/* Phone Number Input Box (Subscriber digits only) */}
+      {/* Phone Number Input Box (Subscriber digits only, max 10 digits) */}
       <input
         id={id}
         type="tel"
@@ -184,7 +223,9 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
         onChange={handleInputChange}
         required={required}
         disabled={disabled}
-        placeholder={placeholder || "Phone number"}
+        maxLength={10}
+        pattern="[0-9]{10}"
+        placeholder={placeholder || "10-digit mobile number"}
         className={`h-11 w-full appearance-none rounded-r-xl border px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-none focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${
           disabled
             ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"

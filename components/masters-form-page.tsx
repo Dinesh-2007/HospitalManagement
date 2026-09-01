@@ -646,6 +646,9 @@ export function MastersFormPage({
                               /[^0-9]/g,
                               "",
                             );
+                            if (field.pattern === "[0-9]{10}" || field.inputMode === "tel") {
+                              e.target.value = e.target.value.slice(0, 10);
+                            }
                           } else if (field.pattern === "[a-zA-Z0-9]*") {
                             e.target.value = e.target.value.replace(
                               /[^a-zA-Z0-9]/g,

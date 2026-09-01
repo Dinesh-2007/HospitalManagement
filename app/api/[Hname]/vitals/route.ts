@@ -158,6 +158,18 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
   await pool.query(`ALTER TABLE ${quoteIdentifier(PATIENTS_TABLE)} ADD COLUMN IF NOT EXISTS dob DATE`);
 }
 
+async function ensureConsultationTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ${quoteIdentifier("doctor_consultation_entry")} (
+      id BIGSERIAL PRIMARY KEY,
+      status TEXT,
+      token_number TEXT,
+      sended TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
 function calculateBmi(heightCm: number | null, weightKg: number | null) {
   if (!heightCm || !weightKg || heightCm <= 0) return null;
   const heightM = heightCm / 100;
@@ -174,6 +186,7 @@ export async function GET(
     await ensureTables(pool);
     await ensureAppointmentsTable(pool);
     await ensurePatientTable(pool);
+    await ensureConsultationTable(pool);
 
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date");
@@ -276,7 +289,14 @@ export async function GET(
                 v.remarks,
                 v.status AS vitals_status,
                 v.created_at AS vitals_created_at,
-                v.updated_at AS vitals_updated_at
+                v.updated_at AS vitals_updated_at,
+                dce.status AS consultation_status,
+                dce.sended AS consultation_sended,
+                (
+                  a.status IN ('Conslt', 'Pharmacy', 'Completed')
+                  OR LOWER(COALESCE(dce.status, '')) = 'completed'
+                  OR LOWER(COALESCE(dce.sended, '')) IN ('yes', 'true')
+                ) AS is_vitals_locked
               FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
               LEFT JOIN ${quoteIdentifier(PATIENTS_TABLE)} p
                 ON (
@@ -293,6 +313,14 @@ export async function GET(
                   NULLIF(a.patient_id, ''),
                   NULLIF(p.patient_id, ''),
                   NULLIF(p.id::text, '')
+                )
+              LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
+                ON (
+                  (dce.token_number IS NOT NULL AND dce.token_number <> '' AND (
+                    dce.token_number::text = a.id::text 
+                    OR dce.token_number = a.appointment_id_display 
+                    OR (a.patient_id IS NOT NULL AND a.patient_id <> '' AND dce.token_number = a.patient_id)
+                  ))
                 )
               WHERE a.appointment_date = $1
                 AND ($2 = 'all' OR a.doctor = $2)
@@ -374,7 +402,14 @@ export async function GET(
             v.remarks,
             v.status AS vitals_status,
             v.created_at AS vitals_created_at,
-            v.updated_at AS vitals_updated_at
+            v.updated_at AS vitals_updated_at,
+            dce.status AS consultation_status,
+            dce.sended AS consultation_sended,
+            (
+              a.status IN ('Conslt', 'Pharmacy', 'Completed')
+              OR LOWER(COALESCE(dce.status, '')) = 'completed'
+              OR LOWER(COALESCE(dce.sended, '')) IN ('yes', 'true')
+            ) AS is_vitals_locked
           FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
           LEFT JOIN ${quoteIdentifier(PATIENTS_TABLE)} p
             ON (
@@ -383,7 +418,7 @@ export async function GET(
                 (a.patient_id IS NULL OR a.patient_id = '')
                 AND a.patient_phone IS NOT NULL
                 AND a.patient_phone <> ''
-                AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\D', '', 'g') = regexp_replace(a.patient_phone, '\D', '', 'g')
+                AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
               )
             )
           LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
@@ -391,6 +426,14 @@ export async function GET(
               NULLIF(a.patient_id, ''),
               NULLIF(p.patient_id, ''),
               NULLIF(p.id::text, '')
+            )
+          LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
+            ON (
+              (dce.token_number IS NOT NULL AND dce.token_number <> '' AND (
+                dce.token_number::text = a.id::text 
+                OR dce.token_number = a.appointment_id_display 
+                OR (a.patient_id IS NOT NULL AND a.patient_id <> '' AND dce.token_number = a.patient_id)
+              ))
             )
           WHERE ($1 = 'all' OR a.doctor = $1)
             AND a.status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')
@@ -418,6 +461,7 @@ export async function POST(
     const { Hname } = await params;
     const pool = await getTenantDB(decodeURIComponent(Hname));
     await ensureTables(pool);
+    await ensureConsultationTable(pool);
 
     const body = (await request.json()) as VitalsBody;
     let patientId = normalizeText(body.patientId);
@@ -441,12 +485,33 @@ export async function POST(
       return NextResponse.json({ error: "Patient name is required." }, { status: 400 });
     }
 
+    const appointmentId = normalizeNumber(body.appointmentId);
+    if (appointmentId || patientId) {
+      const lockCheck = await pool.query(
+        `SELECT a.status AS appt_status, dce.status AS cons_status, dce.sended AS cons_sended
+         FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
+         LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
+           ON (dce.token_number::text = a.id::text OR dce.token_number = a.appointment_id_display OR (a.patient_id IS NOT NULL AND a.patient_id <> '' AND dce.token_number = a.patient_id))
+         WHERE ${appointmentId ? 'a.id = $1' : 'a.patient_id = $1'}
+         LIMIT 1`,
+        [appointmentId || patientId]
+      );
+      if (lockCheck.rows.length > 0) {
+        const row = lockCheck.rows[0];
+        const isLocked = ['Conslt', 'Pharmacy', 'Completed'].includes(row.appt_status) ||
+          String(row.cons_status || '').toLowerCase() === 'completed' ||
+          ['yes', 'true'].includes(String(row.cons_sended || '').toLowerCase());
+        if (isLocked) {
+          return NextResponse.json({ error: "Vitals cannot be edited because the consultation is completed or sent to pharmacy." }, { status: 403 });
+        }
+      }
+    }
+
     if (!patientId || /^\d+$/.test(patientId)) {
       const result = await pool.query(`SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE patient_id LIKE 'PID-%'`);
       const count = Number(result.rows[0]?.cnt ?? 0);
       const seq = String(count + 1).padStart(4, "0");
       const generatedId = `PID-${seq}`;
-
       if (patientId && /^\d+$/.test(patientId)) {
         await pool.query(`UPDATE ${quoteIdentifier(PATIENTS_TABLE)} SET patient_id = $1 WHERE id = $2`, [generatedId, patientId]);
         await pool.query(`UPDATE ${quoteIdentifier(APPOINTMENTS_TABLE)} SET patient_id = $1 WHERE patient_id = $2`, [generatedId, patientId]);
@@ -459,10 +524,9 @@ export async function POST(
       patientId = generatedId;
     }
 
-    const appointmentId = normalizeNumber(body.appointmentId);
     if (appointmentId) {
       await pool.query(
-        `UPDATE ${quoteIdentifier(APPOINTMENTS_TABLE)} SET status = 'Vitals', updated_at = NOW() WHERE id = $1`,
+        `UPDATE ${quoteIdentifier(APPOINTMENTS_TABLE)} SET status = 'Vitals', updated_at = NOW() WHERE id = $1 AND status NOT IN ('Conslt', 'Pharmacy', 'Completed')`,
         [appointmentId]
       );
     }
