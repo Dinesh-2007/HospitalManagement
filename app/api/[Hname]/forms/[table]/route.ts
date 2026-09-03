@@ -263,6 +263,24 @@ export async function GET(
          ORDER BY dce.id DESC LIMIT 100`,
         filterValues
       );
+    } else if (tableName === "pharmacy_dispensing") {
+      const prefixedFilterClauses = filterClauses.map(clause => `pd.${clause}`);
+      const pdWhereClause = prefixedFilterClauses.length > 0
+        ? `WHERE ${prefixedFilterClauses.join(" AND ")}`
+        : "";
+
+      rowsResult = await pool.query(
+        `SELECT pd.*,
+                COALESCE(
+                  NULLIF(pd.patient_phone, ''),
+                  appt.patient_phone
+                ) AS patient_phone
+         FROM pharmacy_dispensing pd
+         LEFT JOIN appointments appt ON appt.id::text = pd.token_number::text
+         ${pdWhereClause}
+         ORDER BY pd.id DESC LIMIT 100`,
+        filterValues
+      );
     } else {
       rowsResult = await pool.query(
         `SELECT * FROM ${quoteIdentifier(tableName)} ${whereClause} ORDER BY id DESC LIMIT 100`,
