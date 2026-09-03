@@ -798,16 +798,7 @@ export function PricingManagementPage({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {!savedFormsOpen ? (
-              <button
-                type="button"
-                onClick={() => setDialogOpen(true)}
-                disabled={!resolvedHname || loadingItems}
-                className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loadingItems ? "Loading Items..." : "Select Items"}
-              </button>
-            ) : (
+            {savedFormsOpen && (
               <button
                 type="button"
                 onClick={() => setSavedFormsOpen(false)}
@@ -901,7 +892,7 @@ export function PricingManagementPage({
                 </label>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto]">
                 <label className="relative block">
                   <span className="sr-only">Search products</span>
                   <input
@@ -927,6 +918,16 @@ export function PricingManagementPage({
                     ))}
                   </select>
                 </label>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => setDialogOpen(true)}
+                    disabled={!resolvedHname || loadingItems}
+                    className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-500 px-5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loadingItems ? "Loading Items..." : "Select Items"}
+                  </button>
+                </div>
               </div>
 
               {errorMessage ? (
