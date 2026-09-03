@@ -10,12 +10,12 @@ type InvoiceRecord = {
   invoice_number: string;
   patient_name: string;
   patient_phone?: string;
+  patient_id?: string;
   token_number: string;
   billing_type: string;
   subtotal: string | number;
-  registration_fee?: string | number;
-  tax_amount: string | number;
-  discount_amount: string | number;
+  tax_amount?: string | number;
+  discount_amount?: string | number;
   payable_amount: string | number;
   payment_status: string;
   payment_method?: string;
@@ -23,24 +23,23 @@ type InvoiceRecord = {
   doctor_name?: string;
   details?: string;
   remarks?: string;
-  patient_id?: string;
   created_at: string;
 };
 
-type PendingConsultation = {
+type PendingDischarge = {
   id: number;
-  patient_details: string;
+  patient_name: string;
   patient_phone?: string;
-  token_number: string;
-  doctor: string;
-  department: string;
-  diagnosis_name?: string;
-  consultation_amount?: string | number;
-  created_at: string;
   patient_id?: string;
-  visit_type?: string;
-  appointment_date?: string;
-  appointment_time?: string;
+  bed_name?: string;
+  room_name?: string;
+  ward_name?: string;
+  floor_name?: string;
+  building_name?: string;
+  allocated_at?: string;
+  discharged_at?: string;
+  billing_amount?: string | number;
+  created_at?: string;
 };
 
 function formatDisplayDate(dateValue: string | Date | undefined, includeTime = false): string {
@@ -65,15 +64,16 @@ function formatDisplayDate(dateValue: string | Date | undefined, includeTime = f
   }
 }
 
-export function ConsultationBillingDashboard() {
+export function DischargeBillingDashboard() {
   const params = useParams();
   const hname = decodeURIComponent(params?.Hname as string || "HSMS");
 
   const { todayDate } = useHospitalTimezone();
   const { formatCurrency, currencySymbol } = useHospitalCurrency();
 
-  const [pendingConsultations, setPendingConsultations] = useState<PendingConsultation[]>([]);
+  const [pendingDischarges, setPendingDischarges] = useState<PendingDischarge[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -83,24 +83,17 @@ export function ConsultationBillingDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => todayDate);
 
   // Selection states
-  const [selectedPendingId, setSelectedPendingId] = useState<number | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
 
-  // checkout modals
-  const [activeCheckout, setActiveCheckout] = useState<PendingConsultation | null>(null);
+  // Checkout modals
+  const [activeCheckout, setActiveCheckout] = useState<PendingDischarge | null>(null);
   const [payingDraft, setPayingDraft] = useState<InvoiceRecord | null>(null);
   const [viewInvoiceModal, setViewInvoiceModal] = useState<InvoiceRecord | null>(null);
 
-  // Billing calculation states
-  const [consRateOption, setConsRateOption] = useState<"Full" | "FollowUpFree" | "FollowUpHalf" | "Custom">("Full");
-  const [consFollowUpInfo, setConsFollowUpInfo] = useState<{ isFollowUp: boolean; originalVisitDate: string | null } | null>(null);
-  const [registrationFee, setRegistrationFee] = useState<number>(0);
-  const [taxPercent, setTaxPercent] = useState<number>(0);
-  const [discountInput, setDiscountInput] = useState<number>(0);
-  const [discountType, setDiscountType] = useState<"Amount" | "Percent">("Amount");
+  // Input states
   const [billingRemarks, setBillingRemarks] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Payment gateway input states
   const [paymentMethod, setPaymentMethod] = useState<"Card" | "UPI" | "Cash" | "Insurance">("Cash");
   const [transactionId, setTransactionId] = useState("");
@@ -113,13 +106,13 @@ export function ConsultationBillingDashboard() {
       const pendingRes = await fetch(`/api/${encodeURIComponent(hname)}/billing?action=pending`);
       const pendingData = await pendingRes.json();
       if (!pendingRes.ok) throw new Error(pendingData.error || "Failed to load pending lists");
-      setPendingConsultations(pendingData.pendingConsultations || []);
+      setPendingDischarges(pendingData.pendingDischarges || []);
 
       const invRes = await fetch(`/api/${encodeURIComponent(hname)}/billing${searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : ""}`);
       const invData = await invRes.json();
       if (!invRes.ok) throw new Error(invData.error || "Failed to load invoices");
-      const consInvoices = (invData.invoices || []).filter((i: InvoiceRecord) => i.billing_type === "Consultation");
-      setInvoices(consInvoices);
+      const disInvoices = (invData.invoices || []).filter((i: InvoiceRecord) => i.billing_type === "Discharge");
+      setInvoices(disInvoices);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Failed to load data.");
@@ -141,120 +134,71 @@ export function ConsultationBillingDashboard() {
     });
   }, [invoices, selectedDate, searchQuery]);
 
-  // Open checkout for selected unbilled record
-  const handleOpenBilling = async (c: PendingConsultation) => {
-    setActiveCheckout(c);
-    setConsRateOption("Full");
-    setConsFollowUpInfo(null);
+  // Open billing creation for room discharge
+  const handleOpenBilling = (d: PendingDischarge) => {
+    setActiveCheckout(d);
     setPaymentMethod("Cash");
     setTransactionId("");
-    setRegistrationFee(0);
-    setTaxPercent(0);
-    setDiscountInput(0);
-    setDiscountType("Amount");
     setBillingRemarks("");
-
-    try {
-      const checkUrl = `/api/${encodeURIComponent(hname)}/billing?action=check-followup&patientName=${encodeURIComponent(c.patient_details)}&doctor=${encodeURIComponent(c.doctor)}&diagnosis=${encodeURIComponent(c.diagnosis_name || "")}`;
-      const res = await fetch(checkUrl);
-      const data = await res.json();
-      if (res.ok && data.isFollowUp) {
-        setConsFollowUpInfo({
-          isFollowUp: true,
-          originalVisitDate: data.originalVisitDate,
-        });
-        
-        // Auto default to free follow-up if within 10 days, otherwise 50% discount
-        const originalDate = new Date(data.originalVisitDate);
-        const currentDate = new Date(c.created_at || Date.now());
-        const daysDiff = Math.ceil(Math.abs(currentDate.getTime() - originalDate.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (daysDiff <= 10) {
-          setConsRateOption("FollowUpFree");
-        } else {
-          setConsRateOption("FollowUpHalf");
-        }
-      }
-    } catch (err) {
-      console.error("Error checking follow-up status:", err);
-    }
   };
 
-  // Calculations for Consultation Invoice
+  // Calculations for Discharge Invoice
   const billingCalculations = useMemo(() => {
-    if (!activeCheckout) return { subtotal: 0, registrationFee, discount: 0, tax: 0, payable: 0 };
-    const subtotal = Number(activeCheckout.consultation_amount || 0);
-    let discount = 0;
-    if (consRateOption === "FollowUpFree") {
-      discount = subtotal;
-    } else if (consRateOption === "FollowUpHalf") {
-      discount = Math.round(subtotal * 0.5);
-    } else if (consRateOption === "Custom") {
-      discount = discountType === "Amount" ? discountInput : Math.round((subtotal + registrationFee) * (discountInput / 100));
-    }
-    
-    // Tax is applied after discount on (subtotal + registration fee)
-    const afterDiscount = Math.max(0, (subtotal + registrationFee) - discount);
-    const tax = Math.round(afterDiscount * (taxPercent / 100));
-    const payable = afterDiscount + tax;
-
+    if (!activeCheckout) return { subtotal: 0, payable: 0 };
+    const subtotal = Number(activeCheckout.billing_amount || 0);
     return {
       subtotal,
-      registrationFee,
-      discount,
-      tax,
-      payable
+      payable: subtotal
     };
-  }, [activeCheckout, consRateOption, registrationFee, taxPercent, discountInput, discountType]);
+  }, [activeCheckout]);
 
-  // Submit and finalize billing
+  // Submit and finalize invoice
   const handleFinalizeInvoice = async (status: "Paid" | "Pending") => {
     if (!activeCheckout) return;
     setIsSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
-    
-    const { subtotal, registrationFee, discount, tax, payable } = billingCalculations;
+
+    const { subtotal, payable } = billingCalculations;
+    const token = activeCheckout.patient_id || `ALLOC-${activeCheckout.id}`;
 
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/billing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientName: activeCheckout.patient_details,
+          patientName: activeCheckout.patient_name,
+          patientPhone: activeCheckout.patient_phone,
           patientId: activeCheckout.patient_id,
-          tokenNumber: activeCheckout.token_number,
-          billingType: "Consultation",
+          tokenNumber: token,
+          billingType: "Discharge",
           subtotal,
-          registrationFee,
-          taxAmount: tax,
-          discountAmount: discount,
+          taxAmount: 0,
+          discountAmount: 0,
+          registrationFee: 0,
           payableAmount: payable,
           paymentStatus: status,
           paymentMethod: status === "Paid" ? paymentMethod : null,
           transactionId: status === "Paid" ? (transactionId || `TXN-${Date.now().toString().slice(-6)}`) : null,
-          doctorName: activeCheckout.doctor,
           remarks: billingRemarks,
           details: {
-            doctor: activeCheckout.doctor,
-            department: activeCheckout.department,
-            diagnosis: activeCheckout.diagnosis_name,
-            visitType: activeCheckout.visit_type === 'walk-in' ? 'OP' : 'OP', // default to OP
-            pricingTier: consRateOption,
-            originalVisitDate: consFollowUpInfo?.originalVisitDate,
+            bedName: activeCheckout.bed_name,
+            roomName: activeCheckout.room_name,
+            wardName: activeCheckout.ward_name,
+            allocatedAt: activeCheckout.allocated_at,
+            dischargedAt: activeCheckout.discharged_at,
           },
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to finalize invoice");
+      if (!response.ok) throw new Error(data.error || "Failed to create discharge invoice");
 
       setSuccessMsg(
         status === "Paid"
-          ? `Invoice ${data.invoice.invoice_number} paid successfully.`
-          : `Invoice ${data.invoice.invoice_number} saved as Draft.`
+          ? `Discharge room invoice ${data.invoice.invoice_number} paid successfully.`
+          : `Discharge room invoice ${data.invoice.invoice_number} saved as Draft.`
       );
       setActiveCheckout(null);
-      setSelectedPendingId(null);
       await loadData();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to save invoice.");
@@ -294,11 +238,6 @@ export function ConsultationBillingDashboard() {
     }
   };
 
-  // Actions for unbilled
-  const selectedPendingItem = useMemo(() => {
-    return pendingConsultations.find(c => c.id === selectedPendingId) || null;
-  }, [pendingConsultations, selectedPendingId]);
-
   // Actions for invoice
   const selectedInvoiceItem = useMemo(() => {
     return invoices.find(i => i.id === selectedInvoiceId) || null;
@@ -308,7 +247,6 @@ export function ConsultationBillingDashboard() {
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;
     
-    // HTML string for the invoice
     const html = `
       <html>
         <head>
@@ -319,12 +257,11 @@ export function ConsultationBillingDashboard() {
             .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
             .bold { font-weight: bold; }
             .total { font-size: 18px; border-top: 2px solid #eee; padding-top: 10px; margin-top: 20px; }
-            .badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
           </style>
         </head>
         <body>
           <div class="header">
-            <h2>HOSPITAL INVOICE</h2>
+            <h2>DISCHARGE ROOM CHARGES INVOICE</h2>
             <p>${invoice.invoice_number}</p>
             <p>Date: ${new Date(invoice.created_at).toLocaleString()}</p>
           </div>
@@ -333,25 +270,19 @@ export function ConsultationBillingDashboard() {
             <div>
               <p class="bold">Patient Information:</p>
               <p>Name: ${invoice.patient_name}</p>
-              <p>ID/Token: ${invoice.token_number}</p>
               ${invoice.patient_id ? `<p>Patient ID: ${invoice.patient_id}</p>` : ''}
               ${invoice.patient_phone ? `<p>Phone: ${invoice.patient_phone}</p>` : ''}
             </div>
             <div>
-              <p class="bold">Consultation Details:</p>
-              <p>Doctor: ${invoice.doctor_name || 'N/A'}</p>
+              <p class="bold">Discharge Details:</p>
               <p>Bill Type: ${invoice.billing_type}</p>
+              <p>Ref Token: ${invoice.token_number}</p>
             </div>
           </div>
           
           <div style="margin-top: 30px;">
-            <p class="bold" style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Charges</p>
-            
-            <div class="row"><span>Consultation Fee</span> <span>${currencySymbol}${Number(invoice.subtotal).toFixed(2)}</span></div>
-            ${Number(invoice.registration_fee) > 0 ? `<div class="row"><span>Registration Fee</span> <span>${currencySymbol}${Number(invoice.registration_fee).toFixed(2)}</span></div>` : ''}
-            ${Number(invoice.discount_amount) > 0 ? `<div class="row" style="color: red;"><span>Discount</span> <span>-${currencySymbol}${Number(invoice.discount_amount).toFixed(2)}</span></div>` : ''}
-            ${Number(invoice.tax_amount) > 0 ? `<div class="row"><span>Tax</span> <span>${currencySymbol}${Number(invoice.tax_amount).toFixed(2)}</span></div>` : ''}
-            
+            <p class="bold" style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Room Stay Charges</p>
+            <div class="row"><span>Accrued Room Charges</span> <span>${currencySymbol}${Number(invoice.subtotal).toFixed(2)}</span></div>
             <div class="row total bold"><span>Grand Total</span> <span>${currencySymbol}${Number(invoice.payable_amount).toFixed(2)}</span></div>
           </div>
 
@@ -361,11 +292,6 @@ export function ConsultationBillingDashboard() {
             <p>Method: ${invoice.payment_method || 'N/A'}</p>
             <p>Transaction ID: ${invoice.transaction_id || 'N/A'}</p>
             ${invoice.remarks ? `<p>Remarks: ${invoice.remarks}</p>` : ''}
-          </div>
-          
-          <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #777;">
-            <p>Thank you for visiting.</p>
-            ${downloadAsPdf ? '<p style="margin-top:20px; font-weight:bold; color:#000;">* To save as PDF, select "Save as PDF" in your print dialog.</p>' : ''}
           </div>
         </body>
       </html>
@@ -421,8 +347,8 @@ export function ConsultationBillingDashboard() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950 animate-in fade-in duration-200">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-gray-800 mb-6">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Checkout Consultation</h2>
-              <p className="text-xs text-slate-500 mt-1">Review fees, apply follow-up rules, and complete payment gateway.</p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Checkout Discharge Room Charges</h2>
+              <p className="text-xs text-slate-500 mt-1">Review room stay fees and complete payment gateway process.</p>
             </div>
             <button
               onClick={() => setActiveCheckout(null)}
@@ -433,16 +359,18 @@ export function ConsultationBillingDashboard() {
           </div>
 
           <div className="max-w-xl mx-auto space-y-6 w-full">
-            {/* 1. Patient Details */}
-            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/50">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-2">Patient Details</h3>
+            {/* 1. Patient & Room Stay Details */}
+            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/50 space-y-2">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-2">Patient & Room Stay Details</h3>
               <div className="text-xs space-y-1.5 text-gray-600 dark:text-gray-400">
-                <p>Patient Name: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_details}</strong></p>
+                <p>Patient Name: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_name}</strong></p>
                 <p>Patient Phone: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_phone || "—"}</strong></p>
                 <p>Patient ID: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_id || "—"}</strong></p>
-                <p>Doctor Name: {activeCheckout.doctor} ({activeCheckout.department})</p>
-                <p>Token / Visit ID: {activeCheckout.token_number}</p>
-                {activeCheckout.diagnosis_name && <p>Diagnosis: <strong className="text-brand-600">{activeCheckout.diagnosis_name}</strong></p>}
+                {activeCheckout.bed_name && (
+                  <p>Bed / Room Location: <strong className="text-brand-600">{activeCheckout.bed_name}</strong> {activeCheckout.room_name ? `(${activeCheckout.room_name})` : ""}</p>
+                )}
+                {activeCheckout.allocated_at && <p>Admission Date: {formatDisplayDate(activeCheckout.allocated_at, true)}</p>}
+                {activeCheckout.discharged_at && <p>Discharge Date: {formatDisplayDate(activeCheckout.discharged_at, true)}</p>}
               </div>
             </div>
 
@@ -483,6 +411,17 @@ export function ConsultationBillingDashboard() {
                     />
                   </div>
                 )}
+
+                <div>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">Billing Remarks</span>
+                  <input
+                    type="text"
+                    placeholder="Optional remarks"
+                    value={billingRemarks}
+                    onChange={(e) => setBillingRemarks(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
 
@@ -490,7 +429,7 @@ export function ConsultationBillingDashboard() {
             <div className="space-y-4">
               <div className="p-4 border border-slate-100 rounded-2xl bg-slate-50/50 dark:border-gray-800 dark:bg-gray-900/30 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Consultation Fee:</span>
+                  <span>Room Charges Subtotal:</span>
                   <span>{formatCurrency(billingCalculations.subtotal)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-lg pt-1 border-t border-slate-100 dark:border-gray-800">
@@ -524,45 +463,41 @@ export function ConsultationBillingDashboard() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-gray-800 mb-4 gap-3">
             <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Unbilled Consultation Visits</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Unbilled Discharge Room Charges</h3>
               <p className="text-xs text-gray-500 mt-0.5">Click on any patient row to open checkout immediately.</p>
             </div>
           </div>
 
           {isLoading ? (
-            <p className="text-xs text-gray-500">Loading consultations...</p>
-          ) : pendingConsultations.length === 0 ? (
-            <p className="text-xs text-gray-500 py-4">No completed consultations waiting to be billed.</p>
+            <p className="text-xs text-gray-500">Loading discharge billing queue...</p>
+          ) : pendingDischarges.length === 0 ? (
+            <p className="text-xs text-gray-500 py-4">No inpatient room billings waiting to be processed.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-850">
               <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-800">
                 <thead className="bg-slate-50 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="px-3 py-2 text-left">Patient Details</th>
+                    <th className="px-3 py-2 text-left">Patient Name</th>
+                    <th className="px-3 py-2 text-left">Patient Phone</th>
                     <th className="px-3 py-2 text-left">Patient ID</th>
-                    <th className="px-3 py-2 text-left">Doctor</th>
-                    <th className="px-3 py-2 text-left">Department</th>
-                    <th className="px-3 py-2 text-left">Visit Token</th>
-                    <th className="px-3 py-2 text-left">Type</th>
-                    <th className="px-3 py-2 text-left">Consultation Fee</th>
-                    <th className="px-3 py-2 text-left">Date & Time</th>
+                    <th className="px-3 py-2 text-left">Bed / Room</th>
+                    <th className="px-3 py-2 text-left">Room Charges</th>
+                    <th className="px-3 py-2 text-left">Admission Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-transparent">
-                  {pendingConsultations.map((c) => (
+                  {pendingDischarges.map((d) => (
                     <tr
-                      key={c.id}
-                      onClick={() => handleOpenBilling(c)}
+                      key={d.id}
+                      onClick={() => handleOpenBilling(d)}
                       className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-gray-800/50"
                     >
-                      <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white">{c.patient_details}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.patient_id || "—"}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.doctor}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.department}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.token_number}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.visit_type === 'walk-in' ? 'OP' : (c.visit_type || 'OP').toUpperCase()}</td>
-                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">{formatCurrency(Number(c.consultation_amount))}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{formatDisplayDate(c.appointment_date || c.created_at)} {c.appointment_time || ''}</td>
+                      <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white">{d.patient_name}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{d.patient_phone || "—"}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{d.patient_id || "—"}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{d.bed_name || "—"} {d.room_name ? `(${d.room_name})` : ""}</td>
+                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">{formatCurrency(Number(d.billing_amount))}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{formatDisplayDate(d.allocated_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -573,7 +508,6 @@ export function ConsultationBillingDashboard() {
       ) : (
         /* Invoices History Table View */
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-          {/* Date Picker on top */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-gray-800">
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -606,7 +540,6 @@ export function ConsultationBillingDashboard() {
               </div>
             </div>
             
-            {/* Top action buttons */}
             <div className="flex gap-2">
               <button
                 disabled={!selectedInvoiceId}
@@ -628,7 +561,7 @@ export function ConsultationBillingDashboard() {
           {isLoading ? (
             <p className="text-xs text-gray-500">Loading invoices...</p>
           ) : filteredInvoices.length === 0 ? (
-            <p className="text-xs text-gray-500">No consultation invoices generated on {formatDisplayDate(selectedDate)}.</p>
+            <p className="text-xs text-gray-500">No discharge invoices generated on {formatDisplayDate(selectedDate)}.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-gray-850">
               <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-800">
@@ -637,8 +570,7 @@ export function ConsultationBillingDashboard() {
                     <th className="w-12 px-3 py-2 text-left">Select</th>
                     <th className="px-3 py-2 text-left">Invoice No</th>
                     <th className="px-3 py-2 text-left">Patient</th>
-                    <th className="px-3 py-2 text-left">Doctor</th>
-                    <th className="px-3 py-2 text-left">Token</th>
+                    <th className="px-3 py-2 text-left">Patient ID</th>
                     <th className="px-3 py-2 text-left">Payable</th>
                     <th className="px-3 py-2 text-left">Status</th>
                     <th className="px-3 py-2 text-left">Method</th>
@@ -657,14 +589,13 @@ export function ConsultationBillingDashboard() {
                         <input
                           type="checkbox"
                           checked={selectedInvoiceId === inv.id}
-                          onChange={() => {}} // handled by tr onClick
+                          onChange={() => {}}
                           className="rounded border-slate-300 text-brand-500 focus:ring-brand-500"
                         />
                       </td>
                       <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white">{inv.invoice_number}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.patient_name}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.doctor_name || "—"}</td>
-                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.token_number}</td>
+                      <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{inv.patient_id || "—"}</td>
                       <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white">{formatCurrency(Number(inv.payable_amount))}</td>
                       <td className="px-3 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -701,7 +632,6 @@ export function ConsultationBillingDashboard() {
                 </p>
               </div>
 
-              {/* Payment Methods */}
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Select Gateway Channel</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -722,7 +652,6 @@ export function ConsultationBillingDashboard() {
                 </div>
               </div>
 
-              {/* Reference */}
               {paymentMethod !== "Cash" && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Transaction Reference ID</label>
@@ -761,69 +690,25 @@ export function ConsultationBillingDashboard() {
                 <div>
                   <p className="font-semibold text-gray-900 dark:text-white">Patient: {viewInvoiceModal.patient_name}</p>
                   <p>Phone: {viewInvoiceModal.patient_phone || "—"}</p>
-                  <p>Visit Token: {viewInvoiceModal.token_number}</p>
+                  <p>Patient ID: {viewInvoiceModal.patient_id || "—"}</p>
                 </div>
                 <div className="text-right">
                   <p>Date: {formatDisplayDate(viewInvoiceModal.created_at, true)}</p>
                   <p>Bill Type: <strong>{viewInvoiceModal.billing_type}</strong></p>
-                  {viewInvoiceModal.doctor_name && <p>Doctor: {viewInvoiceModal.doctor_name}</p>}
                 </div>
               </div>
 
-              {/* Items details */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-gray-800 dark:bg-slate-900/40 text-xs">
-                <p className="font-bold text-gray-800 dark:text-white mb-2">Billing Details</p>
-                <div>
-                  <div className="flex justify-between">
-                    <span>Doctor Consultation Fee</span>
-                    <span>{formatCurrency(Number(viewInvoiceModal.subtotal))}</span>
-                  </div>
-                  {(() => {
-                    try {
-                      const parsed = JSON.parse(viewInvoiceModal.details || "{}");
-                      return parsed.visitType === "Follow-up Visit" ? (
-                        <p className="text-[10px] text-amber-600 font-semibold mt-1">
-                          Follow-up visit policy discount applied
-                        </p>
-                      ) : null;
-                    } catch {
-                      return null;
-                    }
-                  })()}
-                </div>
-              </div>
-
-              {/* Receipt Summary */}
               <div className="border-t border-dashed border-gray-200 pt-3 dark:border-gray-800 text-xs space-y-1.5">
                 <div className="flex justify-between text-gray-500">
-                  <span>Consultation Fee:</span>
+                  <span>Room Stay Charges Subtotal:</span>
                   <span>{formatCurrency(Number(viewInvoiceModal.subtotal))}</span>
                 </div>
-                {Number(viewInvoiceModal.registration_fee) > 0 && (
-                  <div className="flex justify-between text-gray-500">
-                    <span>Registration Fee:</span>
-                    <span>{formatCurrency(Number(viewInvoiceModal.registration_fee))}</span>
-                  </div>
-                )}
-                {Number(viewInvoiceModal.discount_amount) > 0 && (
-                  <div className="flex justify-between text-red-500">
-                    <span>Discount:</span>
-                    <span>-{formatCurrency(Number(viewInvoiceModal.discount_amount))}</span>
-                  </div>
-                )}
-                {Number(viewInvoiceModal.tax_amount) > 0 && (
-                  <div className="flex justify-between text-gray-500">
-                    <span>Tax:</span>
-                    <span>{formatCurrency(Number(viewInvoiceModal.tax_amount))}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-sm pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Amount Paid:</span>
                   <span>{formatCurrency(Number(viewInvoiceModal.payable_amount))}</span>
                 </div>
               </div>
 
-              {/* Gateway details */}
               <div className="rounded-xl border border-slate-200 p-3 dark:border-gray-800 bg-slate-50 dark:bg-slate-900/60 text-xs">
                 <p className="font-semibold text-gray-800 dark:text-white">Gateway Details</p>
                 <div className="grid grid-cols-2 gap-2 mt-1.5 text-gray-600 dark:text-gray-400">
@@ -842,18 +727,12 @@ export function ConsultationBillingDashboard() {
                   >
                     Print Invoice
                   </button>
-                  <button
-                    onClick={() => handlePrint(viewInvoiceModal, true)}
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white transition"
-                  >
-                    Download PDF
-                  </button>
                 </div>
                 <button
                   onClick={() => setViewInvoiceModal(null)}
-                  className="rounded-xl bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600 transition"
+                  className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white dark:bg-white dark:text-slate-900"
                 >
-                  Close Receipt
+                  Close
                 </button>
               </div>
             </div>

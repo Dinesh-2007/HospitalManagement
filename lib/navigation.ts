@@ -128,6 +128,7 @@ export const navigation: NavigationSection[] = [
     items: [
       { title: "Consultation Billing", href: "/billing/consultation-billing" },
       { title: "Pharmacy Billing", href: "/billing/pharmacy-billing" },
+      { title: "Discharge Billing", href: "/billing/discharge-billing" },
     ],
   },
 
@@ -135,15 +136,10 @@ export const navigation: NavigationSection[] = [
     title: "Bed Management",
     items: [
       { title: "Infrastructure Setup", href: "/bed-management/infrastructure" },
-      { title: "Infrastructure Builder", href: "/bed-management/infrastructure-builder" },
-      { title: "Floor Plan", href: "/bed-management/floor-plan" },
       { title: "Bed Allocation", href: "/bed-management/allocation" },
-      { title: "Bed Transfer", href: "/bed-management/transfer" },
-      { title: "Bed Reservations", href: "/bed-management/reservations" },
       { title: "Clinical Discharge", href: "/bed-management/discharge" },
       { title: "Care Plans", href: "/bed-management/care-plan" },
       { title: "Housekeeping", href: "/housekeeping" },
-      { title: "Dashboard", href: "/bed-management/dashboard" },
       { title: "Reports", href: "/bed-management/reports" },
     ],
   },

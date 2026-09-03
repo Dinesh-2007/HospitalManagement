@@ -28,6 +28,7 @@ type PendingDispensing = {
   id: number;
   patient_name: string;
   patient_phone?: string;
+  patient_id?: string;
   token_number: string;
   billing_amount?: string | number;
   medicine_lines?: string;
@@ -192,10 +193,9 @@ export function PharmacyBillingDashboard() {
 
   // Calculations for Pharmacy Invoice
   const billingCalculations = useMemo(() => {
-    if (!activeCheckout) return { subtotal: 0, taxAmount: 0, discount: 0, payable: 0 };
+    if (!activeCheckout) return { subtotal: 0, payable: 0 };
     
     // Subtotal: perUnit × qty for each line.
-    // perUnitPrice may be stored as empty string; fall back to medicineAmount / qty.
     const subtotal = phMedicineLines.reduce((acc, line) => {
       const qty = Number(line.receivedQty || line.prescribedQty || 0);
       const storedPerUnit = Number(line.perUnitPrice || 0);
@@ -206,63 +206,11 @@ export function PharmacyBillingDashboard() {
       return acc + (perUnit * qty);
     }, 0);
 
-    const baseForDiscount = subtotal + phAdditionalFee;
-    let discount = 0;
-
-    if (!phDiscountWarning) {
-      if (phSelectedDiscountId === "Custom") {
-        if (phDiscountType === "Amount") {
-          discount = phDiscountInput;
-        } else {
-          discount = (baseForDiscount * phDiscountInput) / 100;
-        }
-      } else if (phSelectedDiscountId) {
-        const schema = discounts.find(ds => String(ds.id) === phSelectedDiscountId);
-        if (schema) {
-          const val = Number(schema.value || 0);
-          const discountTypeNormalized = schema.discountType || schema.discount_type;
-          const applyLevelNormalized = schema.applyLevel || schema.apply_level;
-
-          if (applyLevelNormalized === "Item") {
-            // Apply percentage or flat discount at item level
-            // medicineAmount is already the line total (qty × perUnitPrice)
-            discount = phMedicineLines.reduce((acc, line) => {
-              const qty = Number(line.receivedQty || line.prescribedQty || 0);
-              const storedPerUnit = Number(line.perUnitPrice || 0);
-              const storedTotal   = Number(line.medicineAmount || 0);
-              const perUnit = storedPerUnit > 0
-                ? storedPerUnit
-                : (qty > 0 ? storedTotal / qty : storedTotal);
-              const lineTotal = perUnit * qty;
-              if (discountTypeNormalized === "Percentage") {
-                return acc + (lineTotal * (val / 100));
-              } else {
-                return acc + Math.min(val, lineTotal);
-              }
-            }, 0);
-          } else {
-            // Apply globally at invoice level
-            if (discountTypeNormalized === "Percentage") {
-              discount = baseForDiscount * (val / 100);
-            } else {
-              discount = Math.min(val, baseForDiscount);
-            }
-          }
-        }
-      }
-    }
-    discount = Math.round(discount * 100) / 100;
-
-    const afterDiscount = Math.max(0, baseForDiscount - discount);
-    const taxAmount = Math.round((afterDiscount * (phTaxPercent / 100)) * 100) / 100;
-
     return {
       subtotal,
-      taxAmount,
-      discount,
-      payable: Math.max(0, afterDiscount + taxAmount)
+      payable: subtotal
     };
-  }, [activeCheckout, phMedicineLines, phTaxPercent, phSelectedDiscountId, discounts, phDiscountWarning, phDiscountInput, phDiscountType, phAdditionalFee]);
+  }, [activeCheckout, phMedicineLines]);
 
   // Submit and finalize invoice
   const handleFinalizeInvoice = async (status: "Paid" | "Pending") => {
@@ -271,7 +219,7 @@ export function PharmacyBillingDashboard() {
     setErrorMsg("");
     setSuccessMsg("");
 
-    const { subtotal, taxAmount, discount, payable } = billingCalculations;
+    const { subtotal, payable } = billingCalculations;
 
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/billing`, {
@@ -280,12 +228,13 @@ export function PharmacyBillingDashboard() {
         body: JSON.stringify({
           patientName: activeCheckout.patient_name,
           patientPhone: activeCheckout.patient_phone,
+          patientId: activeCheckout.patient_id,
           tokenNumber: activeCheckout.token_number,
           billingType: "Pharmacy",
           subtotal,
-          taxAmount,
-          discountAmount: discount,
-          registrationFee: phAdditionalFee,
+          taxAmount: 0,
+          discountAmount: 0,
+          registrationFee: 0,
           payableAmount: payable,
           paymentStatus: status,
           paymentMethod: status === "Paid" ? paymentMethod : null,
@@ -293,10 +242,6 @@ export function PharmacyBillingDashboard() {
           remarks: phBillingRemarks,
           details: {
             medicines: phMedicineLines,
-            taxPercent: phTaxPercent,
-            discountSchemaId: phSelectedDiscountId !== "Custom" ? phSelectedDiscountId : null,
-            discountInput: phDiscountInput,
-            discountType: phDiscountType
           },
         }),
       });
@@ -485,14 +430,15 @@ export function PharmacyBillingDashboard() {
             </button>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Left side: items details, tax & discounts */}
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/50">
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-2">Patient & Order Reference</h3>
-                <div className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
+          <div className="max-w-xl mx-auto space-y-6 w-full">
+            {/* 1. Patient Details & Medicines */}
+            <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/50 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-2">Patient Details</h3>
+                <div className="text-xs space-y-1.5 text-gray-600 dark:text-gray-400">
                   <p>Patient Name: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_name}</strong></p>
-                  {activeCheckout.patient_phone && <p>Mobile: {activeCheckout.patient_phone}</p>}
+                  <p>Patient Phone: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_phone || "—"}</strong></p>
+                  <p>Patient ID: <strong className="text-gray-900 dark:text-white">{activeCheckout.patient_id || "—"}</strong></p>
                   <p>Dispensing Token: {activeCheckout.token_number}</p>
                 </div>
               </div>
@@ -513,7 +459,6 @@ export function PharmacyBillingDashboard() {
                       const qty = Number(line.receivedQty || line.prescribedQty || 0);
                       const storedPerUnit = Number(line.perUnitPrice || 0);
                       const storedTotal   = Number(line.medicineAmount || 0);
-                      // Derive per-unit price: use stored value or compute from total÷qty
                       const perUnit = storedPerUnit > 0
                         ? storedPerUnit
                         : (qty > 0 ? storedTotal / qty : storedTotal);
@@ -530,124 +475,66 @@ export function PharmacyBillingDashboard() {
                   </tbody>
                 </table>
               </div>
-
-              {/* Discount Selection */}
-              <div className="space-y-2">
-                <span className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Apply Discount</span>
-                {phDiscountWarning ? (
-                  <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-400 font-medium">
-                    {phDiscountWarning}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={phSelectedDiscountId}
-                      onChange={(e) => setPhSelectedDiscountId(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                    >
-                      <option value="Custom">Custom Manual Discount</option>
-                      {discounts.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} ({d.discountType || d.discount_type} - {d.value}{ (d.discountType || d.discount_type) === "Percentage" ? "%" : " Rs"}) [{d.applyLevel || d.apply_level} Level]
-                        </option>
-                      ))}
-                    </select>
-                    {phSelectedDiscountId === "Custom" && (
-                      <div className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => setPhDiscountType("Amount")} className={`flex-1 py-1 text-xs rounded-md border ${phDiscountType === 'Amount' ? 'bg-brand-50 border-brand-500 text-brand-700' : 'border-gray-200'}`}>Amount</button>
-                          <button type="button" onClick={() => setPhDiscountType("Percent")} className={`flex-1 py-1 text-xs rounded-md border ${phDiscountType === 'Percent' ? 'bg-brand-50 border-brand-500 text-brand-700' : 'border-gray-200'}`}>Percent</button>
-                        </div>
-                        <input type="number" min="0" value={phDiscountInput} onChange={(e) => setPhDiscountInput(Number(e.target.value) || 0)} className="h-9 w-full rounded-md border border-gray-300 px-3 text-sm" placeholder="Enter discount..." />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Tax configuration */}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Taxes (GST %):</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={phTaxPercent}
-                  onChange={(e) => setPhTaxPercent(Number(e.target.value) || 0)}
-                  className="w-20 h-7 text-right border rounded text-xs px-2 dark:bg-gray-800 dark:border-gray-700"
-                />
-              </div>
             </div>
 
-            {/* Right side: Payment & Summary */}
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-brand-50/50 border border-brand-100 dark:bg-slate-900/60 dark:border-gray-800">
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Payment Gateway Details</h3>
-                
-                <div className="space-y-3">
-                  <div>
-                    <span className="block text-xs font-semibold text-gray-500 mb-1.5">Payment Method</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {["Cash", "Card", "UPI", "Insurance"].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setPaymentMethod(m as any)}
-                          className={`py-2 rounded-lg border text-xs font-semibold transition ${
-                            paymentMethod === m 
-                              ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/20 dark:text-brand-400"
-                              : "border-slate-200 text-gray-600 hover:bg-slate-50 dark:border-gray-800 dark:text-gray-400"
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
+            {/* 2. Payment Gateway Details */}
+            <div className="p-4 rounded-2xl bg-brand-50/50 border border-brand-100 dark:bg-slate-900/60 dark:border-gray-800">
+              <h3 className="text-sm font-bold text-gray-800 dark:text-white mb-3">Payment Gateway Details</h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1.5">Payment Method</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {["Cash", "Card", "UPI", "Insurance"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPaymentMethod(m as any)}
+                        className={`py-2 rounded-lg border text-xs font-semibold transition ${
+                          paymentMethod === m 
+                            ? "border-brand-500 bg-brand-50 text-brand-600 dark:bg-brand-950/20 dark:text-brand-400"
+                            : "border-slate-200 text-gray-600 hover:bg-slate-50 dark:border-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
+                {paymentMethod !== "Cash" && (
                   <div>
                     <span className="block text-xs font-semibold text-gray-500 mb-1">Transaction reference ID</span>
                     <input
                       type="text"
-                      placeholder={paymentMethod === "Cash" ? "Optional for Cash" : "Enter txn/ref id"}
+                      placeholder="Enter txn/ref id"
                       value={transactionId}
                       onChange={(e) => setTransactionId(e.target.value)}
                       className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                     />
                   </div>
+                )}
 
-                  <div>
-                    <span className="block text-xs font-semibold text-gray-500 mb-1">Billing Remarks</span>
-                    <input
-                      type="text"
-                      placeholder="Optional remarks"
-                      value={phBillingRemarks}
-                      onChange={(e) => setPhBillingRemarks(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                    />
-                  </div>
+                <div>
+                  <span className="block text-xs font-semibold text-gray-500 mb-1">Billing Remarks</span>
+                  <input
+                    type="text"
+                    placeholder="Optional remarks"
+                    value={phBillingRemarks}
+                    onChange={(e) => setPhBillingRemarks(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  />
                 </div>
               </div>
+            </div>
 
-              {/* Subtotal summary */}
-              <div className="p-4 border-t border-dashed border-slate-200 dark:border-gray-800 space-y-2 text-sm">
-                <div className="flex items-center justify-between text-gray-600 dark:text-gray-400">
-                  <span>Additional Fee:</span>
-                  <input type="number" value={phAdditionalFee} onChange={e => setPhAdditionalFee(Number(e.target.value) || 0)} className="w-24 h-7 text-right border rounded text-xs px-2 dark:bg-gray-800 dark:border-gray-700" />
-                </div>
+            {/* 3. Payment Total & Action Buttons */}
+            <div className="space-y-4">
+              <div className="p-4 border border-slate-100 rounded-2xl bg-slate-50/50 dark:border-gray-800 dark:bg-gray-900/30 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Subtotal:</span>
+                  <span>Subtotal (Medicines):</span>
                   <span>{formatCurrency(billingCalculations.subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Taxes ({phTaxPercent}%):</span>
-                  <span>{formatCurrency(billingCalculations.taxAmount)}</span>
-                </div>
-                {billingCalculations.discount > 0 && (
-                  <div className="flex justify-between text-red-600 font-medium">
-                    <span>Discount Applied:</span>
-                    <span>-{formatCurrency(billingCalculations.discount)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white text-lg pt-1 border-t border-slate-100 dark:border-gray-800">
                   <span>Total Payable:</span>
                   <span>{formatCurrency(billingCalculations.payable)}</span>
@@ -680,15 +567,8 @@ export function PharmacyBillingDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-gray-800 mb-4 gap-3">
             <div>
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Unbilled Pharmacy Dispensings</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Select a patient row and click "Checkout & Pay" at the top.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Click on any patient row to open checkout immediately.</p>
             </div>
-            <button
-              disabled={!selectedPendingId}
-              onClick={() => selectedPendingItem && handleOpenBilling(selectedPendingItem)}
-              className="inline-flex items-center justify-center rounded-xl bg-brand-500 px-4 py-2.5 text-xs font-bold text-white hover:bg-brand-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Checkout & Pay Selected
-            </button>
           </div>
 
           {isLoading ? (
@@ -700,11 +580,10 @@ export function PharmacyBillingDashboard() {
               <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-800">
                 <thead className="bg-slate-50 dark:bg-white/[0.02]">
                   <tr>
-                    <th className="w-12 px-3 py-2 text-left">Select</th>
                     <th className="px-3 py-2 text-left">Patient Name</th>
                     <th className="px-3 py-2 text-left">Patient Phone</th>
                     <th className="px-3 py-2 text-left">Dispensing Token</th>
-                    <th className="px-3 py-2 text-left">Pre-Tax Amount</th>
+                    <th className="px-3 py-2 text-left">Total Amount</th>
                     <th className="px-3 py-2 text-left">Date</th>
                   </tr>
                 </thead>
@@ -712,19 +591,9 @@ export function PharmacyBillingDashboard() {
                   {pendingDispensings.map((d) => (
                     <tr
                       key={d.id}
-                      onClick={() => setSelectedPendingId(selectedPendingId === d.id ? null : d.id)}
-                      className={`cursor-pointer transition hover:bg-slate-50 dark:hover:bg-gray-800/50 ${
-                        selectedPendingId === d.id ? "bg-brand-50/70 dark:bg-brand-950/20" : ""
-                      }`}
+                      onClick={() => handleOpenBilling(d)}
+                      className="cursor-pointer transition hover:bg-slate-50 dark:hover:bg-gray-800/50"
                     >
-                      <td className="px-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selectedPendingId === d.id}
-                          onChange={() => {}} // handled by tr onClick
-                          className="rounded border-slate-300 text-brand-500 focus:ring-brand-500"
-                        />
-                      </td>
                       <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white">{d.patient_name}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{d.patient_phone || "—"}</td>
                       <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{d.token_number}</td>
@@ -888,16 +757,18 @@ export function PharmacyBillingDashboard() {
               </div>
 
               {/* Reference */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Transaction Reference ID</label>
-                <input
-                  type="text"
-                  placeholder={paymentMethod === "Cash" ? "Optional for Cash" : "Enter ref transaction ID"}
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                />
-              </div>
+              {paymentMethod !== "Cash" && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400">Transaction Reference ID</label>
+                  <input
+                    type="text"
+                    placeholder="Enter ref transaction ID"
+                    value={transactionId}
+                    onChange={(e) => setTransactionId(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-900 focus:border-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  />
+                </div>
+              )}
 
               <button
                 onClick={handlePayDraft}

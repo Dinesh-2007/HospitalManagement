@@ -140,7 +140,7 @@ export async function GET(
       // 3a. Uninvoiced consultations
       const consultations = await pool.query(
         `
-          SELECT c.*, a.patient_id, a.patient_type as visit_type, a.department, a.appointment_date, a.appointment_time
+          SELECT c.*, a.patient_id, a.patient_phone, a.patient_type as visit_type, a.department, a.appointment_date, a.appointment_time
           FROM ${quoteIdentifier(CONSULTATION_TABLE)} c
           LEFT JOIN appointments a ON a.id = (CASE WHEN c.token_number ~ '^[0-9]+$' THEN CAST(c.token_number AS BIGINT) ELSE NULL END)
           LEFT JOIN ${quoteIdentifier(INVOICE_TABLE)} b ON b.token_number = c.token_number AND b.billing_type = 'Consultation'
@@ -156,7 +156,8 @@ export async function GET(
                  COALESCE(
                    NULLIF(d.patient_phone, ''),
                    appt.patient_phone
-                 ) AS patient_phone
+                 ) AS patient_phone,
+                 appt.patient_id
           FROM ${quoteIdentifier(DISPENSING_TABLE)} d
           LEFT JOIN ${quoteIdentifier(INVOICE_TABLE)} b ON b.token_number = d.token_number AND b.billing_type = 'Pharmacy'
           LEFT JOIN appointments appt ON appt.id::text = d.token_number::text
@@ -165,9 +166,40 @@ export async function GET(
         `
       );
 
+      // 3c. Uninvoiced discharge room billings
+      let dischargesRows: any[] = [];
+      try {
+        const tableCheck = await pool.query(
+          `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bed_allocation')`
+        );
+        if (Boolean(tableCheck.rows[0]?.exists)) {
+          const discharges = await pool.query(
+            `
+              SELECT ba.*,
+                     COALESCE(
+                       (SELECT appt.patient_phone FROM appointments appt WHERE appt.patient_id = ba.patient_id LIMIT 1),
+                       ''
+                     ) AS patient_phone,
+                     COALESCE(
+                       (SELECT SUM(COALESCE(bbl.total_amount, 0)) FROM bed_billing_line bbl WHERE bbl.patient_id = ba.patient_id),
+                       500
+                     ) AS billing_amount
+              FROM bed_allocation ba
+              LEFT JOIN ${quoteIdentifier(INVOICE_TABLE)} b ON (b.patient_id = ba.patient_id OR b.token_number = ba.patient_id) AND b.billing_type = 'Discharge'
+              WHERE b.id IS NULL
+              ORDER BY ba.allocated_at DESC
+            `
+          );
+          dischargesRows = discharges.rows;
+        }
+      } catch (err) {
+        console.error("Failed to fetch pending discharges:", err);
+      }
+
       return NextResponse.json({
         pendingConsultations: consultations.rows,
         pendingDispensings: dispensings.rows,
+        pendingDischarges: dischargesRows,
       });
     }
 

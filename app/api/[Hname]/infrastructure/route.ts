@@ -881,7 +881,7 @@ export async function GET(
         `SELECT dce.*, appt.patient_phone, appt.patient_id as appt_patient_id, appt.patient_name as appt_patient_name
          FROM doctor_consultation_entry dce
          LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
-         WHERE (dce.patient_type = 'IP' OR dce.patientType = 'IP' OR appt.patient_type = 'IP')
+         WHERE (dce.patient_type = 'IP' OR appt.patient_type = 'IP')
            AND (dce.rno IS NULL OR dce.rno = '')
            AND (dce.status IS NULL OR dce.status <> 'Completed')
          ORDER BY dce.id DESC LIMIT 100`
@@ -1448,7 +1448,7 @@ export async function POST(
                SELECT dce.id 
                FROM doctor_consultation_entry dce
                LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
-               WHERE (appt.patient_id = $2 OR dce.patient_id = $2 OR dce.patient_details LIKE $3)
+               WHERE (appt.patient_id = $2 OR dce.token_number::text = $2::text OR dce.patient_details LIKE $3)
                  AND (dce.rno IS NULL OR dce.rno = '')
                ORDER BY dce.id DESC 
                LIMIT 1
@@ -1559,7 +1559,7 @@ export async function POST(
              SELECT dce.id 
              FROM doctor_consultation_entry dce
              LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
-             WHERE (appt.patient_id = $2 OR dce.patient_id = $2 OR dce.patient_details LIKE $3)
+             WHERE (appt.patient_id = $2 OR dce.token_number::text = $2::text OR dce.patient_details LIKE $3)
                AND dce.rno = $4
              ORDER BY dce.id DESC 
              LIMIT 1
@@ -1619,7 +1619,7 @@ export async function POST(
              SELECT dce.id 
              FROM doctor_consultation_entry dce
              LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
-             WHERE (appt.patient_id = $1 OR dce.patient_id = $1)
+             WHERE (appt.patient_id = $1 OR dce.token_number::text = $1::text)
                AND dce.rno = $2
              ORDER BY dce.id DESC 
              LIMIT 1
@@ -1848,7 +1848,7 @@ export async function POST(
              SELECT dce.id 
              FROM doctor_consultation_entry dce
              LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
-             WHERE (appt.patient_id = $1 OR dce.patient_id = $1)
+             WHERE (appt.patient_id = $1 OR dce.token_number::text = $1::text)
                AND dce.rno = $2
              ORDER BY dce.id DESC 
              LIMIT 1
