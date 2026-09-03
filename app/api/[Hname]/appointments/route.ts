@@ -692,7 +692,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
 async function generateAppointmentDisplayId(pool: Pool | PoolClient, targetDate: string): Promise<{ displayId: string; seq: number }> {
   const dateCompact = targetDate.replace(/-/g, ""); // e.g. "20260629"
   const result = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND appointment_id_display IS NOT NULL`,
+    `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND appointment_id_display LIKE 'APT-%' AND (patient_type IS NULL OR LOWER(patient_type) NOT LIKE '%walk%')`,
     [targetDate],
   );
   const seq = (Number(result.rows[0]?.cnt) || 0) + 1;

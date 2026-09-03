@@ -88,6 +88,21 @@ function isCompleted(row: VitalsRow) {
   return Boolean(row.vitals_id || row.vitals_status);
 }
 
+function isVitalsLocked(row: VitalsRow) {
+  const status = String(row.appointment_status || "").toLowerCase();
+  const consStatus = String(row.consultation_status || "").toLowerCase();
+  const consSended = String(row.consultation_sended || "").toLowerCase();
+  const lockedFlag = Boolean(row.is_vitals_locked);
+
+  return (
+    lockedFlag ||
+    ["conslt", "pharmacy", "completed"].includes(status) ||
+    consStatus === "completed" ||
+    consSended === "yes" ||
+    consSended === "true"
+  );
+}
+
 export default function PatientVitalsPage() {
   const params = useParams();
   const hname = params?.Hname as string;
@@ -288,6 +303,7 @@ export default function PatientVitalsPage() {
                   <tr><td className="px-4 py-6 text-gray-500 text-center" colSpan={10}>No patients found.</td></tr>
                 ) : filteredRows.map((row) => {
                   const done = isCompleted(row);
+                  const locked = isVitalsLocked(row);
                   const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
                   const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
                   const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
@@ -324,7 +340,11 @@ export default function PatientVitalsPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-600">{text(row, ["time_slot_minutes"]) ? `${text(row, ["time_slot_minutes"])} min` : "-"}</td>
                       <td className="px-4 py-3">
-                        {done ? (
+                        {locked ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                            Vitals locked
+                          </span>
+                        ) : done ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
                             <CheckCircleIcon className="h-4 w-4" />
                             Vitals completed
@@ -344,7 +364,7 @@ export default function PatientVitalsPage() {
                                 const genderVal = text(row, ["gender", "registration_gender", "vitals_gender"]);
 
                                 setSelectedRow(row);
-                                setIsEditing(!done);
+                                setIsEditing(!done && !locked);
                                 setForm({
                                   patientId: text(row, ["registration_patient_id", "appointment_patient_id", "patient_id", "registration_id"]),
                                   patientName: text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]),
@@ -367,7 +387,7 @@ export default function PatientVitalsPage() {
                             }}
                             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
                           >
-                            {done ? "View" : "Enter Vitals"}
+                            {done || locked ? "View" : "Enter Vitals"}
                           </button>
                           {done ? <CheckCircleIcon className="h-5 w-5 text-success-500" /> : null}
                         </div>
@@ -382,6 +402,14 @@ export default function PatientVitalsPage() {
           {selectedRow ? (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
               <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+                {isVitalsLocked(selectedRow) ? (
+                  <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                    <svg className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Vitals are locked and uneditable because consultation has been completed or sent to pharmacy.</span>
+                  </div>
+                ) : null}
                 <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
                   <div>
                     <div className="text-lg font-semibold text-gray-800 dark:text-white/90">{selectedSummary?.name}</div>
@@ -411,7 +439,7 @@ export default function PatientVitalsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {selectedSummary?.completed && !isEditing ? (
+                    {selectedSummary?.completed && !isEditing && !isVitalsLocked(selectedRow) ? (
                       <button
                         type="button"
                         onClick={() => setIsEditing(true)}
@@ -534,8 +562,12 @@ export default function PatientVitalsPage() {
                             <input
                               type={type}
                               value={form[key as keyof FormState]}
+                              maxLength={key === "mobile" ? 10 : undefined}
                               onChange={(e) => {
-                                const val = e.target.value;
+                                let val = e.target.value;
+                                if (key === "mobile") {
+                                  val = val.replace(/\D/g, "").slice(0, 10);
+                                }
                                 setForm((current) => {
                                   const updated = { ...current, [key]: val };
                                   if (key === "dob") {

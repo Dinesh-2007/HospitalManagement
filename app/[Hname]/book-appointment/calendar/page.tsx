@@ -617,7 +617,7 @@ export default function AppointmentCalendarPage() {
             <div className="flex flex-col items-start">
               <button
                 type="button"
-                onClick={() => router.push(`/${hname}/book-appointment`)}
+                onClick={() => router.push(`/${hname}/patient-book-appointment`)}
                 className="mb-2 flex items-center text-xs font-medium text-gray-500 hover:text-brand-600 transition"
               >
                 <svg className="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
