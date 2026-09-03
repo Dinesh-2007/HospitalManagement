@@ -152,9 +152,14 @@ export async function GET(
       // 3b. Uninvoiced pharmacy dispensings
       const dispensings = await pool.query(
         `
-          SELECT d.*
+          SELECT d.*,
+                 COALESCE(
+                   NULLIF(d.patient_phone, ''),
+                   appt.patient_phone
+                 ) AS patient_phone
           FROM ${quoteIdentifier(DISPENSING_TABLE)} d
           LEFT JOIN ${quoteIdentifier(INVOICE_TABLE)} b ON b.token_number = d.token_number AND b.billing_type = 'Pharmacy'
+          LEFT JOIN appointments appt ON appt.id::text = d.token_number::text
           WHERE b.id IS NULL
           ORDER BY d.created_at DESC
         `

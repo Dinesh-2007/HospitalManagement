@@ -194,11 +194,10 @@ export function PharmacyBillingDashboard() {
   const billingCalculations = useMemo(() => {
     if (!activeCheckout) return { subtotal: 0, taxAmount: 0, discount: 0, payable: 0 };
     
-    // Subtotal: sum up item subtotals
+    // Subtotal: sum up item totals (medicineAmount is already qty × perUnitPrice)
     const subtotal = phMedicineLines.reduce((acc, line) => {
-      const qty = Number(line.receivedQty || line.prescribedQty || 0);
-      const price = Number(line.medicineAmount || 0);
-      return acc + (qty * price);
+      const lineTotal = Number(line.medicineAmount || 0);
+      return acc + lineTotal;
     }, 0);
 
     const baseForDiscount = subtotal + phAdditionalFee;
@@ -220,14 +219,13 @@ export function PharmacyBillingDashboard() {
 
           if (applyLevelNormalized === "Item") {
             // Apply percentage or flat discount at item level
+            // medicineAmount is already the line total (qty × perUnitPrice)
             discount = phMedicineLines.reduce((acc, line) => {
-              const qty = Number(line.receivedQty || line.prescribedQty || 0);
-              const price = Number(line.medicineAmount || 0);
-              const lineSub = qty * price;
+              const lineTotal = Number(line.medicineAmount || 0);
               if (discountTypeNormalized === "Percentage") {
-                return acc + (lineSub * (val / 100));
+                return acc + (lineTotal * (val / 100));
               } else {
-                return acc + Math.min(val, lineSub);
+                return acc + Math.min(val, lineTotal);
               }
             }, 0);
           } else {
@@ -501,13 +499,14 @@ export function PharmacyBillingDashboard() {
                   <tbody className="divide-y divide-slate-100 dark:divide-gray-800 bg-white dark:bg-transparent">
                     {phMedicineLines.map((line, idx) => {
                       const qty = Number(line.receivedQty || line.prescribedQty || 0);
-                      const price = Number(line.medicineAmount || 0);
+                      const perUnit = Number(line.perUnitPrice || 0);
+                      const lineTotal = Number(line.medicineAmount || 0);
                       return (
                         <tr key={idx}>
                           <td className="px-3 py-2 font-medium">{line.medicineName}</td>
                           <td className="px-3 py-2">{qty}</td>
-                          <td className="px-3 py-2">{formatCurrency(price)}</td>
-                          <td className="px-3 py-2 font-semibold">{formatCurrency(qty * price)}</td>
+                          <td className="px-3 py-2">{perUnit > 0 ? formatCurrency(perUnit) : "—"}</td>
+                          <td className="px-3 py-2 font-semibold">{formatCurrency(lineTotal)}</td>
                         </tr>
                       );
                     })}
