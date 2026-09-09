@@ -744,7 +744,9 @@ export default function BookAppointmentPage() {
     if (!hname || !authenticatedPatient) return;
     try {
       const patientId = authenticatedPatient.phone || authenticatedPatient.name;
-      const res = await fetch(`/api/${encodeURIComponent(hname)}/appointments?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+      const params = new URLSearchParams({ patientId });
+      if (authenticatedPatient.name) params.set("patientName", authenticatedPatient.name);
+      const res = await fetch(`/api/${encodeURIComponent(hname)}/appointments?${params.toString()}`, { cache: "no-store" });
       const d = (await res.json().catch(() => ({}))) as { rows?: any[] };
       const rows = d.rows ?? [];
       // Filter for scheduled appointments

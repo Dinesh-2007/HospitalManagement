@@ -46,15 +46,14 @@ async function generateAppointmentDisplayId(pool: Awaited<ReturnType<typeof getT
   return `APT-${dateCompact}-${String(seq).padStart(4, "0")}`;
 }
 
-/** Generate a Queue ID in format QUE-YYYYMMDD-XXXX using a daily running number */
+/** Generate a Queue ID as a simple 3-digit daily sequence (001, 002, ...) */
 async function generateQueueId(pool: Awaited<ReturnType<typeof getTenantDB>>, targetDate: string): Promise<string> {
-  const dateCompact = targetDate.replace(/-/g, "");
   const result = await pool.query(
     `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND queue_id IS NOT NULL`,
     [targetDate],
   );
   const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
-  return `QUE-${dateCompact}-${String(seq).padStart(4, "0")}`;
+  return String(seq).padStart(3, "0");
 }
 
 async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {

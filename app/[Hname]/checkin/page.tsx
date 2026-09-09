@@ -557,8 +557,14 @@ export default function CheckInPage() {
 
           {checkInResult ? (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">
-              <div>
-                <span className="font-semibold">Checkin Sucessfull for {checkInResult.patientId}</span>
+              <div className="space-y-1">
+                <span className="font-semibold block">Check-in successful for {checkInResult.patientName || checkInResult.patientId}</span>
+                {checkInResult.queueId && (
+                  <span className="block text-lg font-bold text-success-800">Queue No: <span className="font-mono">{checkInResult.queueId}</span></span>
+                )}
+                {checkInResult.patientId && (
+                  <span className="block text-xs text-success-600">Patient ID: <span className="font-mono">{checkInResult.patientId}</span></span>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setCheckInResult(null)} className="shrink-0 text-success-600 hover:text-success-800">✕</button>
@@ -616,7 +622,7 @@ export default function CheckInPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {displayPatientId
+                        {isCheckedIn && displayPatientId
                           ? <span className="font-mono text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{displayPatientId}</span>
                           : <span className="text-xs text-gray-400">—</span>}
                       </td>
@@ -624,7 +630,11 @@ export default function CheckInPage() {
                         <span className="font-mono text-xs text-gray-600">{appointmentIdDisplay}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-indigo-600">{queueIdDisplay}</span>
+                        <>
+                          {isCheckedIn
+                            ? <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 rounded px-2 py-0.5">{queueIdDisplay}</span>
+                            : <span className="text-xs text-gray-400">—</span>}
+                        </>
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{text(row, ["doctor"])}</td>
                       <td className="px-4 py-3 text-gray-600 capitalize">

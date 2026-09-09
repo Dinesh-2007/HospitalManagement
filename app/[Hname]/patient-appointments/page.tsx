@@ -274,11 +274,12 @@ export default function HospitalPatientAppointmentsPage() {
         setFamilyMembers(members);
 
         // 2. Fetch appointments for self + each family member
-        const targets: { key: string; label: string; relationship: string }[] = [
-          { key: self!.phone || self!.name, label: self!.name || "Myself", relationship: "myself" },
+        const targets: { key: string; label: string; name: string; relationship: string }[] = [
+          { key: self!.phone || self!.name, label: self!.name || "Myself", name: self!.name, relationship: "myself" },
           ...members.map((m) => ({
             key: m.phone || m.name,
             label: m.name,
+            name: m.name,
             relationship: m.relationship || "family",
           })),
         ];
@@ -287,12 +288,21 @@ export default function HospitalPatientAppointmentsPage() {
         await Promise.all(
           targets.map(async (t) => {
             try {
+              const params = new URLSearchParams({ patientId: t.key });
+              if (t.name) params.set("patientName", t.name);
               const res = await fetch(
-                `/api/${encodeURIComponent(hname!)}/appointments?patientId=${encodeURIComponent(t.key)}`,
+                `/api/${encodeURIComponent(hname!)}/appointments?${params.toString()}`,
                 { cache: "no-store" }
               );
               const d = (await res.json().catch(() => ({}))) as { rows?: AppointmentRow[] };
-              map[t.key] = d.rows ?? [];
+              // Deduplicate by appointment id in case both patientId and patientName matched same rows
+              const seen = new Set<number>();
+              map[t.key] = (d.rows ?? []).filter((r) => {
+                const id = r.id ?? 0;
+                if (seen.has(id)) return false;
+                seen.add(id);
+                return true;
+              });
             } catch {
               map[t.key] = [];
             }

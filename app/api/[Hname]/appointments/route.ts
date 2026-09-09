@@ -522,6 +522,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
     const department = searchParams.get("department") ?? "";
     const doctor = searchParams.get("doctor") ?? "";
     const patientId = searchParams.get("patientId") ?? "";
+    const patientName = searchParams.get("patientName") ?? "";
     const doctorNames = parseDoctorNames(searchParams.get("doctorNames") ?? "");
     const requestedDoctorNames = Array.from(new Set([doctor, ...doctorNames].map((value) => value.trim()).filter(Boolean)));
 
@@ -616,20 +617,37 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
     }
 
     if (patientId && !department && requestedDoctorNames.length === 0) {
+      const clauses: string[] = [
+        `patient_id = $1`,
+        `patient_phone = $1`,
+        `regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')`,
+      ];
+      const values: unknown[] = [patientId];
+      // Also match by patient name if the patientId looks like a name (non-numeric) or a separate patientName is provided
+      const isNonNumeric = patientId && !/^\d+$/.test(patientId);
+      if (isNonNumeric) {
+        clauses.push(`LOWER(patient_name) = LOWER($1)`);
+      }
+      if (patientName) {
+        clauses.push(`LOWER(patient_name) = LOWER($2)`);
+        values.push(patientName);
+      }
       const result = await pool.query(
         `SELECT * FROM ${quoteIdentifier(TABLE_NAME)}
-         WHERE patient_id = $1
-            OR patient_phone = $1
-            OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
+         WHERE ${clauses.join(" OR ")}
          ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC`,
-        [patientId],
+        values,
       );
       return NextResponse.json({ rows: result.rows });
     }
 
     if (patientId && (department || requestedDoctorNames.length > 0)) {
+      const isNonNumericId = patientId && !/^\d+$/.test(patientId);
+      const idClause = isNonNumericId
+        ? `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') OR LOWER(patient_name) = LOWER($1))`
+        : `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))`;
       const filters = [
-        `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))`,
+        idClause,
         `status IN ('Scheduled', 'Rescheduled', 'Checked In', 'Vitals', 'Conslt', 'Lab', 'Pharmacy', 'Completed')`
       ];
       const values: unknown[] = [patientId];
@@ -699,15 +717,14 @@ async function generateAppointmentDisplayId(pool: Pool | PoolClient, targetDate:
   return { displayId: `APT-${dateCompact}-${String(seq).padStart(4, "0")}`, seq };
 }
 
-/** Generate a Queue ID in format QUE-YYYYMMDD-XXXX using a daily running number */
+/** Generate a Queue ID as a simple 3-digit daily sequence (001, 002, ...) */
 async function generateQueueId(pool: Pool | PoolClient, targetDate: string): Promise<string> {
-  const dateCompact = targetDate.replace(/-/g, ""); // e.g. "20260629"
   const result = await pool.query(
     `SELECT COUNT(*) AS cnt FROM ${quoteIdentifier(TABLE_NAME)} WHERE appointment_date = $1 AND queue_id IS NOT NULL`,
     [targetDate],
   );
   const seq = (Number(result.rows[0]?.cnt) || 0) + 1;
-  return `QUE-${dateCompact}-${String(seq).padStart(4, "0")}`;
+  return String(seq).padStart(3, "0");
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ Hname: string }> }) {
