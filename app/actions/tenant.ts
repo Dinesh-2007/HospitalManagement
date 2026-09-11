@@ -3,6 +3,7 @@
 import pool, { createTenantDbIfNotExists, getTenantDB } from "../../lib/db";
 import { redirect } from "next/navigation";
 import bcrypt from "bcrypt";
+import { ensureRBACTables } from "./rbac";
 
 export async function createAccountAction(formData: FormData) {
   const hospitalName = String(formData.get("hospitalName") ?? "").trim();
@@ -84,6 +85,9 @@ export async function createAccountAction(formData: FormData) {
     VALUES ($1, $2, 'admin')
     ON CONFLICT (username) DO NOTHING
   `, [adminMail, hashedPassword]);
+
+  // Ensure RBAC tables exist for this tenant
+  await ensureRBACTables(siteName);
 
   // Use the desired siteName as the routing identifier
   const tenantRoute = encodeURIComponent(siteName);

@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { getTenantDB } from "../../lib/db";
 import bcrypt from "bcrypt";
+import { ensureRBACTables } from "./rbac";
 
 async function ensureUsersTable(hname: string) {
   const pool = await getTenantDB(hname);
@@ -19,6 +20,8 @@ async function ensureUsersTable(hname: string) {
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS role VARCHAR(100) NOT NULL DEFAULT 'User'
   `);
+  // Ensure RBAC tables and columns exist
+  await ensureRBACTables(hname);
   return pool;
 }
 
@@ -39,11 +42,25 @@ export async function checkIsAdmin(hname: string) {
   }
 }
 
-export async function fetchUsers(hname: string) {
+export type UserRow = {
+  id: number;
+  username: string;
+  role: string;
+  role_id: number | null;
+  role_name: string | null;
+  created_at?: string;
+};
+
+export async function fetchUsers(hname: string): Promise<UserRow[]> {
   if (!(await checkIsAdmin(hname))) throw new Error("Unauthorized");
   
   const pool = await ensureUsersTable(hname);
-  const res = await pool.query("SELECT id, username, role, created_at FROM users ORDER BY id ASC");
+  const res = await pool.query<UserRow>(`
+    SELECT u.id, u.username, u.role, u.role_id, r.name AS role_name, u.created_at
+    FROM users u
+    LEFT JOIN roles r ON r.id = u.role_id
+    ORDER BY u.id ASC
+  `);
   return res.rows;
 }
 
@@ -52,7 +69,8 @@ export async function addUser(hname: string, formData: FormData) {
   
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
-  const role = String(formData.get("role") ?? "User").trim() || "User";
+  const roleId = formData.get("role_id") ? Number(formData.get("role_id")) : null;
+  const roleName = String(formData.get("role") ?? "User").trim() || "User";
   
   if (!username || !password) throw new Error("Missing fields");
   
@@ -62,8 +80,8 @@ export async function addUser(hname: string, formData: FormData) {
   const pool = await ensureUsersTable(hname);
   try {
     await pool.query(
-      "INSERT INTO users (username, password, role) VALUES ($1, $2, $3)",
-      [username, hashedPassword, role]
+      "INSERT INTO users (username, password, role, role_id) VALUES ($1, $2, $3, $4)",
+      [username, hashedPassword, roleName, roleId]
     );
   } catch (error) {
     if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
@@ -111,9 +129,14 @@ export async function updateUserRole(hname: string, formData: FormData) {
   const idStr = String(formData.get("id") ?? "");
   const id = parseInt(idStr, 10);
   const role = String(formData.get("role") ?? "").trim();
+  const roleIdStr = formData.get("role_id");
+  const roleId = roleIdStr && String(roleIdStr).trim() ? Number(roleIdStr) : null;
 
   if (isNaN(id) || !role) throw new Error("Missing fields");
 
   const pool = await ensureUsersTable(hname);
-  await pool.query("UPDATE users SET role = $1 WHERE id = $2", [role, id]);
+  await pool.query(
+    "UPDATE users SET role = $1, role_id = $2 WHERE id = $3",
+    [role, roleId, id]
+  );
 }

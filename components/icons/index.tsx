@@ -51,6 +51,7 @@ import HorizontaLDots from "./horizontal-dots";
 import ChatIcon from "./chat";
 import MoreDotIcon from "./more-dot";
 import BellIcon from "./bell";
+import SettingsIcon from "./settings";
 
 export {
   DownloadIcon,
@@ -106,4 +107,5 @@ export {
   HorizontaLDots,
   ChevronUpIcon,
   ChatIcon,
+  SettingsIcon,
 };

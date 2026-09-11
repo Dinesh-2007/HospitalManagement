@@ -41,7 +41,10 @@ export async function POST(
     const formData = new FormData();
     formData.set("username", String(body.username ?? ""));
     formData.set("password", String(body.password ?? ""));
-    formData.set("role", String(body.role ?? ""));
+    formData.set("role", String(body.role ?? "User"));
+    if (body.role_id != null) {
+      formData.set("role_id", String(body.role_id));
+    }
     await addUser(hname, formData);
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -76,7 +79,10 @@ export async function PUT(
 
     const roleFormData = new FormData();
     roleFormData.set("id", String(body.id ?? ""));
-    roleFormData.set("role", String(body.role ?? ""));
+    roleFormData.set("role", String(body.role ?? "User"));
+    if (body.role_id != null) {
+      roleFormData.set("role_id", String(body.role_id));
+    }
     await updateUserRole(hname, roleFormData);
 
     return NextResponse.json({ ok: true });

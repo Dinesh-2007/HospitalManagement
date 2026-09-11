@@ -7,6 +7,7 @@ import { Backdrop } from "./backdrop";
 import { useSidebar } from "./context/SidebarContext";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { RBACProvider } from "./context/RBACContext";
 
 function DashboardShellContent({ children }: { children: React.ReactNode }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
@@ -24,6 +25,7 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
   const isPatientRegistrationEdit = pathname.endsWith("/patient-registration") && searchParams?.get("mode") === "edit";
   const isPatientProfile = pathname.endsWith("/patient-profile");
   const isPatientBookAppointment = pathname.endsWith("/patient-book-appointment");
+  const isAccessDenied = pathname.endsWith("/access-denied");
 
   const hideNavAndSidebar =
     pathname === "/" ||
@@ -50,12 +52,12 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen xl:flex">
-      {!hideNavAndSidebar && <Sidebar />}
-      {!hideNavAndSidebar && <Backdrop />}
+      {!hideNavAndSidebar && !isAccessDenied && <Sidebar />}
+      {!hideNavAndSidebar && !isAccessDenied && <Backdrop />}
       <div
         className={`flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out ${mainContentMargin}`}
       >
-        {!hideNavAndSidebar && <Header />}
+        {!hideNavAndSidebar && !isAccessDenied && <Header />}
         <main className="min-w-0 flex-1 bg-gray-50 dark:bg-gray-800">
           <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
         </main>
@@ -66,8 +68,10 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-800" />}>
-      <DashboardShellContent>{children}</DashboardShellContent>
-    </Suspense>
+    <RBACProvider>
+      <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-800" />}>
+        <DashboardShellContent>{children}</DashboardShellContent>
+      </Suspense>
+    </RBACProvider>
   );
 }

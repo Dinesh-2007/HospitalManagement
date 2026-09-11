@@ -5,7 +5,6 @@ import { usePathname, useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NavigationSection } from "../lib/navigation";
 import { navigation } from "../lib/navigation";
-import { getCurrentUser, getCurrentUserRole } from "../app/actions/user";
 import {
   BoxCubeIcon,
   BoxIcon,
@@ -19,6 +18,8 @@ import {
   UserCircleIcon,
 } from "./icons";
 import { useSidebar } from "./context/SidebarContext";
+import { useRBAC } from "./context/RBACContext";
+import { SettingsIcon } from "./icons";
 
 type OpenMap = Record<string, boolean>;
 
@@ -72,6 +73,10 @@ function getSectionIcon(title: string) {
       return <BoxCubeIcon />;
     case "Schedule":
       return <CalenderIcon />;
+    case "Manage Users":
+      return <GroupIcon />;
+    case "Settings":
+      return <SettingsIcon />;
     default:
       return <FolderIcon />;
   }
@@ -86,6 +91,7 @@ type ItemProps = {
   openMap: OpenMap;
   onToggle: (key: string) => void;
   hname?: string;
+  canAccess: (key: string) => boolean;
 };
 
 function SidebarItem({
@@ -97,6 +103,7 @@ function SidebarItem({
   openMap,
   onToggle,
   hname,
+  canAccess,
 }: ItemProps) {
   const nodeKey = getNodeKey(node, parentKey);
   const hasChildren = Boolean(node.items?.length);
@@ -104,13 +111,34 @@ function SidebarItem({
   const isOpen = Boolean(openMap[nodeKey]);
   const icon = level === 0 ? getSectionIcon(node.title) : null;
 
+  // Filter children that the user can access
+  const accessibleChildren = node.items?.filter((child) => {
+    if (child.items?.length) {
+      // Group node — only show if at least one child is accessible
+      return child.items.some((grandchild) =>
+        grandchild.href ? canAccess(grandchild.href) : true
+      );
+    }
+    return child.href ? canAccess(child.href) : true;
+  });
+
+  // Skip this node if it has children but none are accessible
+  if (hasChildren && (!accessibleChildren || accessibleChildren.length === 0)) {
+    return null;
+  }
+
+  // Skip leaf nodes the user can't access
+  if (!hasChildren && node.href && !canAccess(node.href)) {
+    return null;
+  }
+
   // Build local href optionally injecting the [Hname] directory
   let localHref = node.href ?? "#";
   if (hname && hname !== "HSMS" && localHref.startsWith("/") && localHref !== "/") {
     localHref = `/${encodeURIComponent(hname)}${localHref}`;
   }
 
-  if (!hasChildren) {
+  if (!hasChildren || !accessibleChildren?.length) {
     return (
       <li>
         <Link
@@ -157,7 +185,7 @@ function SidebarItem({
         <div className={`overflow-hidden transition-all duration-300 ${isOpen ? "mt-2" : "mt-0"}`}>
           {isOpen ? (
             <ul className={`${level === 0 ? "ml-9" : "ml-4"} space-y-1`}>
-              {node.items?.map((child) => (
+              {accessibleChildren?.map((child) => (
                 <SidebarItem
                   key={getNodeKey(child, nodeKey)}
                   node={child}
@@ -168,6 +196,7 @@ function SidebarItem({
                   openMap={openMap}
                   onToggle={onToggle}
                   hname={hname}
+                  canAccess={canAccess}
                 />
               ))}
             </ul>
@@ -190,25 +219,37 @@ export function Sidebar() {
   const { isExpanded, isHovered, isMobileOpen, setIsHovered } = useSidebar();
   const isCompact = !isExpanded && !isHovered && !isMobileOpen;
 
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const { isAdmin, canAccess, isLoading } = useRBAC();
 
-  useEffect(() => {
-    if (hname !== "HSMS") {
-      getCurrentUserRole(hname)
-        .then((role) => setCurrentUserRole(role ? role.toLowerCase() : null))
-        .catch(console.error);
-    }
-  }, [hname]);
-
+  // Filter navigation items based on RBAC
   const filteredNavigation = useMemo(() => {
-    return navigation.filter(nav => {
-      // Hide Manage Users for non-admin
-      if (nav.title === "Manage Users" && currentUserRole !== "admin") {
-        return false;
+    // Skip the "Hidden" section always
+    const visible = navigation.filter((nav) => nav.title !== "Hidden");
+
+    return visible.filter((nav) => {
+      // Admin-only items: only show to admin
+      if (nav.isAdminOnly) {
+        return isAdmin;
       }
+
+      // For items with href — check access
+      if (nav.href) {
+        return isLoading || canAccess(nav.href);
+      }
+
+      // For group items — check if at least one child is accessible
+      if (nav.items?.length) {
+        return nav.items.some((child) => {
+          if (child.items?.length) {
+            return child.items.some((gc) => gc.href ? (isLoading || canAccess(gc.href)) : true);
+          }
+          return child.href ? (isLoading || canAccess(child.href)) : true;
+        });
+      }
+
       return true;
     });
-  }, [currentUserRole]);
+  }, [isAdmin, canAccess, isLoading]);
 
   const initialOpen = useMemo(
     () => collectOpenKeys(filteredNavigation, normalizedPathname),
@@ -294,6 +335,7 @@ export function Sidebar() {
                     openMap={openMap}
                     onToggle={handleToggle}
                     hname={hname}
+                    canAccess={canAccess}
                   />
                 ))}
               </ul>

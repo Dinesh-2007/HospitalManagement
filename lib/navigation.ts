@@ -2,6 +2,8 @@ export type NavigationSection = {
   title: string;
   href?: string;
   items?: NavigationSection[];
+  /** If true, only admin users should see/access this nav item */
+  isAdminOnly?: boolean;
 };
 
 export const mastersData: NavigationSection[] = [
@@ -151,6 +153,12 @@ export const navigation: NavigationSection[] = [
   {
     title: "Manage Users",
     href: "/manage-users",
+    isAdminOnly: true,
+  },
+  {
+    title: "Settings",
+    href: "/settings",
+    isAdminOnly: true,
   },
   {
     title: "Hidden",
