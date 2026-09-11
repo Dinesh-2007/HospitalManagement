@@ -1,6 +1,7 @@
 "use client";
 
-import React, { FC, useEffect, useRef, useState } from "react";
+import React, { FC, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { defaultCountries, FlagImage } from "react-international-phone";
 import { parsePhoneNumber } from "libphonenumber-js";
 import "react-international-phone/style.css";
@@ -49,7 +50,20 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
   const [selectedIso2, setSelectedIso2] = useState<string>("in");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [dropdownCoords, setDropdownCoords] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Set default country based on context or prop override
   useEffect(() => {
@@ -152,6 +166,49 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
     onChange(fullNumber);
   };
 
+  // Calculate dropdown coordinates relative to viewport
+  const updateCoords = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const dropdownHeight = 260;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    const placeAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+    const availableHeight = placeAbove
+      ? Math.min(dropdownHeight, spaceAbove - 16)
+      : Math.min(dropdownHeight, spaceBelow - 16);
+
+    const top = placeAbove
+      ? rect.top - availableHeight - 6
+      : rect.bottom + 6;
+
+    const width = 288; // 18rem (w-72)
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) {
+      left = window.innerWidth - width - 12;
+    }
+    if (left < 12) {
+      left = 12;
+    }
+
+    setDropdownCoords({
+      top,
+      left,
+      maxHeight: Math.max(160, availableHeight),
+    });
+  }, []);
+
+  const handleToggleDropdown = () => {
+    if (disabled) return;
+    if (!isDropdownOpen) {
+      updateCoords();
+      setIsDropdownOpen(true);
+    } else {
+      setIsDropdownOpen(false);
+    }
+  };
+
   // Handle country selection
   const handleSelectCountry = (countryItem: CountryItem) => {
     setSelectedIso2(countryItem.iso2);
@@ -163,16 +220,52 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
     onChange(fullNumber);
   };
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click or escape key
   useEffect(() => {
+    if (!isDropdownOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
         setIsDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDropdownOpen]);
+
+  // Keep dropdown aligned on scroll or resize
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    updateCoords();
+
+    const handleScrollOrResize = (e: Event) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+        return;
+      }
+      updateCoords();
+    };
+
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [isDropdownOpen, updateCoords]);
 
   // Filter countries by search
   const filteredCountries = ALL_COUNTRIES.filter(
@@ -193,9 +286,10 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
 
       {/* Country Button on the Left displaying Flag AND Country Dial Code (+91) */}
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setIsDropdownOpen((prev) => !prev)}
+        onClick={handleToggleDropdown}
         className={`flex h-11 items-center gap-1.5 rounded-l-xl border border-r-0 bg-gray-50 px-3 text-sm font-medium text-gray-700 shadow-theme-xs transition dark:bg-gray-800 dark:text-gray-200 ${
           disabled ? "cursor-not-allowed opacity-60" : "hover:bg-gray-100 dark:hover:bg-gray-750"
         } ${borderClasses}`}
@@ -233,43 +327,57 @@ export const PhoneInputField: FC<PhoneInputProps> = ({
         } ${className}`}
       />
 
-      {/* Dropdown Menu for Country Selection */}
-      {isDropdownOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-72 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-          <input
-            type="text"
-            placeholder="Search country or code..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="mb-2 h-9 w-full rounded-lg border border-gray-200 px-3 text-xs focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            autoFocus
-          />
-          <div className="space-y-0.5 max-h-48 overflow-y-auto">
-            {filteredCountries.length === 0 ? (
-              <div className="p-2 text-xs text-gray-400 text-center">No country found</div>
-            ) : (
-              filteredCountries.map((c) => (
-                <button
-                  key={c.iso2}
-                  type="button"
-                  onClick={() => handleSelectCountry(c)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs transition ${
-                    c.iso2 === currentCountry.iso2
-                      ? "bg-brand-50 font-semibold text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
-                      : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <FlagImage iso2={c.iso2} style={{ width: "18px", height: "12px", borderRadius: "2px" }} />
-                    <span className="truncate">{c.name}</span>
-                  </div>
-                  <span className="font-mono text-gray-400 dark:text-gray-500 ml-2">{c.dialCode}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {/* Dropdown Menu for Country Selection portaled to document.body so it floats over blur and modals */}
+      {isDropdownOpen &&
+        mounted &&
+        dropdownCoords &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: "fixed",
+              top: `${dropdownCoords.top}px`,
+              left: `${dropdownCoords.left}px`,
+              maxHeight: `${dropdownCoords.maxHeight}px`,
+              zIndex: 99999,
+            }}
+            className="w-72 flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-2 shadow-2xl dark:border-gray-800 dark:bg-gray-900"
+          >
+            <input
+              type="text"
+              placeholder="Search country or code..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="mb-2 h-9 w-full shrink-0 rounded-lg border border-gray-200 px-3 text-xs focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              autoFocus
+            />
+            <div className="space-y-0.5 overflow-y-auto flex-1">
+              {filteredCountries.length === 0 ? (
+                <div className="p-2 text-xs text-gray-400 text-center">No country found</div>
+              ) : (
+                filteredCountries.map((c) => (
+                  <button
+                    key={c.iso2}
+                    type="button"
+                    onClick={() => handleSelectCountry(c)}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs transition ${
+                      c.iso2 === currentCountry.iso2
+                        ? "bg-brand-50 font-semibold text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
+                        : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <FlagImage iso2={c.iso2} style={{ width: "18px", height: "12px", borderRadius: "2px" }} />
+                      <span className="truncate">{c.name}</span>
+                    </div>
+                    <span className="font-mono text-gray-400 dark:text-gray-500 ml-2">{c.dialCode}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

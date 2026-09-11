@@ -57,7 +57,7 @@ export async function GET(
           c.* 
         FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
         LEFT JOIN ${quoteIdentifier(CONSULTATION_TABLE)} c ON a.id = (CASE WHEN c.token_number ~ '^[0-9]+$' THEN CAST(c.token_number AS BIGINT) ELSE NULL END)
-        LEFT JOIN ${quoteIdentifier("vitals")} v ON v.patient_id = a.patient_id
+        LEFT JOIN ${quoteIdentifier("vitals")} v ON (v.appointment_id = a.id OR (v.appointment_id IS NULL AND v.patient_id = a.patient_id))
         WHERE a.patient_name = $1
         ORDER BY a.appointment_date DESC, a.appointment_time DESC
       `;

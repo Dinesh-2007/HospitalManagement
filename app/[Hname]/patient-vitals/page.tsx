@@ -477,7 +477,6 @@ export default function PatientVitalsPage() {
                       ["spo2", "SpO2 (%)"],
                       ["bloodSugar", "Blood Sugar (Optional)"],
                       ["remarks", "Remarks"],
-                      ["status", "Status"],
                     ].map(([key, label]) => {
                       let value = form[key as keyof FormState];
                       // Format date nicely if it's DOB
@@ -522,7 +521,6 @@ export default function PatientVitalsPage() {
                       ["spo2", "SpO2 (%)", "text", ""],
                       ["bloodSugar", "Blood Sugar (Optional)", "text", ""],
                       ["remarks", "Remarks", "textarea", ""],
-                      ["status", "Status", "select", ""],
                     ].map(([key, label, type, placeholder]) => {
                       const isDemographic = ["patientId", "patientName", "mobile", "age", "gender"].includes(key);
                       return (
@@ -537,17 +535,11 @@ export default function PatientVitalsPage() {
                               disabled={isDemographic}
                               className="h-11 w-full rounded-lg border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-default dark:disabled:bg-gray-800/30 dark:disabled:text-gray-500 transition"
                             >
-                              {key === "gender"
-                                ? ["", "Male", "Female", "Other"].map((option) => (
-                                  <option key={option} value={option}>
-                                    {option || "Select Gender"}
-                                  </option>
-                                ))
-                                : ["Active", "Inactive"].map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
+                              {["", "Male", "Female", "Other"].map((option) => (
+                                <option key={option} value={option}>
+                                  {option || "Select Gender"}
+                                </option>
+                              ))}
                             </select>
                           ) : type === "textarea" ? (
                             <textarea

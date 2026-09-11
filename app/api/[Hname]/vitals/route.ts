@@ -48,7 +48,8 @@ async function ensureTables(pool: Awaited<ReturnType<typeof getTenantDB>>) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ${quoteIdentifier(VITALS_TABLE)} (
       id BIGSERIAL PRIMARY KEY,
-      patient_id TEXT UNIQUE NOT NULL,
+      appointment_id BIGINT,
+      patient_id TEXT NOT NULL,
       patient_name TEXT NOT NULL,
       dob DATE,
       age NUMERIC,
@@ -71,6 +72,13 @@ async function ensureTables(pool: Awaited<ReturnType<typeof getTenantDB>>) {
     )
   `);
 
+  await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS appointment_id BIGINT`);
+  try {
+    await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} DROP CONSTRAINT IF EXISTS vitals_patient_id_key`);
+  } catch {}
+  try {
+    await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} DROP CONSTRAINT IF EXISTS vitals_patient_id_unique`);
+  } catch {}
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS dob DATE`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS age NUMERIC`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS gender TEXT`);
@@ -87,6 +95,27 @@ async function ensureTables(pool: Awaited<ReturnType<typeof getTenantDB>>) {
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS bmi NUMERIC`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS remarks TEXT`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(VITALS_TABLE)} ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Active'`);
+
+  // Backfill any legacy vitals rows where appointment_id is null by associating with the appointment created around that time
+  try {
+    await pool.query(`
+      UPDATE ${quoteIdentifier(VITALS_TABLE)} v
+      SET appointment_id = sub.aid
+      FROM (
+        SELECT a.id AS aid, v2.id AS vid
+        FROM ${quoteIdentifier(VITALS_TABLE)} v2
+        JOIN LATERAL (
+          SELECT id FROM ${quoteIdentifier(APPOINTMENTS_TABLE)}
+          WHERE (patient_id = v2.patient_id OR patient_name = v2.patient_name)
+            AND created_at <= v2.created_at + INTERVAL '1 hour'
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) a ON true
+        WHERE v2.appointment_id IS NULL
+      ) sub
+      WHERE v.id = sub.vid AND v.appointment_id IS NULL
+    `);
+  } catch {}
 }
 
 async function ensureAppointmentsTable(pool: Awaited<ReturnType<typeof getTenantDB>>) {
@@ -275,6 +304,8 @@ export async function GET(
                 p.inactive_from,
                 p.inactive_reason,
                 v.id AS vitals_id,
+                v.dob AS dob,
+                v.age AS age,
                 v.registration_date,
                 v.height_cm,
                 v.weight_kg,
@@ -309,11 +340,7 @@ export async function GET(
                   )
                 )
               LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
-                ON v.patient_id = COALESCE(
-                  NULLIF(a.patient_id, ''),
-                  NULLIF(p.patient_id, ''),
-                  NULLIF(p.id::text, '')
-                )
+                ON v.appointment_id = a.id
               LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
                 ON (
                   (dce.token_number IS NOT NULL AND dce.token_number <> '' AND (
@@ -388,6 +415,8 @@ export async function GET(
             p.inactive_from,
             p.inactive_reason,
             v.id AS vitals_id,
+            v.dob AS dob,
+            v.age AS age,
             v.registration_date,
             v.height_cm,
             v.weight_kg,
@@ -422,11 +451,7 @@ export async function GET(
               )
             )
           LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
-            ON v.patient_id = COALESCE(
-              NULLIF(a.patient_id, ''),
-              NULLIF(p.patient_id, ''),
-              NULLIF(p.id::text, '')
-            )
+            ON v.appointment_id = a.id
           LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
             ON (
               (dce.token_number IS NOT NULL AND dce.token_number <> '' AND (
@@ -533,12 +558,18 @@ export async function POST(
 
     const bmi = calculateBmi(heightCm, weightKg);
 
-    const existing = await pool.query(
-      `SELECT id FROM ${quoteIdentifier(VITALS_TABLE)} WHERE patient_id = $1 LIMIT 1`,
-      [patientId],
-    );
+    const existing = appointmentId
+      ? await pool.query(
+          `SELECT id FROM ${quoteIdentifier(VITALS_TABLE)} WHERE appointment_id = $1 LIMIT 1`,
+          [appointmentId],
+        )
+      : await pool.query(
+          `SELECT id FROM ${quoteIdentifier(VITALS_TABLE)} WHERE patient_id = $1 AND appointment_id IS NULL LIMIT 1`,
+          [patientId],
+        );
 
     if ((existing.rowCount ?? 0) > 0) {
+      const existingId = existing.rows[0].id;
       const updated = await pool.query(
         `
           UPDATE ${quoteIdentifier(VITALS_TABLE)}
@@ -558,8 +589,10 @@ export async function POST(
               bmi = $14,
               remarks = $15,
               status = $16,
+              appointment_id = $17,
+              patient_id = $18,
               updated_at = NOW()
-          WHERE patient_id = $17
+          WHERE id = $19
           RETURNING *
         `,
         [
@@ -579,7 +612,9 @@ export async function POST(
           bmi,
           remarks || null,
           status,
+          appointmentId || null,
           patientId,
+          existingId,
         ],
       );
       return NextResponse.json({ row: updated.rows[0], updated: true });
@@ -588,6 +623,7 @@ export async function POST(
     const inserted = await pool.query(
       `
         INSERT INTO ${quoteIdentifier(VITALS_TABLE)} (
+          appointment_id,
           patient_id,
           patient_name,
           dob,
@@ -606,10 +642,11 @@ export async function POST(
           remarks,
           status
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         RETURNING *
       `,
       [
+        appointmentId || null,
         patientId,
         patientName,
         dob,

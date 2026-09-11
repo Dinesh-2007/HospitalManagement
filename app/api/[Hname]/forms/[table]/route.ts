@@ -556,9 +556,9 @@ export async function PUT(
     const body = (await request.json()) as PutBody;
     const fields = [...(body.fields ?? [])];
     const values = { ...(body.values ?? {}) };
-    const id = body.id;
+    const id = body.id !== undefined && body.id !== null ? Number(body.id) : NaN;
 
-    if (!Number.isInteger(id) || Number(id) <= 0) {
+    if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: "A valid record id is required." }, { status: 400 });
     }
 

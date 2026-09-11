@@ -28,6 +28,19 @@ async function loadDoctorProfile(hname: string, username: string) {
   return normalizeDoctorProfileRow(data.row ?? null);
 }
 
+function calculateAge(dob: string) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return isFinite(age) && age >= 0 ? age : null;
+}
+
 type QueueTab = "Upcoming" | "Draft" | "Completed";
 type DetailTab = "Patient Details" | "Vitals" | "Consultation Form" | "History";
 type PatientType = "OP" | "IP";
@@ -56,6 +69,8 @@ type ConsultationRow = Record<string, unknown> & {
   remarks?: string;
   followUpDays?: string;
   follow_up_days?: string;
+  nextVisitDate?: string;
+  next_visit_date?: string;
   consultationAmount?: string;
   consultation_amount?: string;
   prescriptionData?: string;
@@ -728,6 +743,7 @@ const DEFAULT_FORM_VALUES = {
   treatmentDoctors: "[]",
   remarks: "",
   instructions: "",
+  nextVisitDate: "",
   followUpDays: "",
   patientOutcome: "",
   patientOutcomeNotes: "",
@@ -769,9 +785,17 @@ export default function DoctorConsultationPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<"Draft" | "Completed" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => {
+      setSuccessMessage("");
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
 
   const [icdQuery, setIcdQuery] = useState("");
   const [icdResults, setIcdResults] = useState<any[]>([]);
@@ -1003,7 +1027,12 @@ export default function DoctorConsultationPage() {
       })()],
       ["Patient Name", pName],
       ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
-      ["Age", text(selectedPatientRow, ["registration_age", "age"]) ? `${text(selectedPatientRow, ["registration_age", "age"])} Yrs` : ""],
+      ["Age", (() => {
+        const rawAge = text(selectedPatientRow, ["registration_age", "age", "vitals_age"]);
+        const dobVal = text(selectedPatientRow, ["registration_dob", "dob"]);
+        const calcAge = rawAge || (dobVal ? (calculateAge(dobVal) !== null ? String(calculateAge(dobVal)) : "") : "");
+        return calcAge ? `${calcAge} Yrs` : "";
+      })()],
       ["Gender", text(selectedPatientRow, ["registration_gender", "gender"])],
       ["Contact Number", text(selectedPatientRow, ["registration_mobile", "mobile", "patient_phone"])],
       ["Address", text(selectedPatientRow, ["registration_address", "address"])],
@@ -1017,9 +1046,11 @@ export default function DoctorConsultationPage() {
 
   const vitalsDetailFields = useMemo(() => {
     if (!selectedPatientRow) return [];
+    const rawAge = text(selectedPatientRow, ["age", "vitals_age", "registration_age"]);
+    const dobVal = text(selectedPatientRow, ["dob", "registration_dob"]);
+    const computedAge = rawAge || (dobVal ? (calculateAge(dobVal) !== null ? String(calculateAge(dobVal)) : "") : "");
     return [
-      ["Vitals Status", text(selectedPatientRow, ["vitals_status"]) || "Active"],
-      ["Age", text(selectedPatientRow, ["age"])],
+      ["Age", computedAge ? `${computedAge} Yrs` : ""],
       ["Height (cm)", text(selectedPatientRow, ["height_cm"])],
       ["Weight (kg)", text(selectedPatientRow, ["weight_kg"])],
       ["BMI", text(selectedPatientRow, ["bmi"])],
@@ -1073,10 +1104,10 @@ export default function DoctorConsultationPage() {
     setPatientType(text(row, ["patientType", "patient_type"]) === "IP" ? "IP" : "OP");
     setSelectedPatientRow(matchedPatient ?? { appointment_id: tokenNumber, appointment_patient_name: selectedName });
     setDetailTab("Consultation Form");
-    setEditingRecordId(row.id);
+    setEditingRecordId(row.id ? Number(row.id) : null);
     // Auto-select doctor for patient in admin side
     const docName = text(row, ["doctor", "dutyDoctorName", "duty_doctor_name"]);
-    if (docName && userRole.toLowerCase() === "admin") {
+    if (docName && (userRole.toLowerCase() === "admin" || !selectedDoctor)) {
       setSelectedDoctor(docName);
     }
     setFormValues({
@@ -1096,6 +1127,7 @@ export default function DoctorConsultationPage() {
       treatmentDoctors: text(row, ["treatmentDoctors", "treatment_notes", "treatment_doctors"]) || "[]",
       remarks: text(row, ["remarks"]),
       instructions: text(row, ["instructions"]),
+      nextVisitDate: text(row, ["nextVisitDate", "next_visit_date", "followUpDays", "follow_up_days"]),
       followUpDays: text(row, ["followUpDays", "follow_up_days"]),
       patientOutcome: text(row, ["patientOutcome", "patient_outcome"]),
       patientOutcomeNotes: text(row, ["patientOutcomeNotes", "patient_outcome_notes"]) || "",
@@ -1117,17 +1149,17 @@ export default function DoctorConsultationPage() {
   };
 
   const saveForm = async (status: "Draft" | "Completed", isSended?: boolean) => {
-    setIsSubmitting(true);
+    setSubmittingAction(status);
     setErrorMessage("");
     setSuccessMessage("");
     try {
       const finalSended = (isSended || status === "Completed") ? "Yes" : formValues.sended;
       const payload = {
-        id: editingRecordId,
+        id: editingRecordId ? Number(editingRecordId) : null,
         cardTitle: "Doctor Consultation Entry",
         fields: Object.keys(DEFAULT_FORM_VALUES).filter(k => !["tokenNumber", "patientDetails", "sended"].includes(k)).map(k => ({
           id: k,
-          type: k === "carePlans" ? "multiselect" : "text"
+          type: k === "carePlans" ? "multiselect" : k === "nextVisitDate" ? "date" : "text"
         })).concat([
           { id: "status", type: "text" },
           { id: "doctor", type: "text" },
@@ -1147,7 +1179,7 @@ export default function DoctorConsultationPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to save.");
 
-      setSuccessMessage(`Consultation saved as ${status}.`);
+      setSuccessMessage(status === "Completed" ? "Consultation completed successfully." : "Consultation saved as draft.");
       setFormValues({ ...DEFAULT_FORM_VALUES });
       setPatientType("OP");
       setEditingRecordId(null);
@@ -1173,7 +1205,7 @@ export default function DoctorConsultationPage() {
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save.");
     } finally {
-      setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
@@ -1520,7 +1552,19 @@ export default function DoctorConsultationPage() {
                       1. Clinical Assessment
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Present Illness</label>
+                        <textarea value={formValues.presentIllness} onChange={e => updateFormValue("presentIllness", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                      </div>
                       <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Past History</label>
+                        <textarea value={formValues.patientPastHistory} onChange={e => updateFormValue("patientPastHistory", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient past history..." />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Provisional Diagnosis</label>
+                        <textarea value={formValues.provisionalDiagnosis} onChange={e => updateFormValue("provisionalDiagnosis", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter provisional diagnosis..." />
+                      </div>
+                      <div className={formValues.allergies === "Yes" ? "" : "md:col-span-2"}>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Allergies</label>
                         <div className="flex gap-4">
                           {(["Yes", "No"]).map(opt => (
@@ -1549,18 +1593,6 @@ export default function DoctorConsultationPage() {
                           />
                         </div>
                       )}
-                      <div className="md:col-span-2">
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Present Illness</label>
-                        <textarea value={formValues.presentIllness} onChange={e => updateFormValue("presentIllness", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Past History</label>
-                        <textarea value={formValues.patientPastHistory} onChange={e => updateFormValue("patientPastHistory", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter patient past history..." />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Provisional Diagnosis</label>
-                        <textarea value={formValues.provisionalDiagnosis} onChange={e => updateFormValue("provisionalDiagnosis", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" placeholder="Enter provisional diagnosis..." />
-                      </div>
                       <div className="md:col-span-2">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Symptoms</label>
                         <MultiSelectDropdown
@@ -1668,7 +1700,7 @@ export default function DoctorConsultationPage() {
                         onChange={val => updateFormValue("prescriptionData", val)}
                         isSended={queueTab === "Draft" ? false : (formValues.sended === "Yes" || queueTab === "Completed")}
                         onSendToPharmacy={handleSendToPharmacy}
-                        isSubmitting={isSubmitting}
+                        isSubmitting={submittingAction !== null}
                       />
                       <div className="mt-4">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Prescription Notes / Instructions</label>
@@ -1698,8 +1730,18 @@ export default function DoctorConsultationPage() {
                         <textarea value={formValues.instructions} onChange={e => updateFormValue("instructions", e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Follow-up Days</label>
-                        <input type="number" min="0" value={formValues.followUpDays} onChange={e => updateFormValue("followUpDays", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white" />
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Next visit date</label>
+                        <input
+                          type="date"
+                          value={formValues.nextVisitDate}
+                          onChange={e => updateFormValue("nextVisitDate", e.target.value)}
+                          onClick={e => {
+                            try {
+                              (e.target as any).showPicker?.();
+                            } catch { }
+                          }}
+                          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white cursor-pointer"
+                        />
                       </div>
                       <div>
                         <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Patient Category</label>
@@ -1825,42 +1867,44 @@ export default function DoctorConsultationPage() {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Attender Signature</label>
-                        <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-3">
-                            <label className="flex h-10 flex-1 cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-600 transition hover:border-brand-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
-                              <span className="truncate text-xs">
-                                {formValues.attenderSignature ? "Signature Uploaded" : "Upload Signature Image..."}
-                              </span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={e => handleSignatureUpload(e.target.files?.[0] ?? null)}
-                              />
-                            </label>
+                      {patientType === "IP" && (
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Attender Signature</label>
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-3">
+                              <label className="flex h-10 flex-1 cursor-pointer items-center justify-between rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-600 transition hover:border-brand-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                                <span className="truncate text-xs">
+                                  {formValues.attenderSignature ? "Signature Uploaded" : "Upload Signature Image..."}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => handleSignatureUpload(e.target.files?.[0] ?? null)}
+                                />
+                              </label>
+                              {formValues.attenderSignature && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateFormValue("attenderSignature", "")}
+                                  className="text-xs font-semibold text-red-500 hover:text-red-700"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
                             {formValues.attenderSignature && (
-                              <button
-                                type="button"
-                                onClick={() => updateFormValue("attenderSignature", "")}
-                                className="text-xs font-semibold text-red-500 hover:text-red-700"
-                              >
-                                Clear
-                              </button>
+                              <div className="relative mt-1 h-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-950 flex items-center justify-center">
+                                <img
+                                  src={formValues.attenderSignature}
+                                  alt="Attender Signature Preview"
+                                  className="max-h-full max-w-full object-contain"
+                                />
+                              </div>
                             )}
                           </div>
-                          {formValues.attenderSignature && (
-                            <div className="relative mt-1 h-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-950 flex items-center justify-center">
-                              <img
-                                src={formValues.attenderSignature}
-                                alt="Attender Signature Preview"
-                                className="max-h-full max-w-full object-contain"
-                              />
-                            </div>
-                          )}
                         </div>
-                      </div>
+                      )}
 
                       <div>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Records Handed Over By</label>
@@ -1893,21 +1937,21 @@ export default function DoctorConsultationPage() {
                     </button>
                     <button
                       type="button"
-                      disabled={isSubmitting || !selectedDoctor}
+                      disabled={submittingAction !== null || !selectedDoctor}
                       onClick={() => saveForm("Draft")}
                       className="rounded-lg border border-brand-500 px-5 py-2.5 text-sm font-medium text-brand-500 hover:bg-brand-50 disabled:opacity-50 transition shadow-sm dark:hover:bg-brand-900/20"
                       title={!selectedDoctor ? "Please select a doctor first" : "Save as draft"}
                     >
-                      {isSubmitting ? "Saving..." : "Save as Draft"}
+                      {submittingAction === "Draft" ? "Saving..." : "Save as Draft"}
                     </button>
                     <button
                       type="button"
-                      disabled={isSubmitting || !selectedDoctor}
+                      disabled={submittingAction !== null || !selectedDoctor}
                       onClick={() => saveForm("Completed")}
                       className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 transition shadow-sm"
-                      title={!selectedDoctor ? "Please select a doctor first" : "Save and mark completed"}
+                      title={!selectedDoctor ? "Please select a doctor first" : "Complete consultation"}
                     >
-                      {isSubmitting ? "Saving..." : "Save"}
+                      {submittingAction === "Completed" ? "Completing..." : "Complete"}
                     </button>
                   </div>
                 </form>
@@ -1916,6 +1960,31 @@ export default function DoctorConsultationPage() {
           </div>
         </div>
       </div>
+
+      {/* Top Right Success Toast Notification */}
+      {successMessage && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-lg shadow-emerald-500/10 dark:border-emerald-800/50 dark:bg-gray-900 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div className="mr-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Success</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{successMessage}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage("")}
+            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition"
+            aria-label="Close notification"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </>
   );
 }

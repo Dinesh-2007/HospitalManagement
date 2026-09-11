@@ -7,7 +7,20 @@ import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 import { PhoneInputField } from "../../../components/ui/phone-input";
-import { isValidPhoneNumber } from "libphonenumber-js";
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
+
+function isValidTenDigitPhone(phone: string): boolean {
+  if (!phone) return false;
+  try {
+    const parsed = parsePhoneNumber(phone);
+    if (parsed?.nationalNumber) {
+      return parsed.nationalNumber.length === 10 && isValidPhoneNumber(phone);
+    }
+  } catch {
+    // fallback
+  }
+  return false;
+}
 
 type VitalsRow = Record<string, unknown> & { appointment_end_time?: string | null, appointment_check_in_time?: string | null };
 
@@ -121,8 +134,8 @@ export default function CheckInPage() {
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setWalkInError("");
-    if (!isValidPhoneNumber(walkInPhone)) {
-      setWalkInError("Please enter a valid mobile number with country code.");
+    if (!isValidTenDigitPhone(walkInPhone)) {
+      setWalkInError("Please enter a valid 10-digit mobile number with country code.");
       return;
     }
     setWalkInSubmitting(true);
@@ -840,7 +853,7 @@ export default function CheckInPage() {
                           placeholder="Enter mobile number"
                         />
                       </div>
-                      {isValidPhoneNumber(walkInPhone) && !showWalkInOtp && (
+                      {isValidTenDigitPhone(walkInPhone) && !showWalkInOtp && (
                         <button
                           type="button"
                           onClick={() => setShowWalkInOtp(true)}
