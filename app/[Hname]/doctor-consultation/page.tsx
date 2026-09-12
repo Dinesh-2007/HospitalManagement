@@ -1014,6 +1014,22 @@ export default function DoctorConsultationPage() {
     const pid = (rawPid.toLowerCase() === pName.toLowerCase()) ? "" : rawPid;
     return [
       ["Patient ID", pid],
+      ["Patient Name", pName],
+      ["Contact Number", text(selectedPatientRow, ["registration_mobile", "mobile", "patient_phone"])],
+      ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
+      ["Age", (() => {
+        const rawAge = text(selectedPatientRow, ["registration_age", "age", "vitals_age"]);
+        const dobVal = text(selectedPatientRow, ["registration_dob", "dob"]);
+        const calcAge = rawAge || (dobVal ? (calculateAge(dobVal) !== null ? String(calculateAge(dobVal)) : "") : "");
+        return calcAge ? `${calcAge} Yrs` : "";
+      })()],
+      ["Gender", text(selectedPatientRow, ["registration_gender", "gender"])],
+      ["Address", text(selectedPatientRow, ["registration_address", "address"])],
+      ["City", text(selectedPatientRow, ["registration_city", "city"])],
+      ["State", text(selectedPatientRow, ["registration_state", "state"])],
+      ["Country", text(selectedPatientRow, ["registration_country", "country"])],
+      ["Zip Code", text(selectedPatientRow, ["registration_zip_code", "zip_code"])],
+      ["Email", text(selectedPatientRow, ["registration_email", "email"])],
       ["Appointment Number", (() => {
         const num = text(selectedPatientRow, ["appointment_number"]);
         if (!num) return "";
@@ -1025,22 +1041,6 @@ export default function DoctorConsultationPage() {
           ? (dateCompact ? `WK-${dateCompact}-${String(num).padStart(4, "0")}` : `WK-${String(num).padStart(4, "0")}`)
           : (dateCompact ? `APT-${dateCompact}-${String(num).padStart(4, "0")}` : `APT-${String(num).padStart(4, "0")}`);
       })()],
-      ["Patient Name", pName],
-      ["Date of Birth", formatDisplayDate(text(selectedPatientRow, ["registration_dob", "dob"]))],
-      ["Age", (() => {
-        const rawAge = text(selectedPatientRow, ["registration_age", "age", "vitals_age"]);
-        const dobVal = text(selectedPatientRow, ["registration_dob", "dob"]);
-        const calcAge = rawAge || (dobVal ? (calculateAge(dobVal) !== null ? String(calculateAge(dobVal)) : "") : "");
-        return calcAge ? `${calcAge} Yrs` : "";
-      })()],
-      ["Gender", text(selectedPatientRow, ["registration_gender", "gender"])],
-      ["Contact Number", text(selectedPatientRow, ["registration_mobile", "mobile", "patient_phone"])],
-      ["Address", text(selectedPatientRow, ["registration_address", "address"])],
-      ["City", text(selectedPatientRow, ["registration_city", "city"])],
-      ["State", text(selectedPatientRow, ["registration_state", "state"])],
-      ["Country", text(selectedPatientRow, ["registration_country", "country"])],
-      ["Zip Code", text(selectedPatientRow, ["registration_zip_code", "zip_code"])],
-      ["Email", text(selectedPatientRow, ["registration_email", "email"])],
     ].filter(([, val]) => val !== "");
   }, [selectedPatientRow]);
 

@@ -348,7 +348,19 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                             {/* ── Patient Details ── */}
                             {tab === "Patient Details" && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {/* ── Demographic fields: Patient ID → Name → Mobile → DOB → Age → Gender → Address ── */}
+                                    <InfoField label="Patient ID" value={row.patientId} />
                                     <InfoField label="Patient Name" value={row.patientDetails} />
+                                    {vitalsData && (
+                                        <>
+                                            <InfoField label="Mobile" value={String(vitalsData.mobile ?? "")} />
+                                            <InfoField label="Date of Birth" value={vitalsData.dob ? String(vitalsData.dob).slice(0, 10) : undefined} />
+                                            <InfoField label="Age" value={vitalsData.age ? `${vitalsData.age} Yrs` : undefined} />
+                                            <InfoField label="Gender" value={String(vitalsData.gender ?? "")} />
+                                            <InfoField label="Address" value={String(vitalsData.address ?? "")} />
+                                        </>
+                                    )}
+                                    {/* ── Clinical / Appointment fields ── */}
                                     <InfoField label="Appointment / Token" value={(() => {
                                         if (!row.tokenNumber) return undefined;
                                         const isWalkInPatient = String(row.patientType).toLowerCase() === "walk-in" || String(row.patientType).toLowerCase() === "walk in" || String(row.patientType).toLowerCase() === "walk-id";
@@ -364,15 +376,6 @@ function DetailPanel({ row, hname, onClose }: DetailPanelProps) {
                                     <InfoField label="Consultation Amount" value={row.consultationAmount ? formatCurrency(Number(row.consultationAmount)) : undefined} />
                                     <InfoField label="Follow-up Days" value={row.followUpDays ? `${row.followUpDays} day(s)` : undefined} />
                                     <InfoField label="Date" value={row.updatedAt ? formatDisplayDate(row.updatedAt.slice(0, 10)) : undefined} />
-                                    {/* Additional info from vitals record */}
-                                    {vitalsData && (
-                                        <>
-                                            <InfoField label="Gender" value={String(vitalsData.gender ?? "")} />
-                                            <InfoField label="Date of Birth" value={vitalsData.dob ? String(vitalsData.dob).slice(0, 10) : undefined} />
-                                            <InfoField label="Address" value={String(vitalsData.address ?? "")} />
-                                            <InfoField label="Mobile" value={String(vitalsData.mobile ?? "")} />
-                                        </>
-                                    )}
                                 </div>
                             )}
 
