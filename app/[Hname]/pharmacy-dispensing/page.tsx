@@ -191,6 +191,7 @@ export default function PharmacyDispensingPage() {
   const [addDispenseError, setAddDispenseError] = useState("");
   const [foundPatient, setFoundPatient] = useState<PatientRow | null>(null);
   const [dispenseHistory, setDispenseHistory] = useState<DispensingBillRecord[]>([]);
+  const [selectedBill, setSelectedBill] = useState<DispensingBillRecord | null>(null);
 
   // ── Medicine selection modal state ───────────────────────────────────────────
   const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
@@ -1293,7 +1294,11 @@ export default function PharmacyDispensingPage() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                         {dispensingBills.map((bill) => (
-                          <tr key={bill.id}>
+                          <tr
+                            key={bill.id}
+                            onClick={() => setSelectedBill(bill)}
+                            className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
+                          >
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
                             <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
                             <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
@@ -1379,6 +1384,117 @@ export default function PharmacyDispensingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Patient Detail Modal ──────────────────────────────────────────────── */}
+      {selectedBill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedBill(null)}
+        >
+          <div
+            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/40">
+                  <svg className="h-5 w-5 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {selectedBill.patient_name || "Patient Details"}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Token: {selectedBill.token_number || "—"}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBill(null)}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {[
+                  { label: "Patient Name", value: selectedBill.patient_name || "—" },
+                  { label: "Mobile", value: selectedBill.patient_phone || "—" },
+                  { label: "Token Number", value: selectedBill.token_number || "—" },
+                  { label: "Billing Amount", value: selectedBill.billing_amount != null ? `Rs. ${Number(selectedBill.billing_amount).toFixed(2)}` : "Rs. 0.00" },
+                  { label: "Payment Status", value: selectedBill.payment_status || "Pending" },
+                  { label: "Date", value: formatDate(selectedBill.created_at) },
+                  { label: "Type", value: (selectedBill.pharmacy_only === "1" || selectedBill.pharmacy_only === "true") ? "Pharmacy Only" : "Consultation" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+                    <p className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Medicine list */}
+              {(() => {
+                let lines: MedicineRow[] = [];
+                try {
+                  const parsed = selectedBill.medicine_lines ? JSON.parse(selectedBill.medicine_lines) : [];
+                  if (Array.isArray(parsed)) lines = parsed;
+                } catch { lines = []; }
+                return lines.length > 0 ? (
+                  <div>
+                    <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Medicines Dispensed</h4>
+                    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                        <thead className="bg-gray-50 dark:bg-gray-800/60">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">#</th>
+                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Medicine Name</th>
+                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Prescribed</th>
+                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Received</th>
+                            <th className="px-4 py-2.5 text-right font-semibold text-gray-600 dark:text-gray-300">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {lines.map((line, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                              <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                              <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">{line.medicineName || "—"}</td>
+                              <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{line.prescribedQty || "—"}</td>
+                              <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{line.receivedQty || "—"}</td>
+                              <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-white">
+                                {line.medicineAmount ? `Rs. ${line.medicineAmount}` : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end border-t border-gray-200 px-6 py-4 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setSelectedBill(null)}
+                className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Select Medicines Modal Overlay */}
       {isMedicineModalOpen && (
