@@ -26,6 +26,7 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
   const isPatientProfile = pathname.endsWith("/patient-profile");
   const isPatientBookAppointment = pathname.endsWith("/patient-book-appointment");
   const isAccessDenied = pathname.endsWith("/access-denied");
+  const isSuperAdmin = pathname.startsWith("/SuperAdmin");
 
   const hideNavAndSidebar =
     pathname === "/" ||
@@ -40,7 +41,8 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
     isPatientAppointments ||
     isPatientHistory ||
     isPatientProfile ||
-    isPatientRegistrationEdit;
+    isPatientRegistrationEdit ||
+    isSuperAdmin; // SuperAdmin has its own shell
 
   const mainContentMargin = isMobileOpen
     ? "ml-0"
@@ -59,7 +61,11 @@ function DashboardShellContent({ children }: { children: React.ReactNode }) {
       >
         {!hideNavAndSidebar && !isAccessDenied && <Header />}
         <main className="min-w-0 flex-1 bg-gray-50 dark:bg-gray-800">
-          <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
+          {isSuperAdmin ? (
+            children
+          ) : (
+            <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
+          )}
         </main>
       </div>
     </div>

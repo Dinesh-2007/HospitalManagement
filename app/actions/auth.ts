@@ -6,6 +6,13 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcrypt";
 import { signPermissionJWT, permsCookieName } from "../../lib/jwt";
 import { resolveUserPermissions, ensureRBACTables } from "./rbac";
+import {
+  isTenantEnabled,
+  getTenantFeatureGates,
+  tenantGatesCookieName,
+  signTenantGatesJWT,
+  ensureSuperAdminTables,
+} from "../../lib/super-admin";
 
 export async function loginAction(formData: FormData) {
   const hname = String(formData.get("hname") ?? "").trim();
@@ -14,6 +21,13 @@ export async function loginAction(formData: FormData) {
 
   if (!hname || !username || !password) {
     throw new Error("Missing credentials");
+  }
+
+  // ── Tenant enabled check ────────────────────────────────────────────────────
+  await ensureSuperAdminTables();
+  const enabled = await isTenantEnabled(hname);
+  if (!enabled) {
+    throw new Error("This account has been suspended. Please contact support.");
   }
 
   const pool = await getTenantDB(hname);
@@ -43,23 +57,21 @@ export async function loginAction(formData: FormData) {
   // Sign a permission JWT and store it as a cookie
   const permJWT = await signPermissionJWT({ sub: username, pages: allowedPages });
 
-  // Set auth cookie
+  // ── Tenant feature gates cookie ─────────────────────────────────────────────
+  // Bake the tenant's feature gates into a signed cookie so the middleware can
+  // check them without a DB call.
+  const featureGateKeys = await getTenantFeatureGates(hname);
+  const tenantGatesJWT = await signTenantGatesJWT(hname, featureGateKeys);
+
+  // Set all cookies
   const cookieStore = await cookies();
   const cookieKey = `auth_${hname.replace(/[^a-zA-Z0-9]/g, "_")}`;
-  cookieStore.set(cookieKey, username, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-  });
+  const cookieOpts = { path: "/", httpOnly: true, sameSite: "lax" as const };
+  const cookieOptsWithMaxAge = { ...cookieOpts, maxAge: 60 * 60 * 24 };
 
-  // Set permission cookie (httpOnly so it can be read by middleware / server)
-  cookieStore.set(permsCookieName(hname), permJWT, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    // Max age matches JWT expiry (24h)
-    maxAge: 60 * 60 * 24,
-  });
+  cookieStore.set(cookieKey, username, cookieOpts);
+  cookieStore.set(permsCookieName(hname), permJWT, cookieOptsWithMaxAge);
+  cookieStore.set(tenantGatesCookieName(hname), tenantGatesJWT, cookieOptsWithMaxAge);
 
   redirect(`/${encodeURIComponent(hname)}/masters`);
 }
@@ -68,12 +80,12 @@ export async function logoutAction(hname: string) {
   const cookieStore = await cookies();
   cookieStore.delete(`auth_${hname.replace(/[^a-zA-Z0-9]/g, "_")}`);
   cookieStore.delete(permsCookieName(hname));
+  cookieStore.delete(tenantGatesCookieName(hname));
 }
 
 /**
  * Refresh the permission cookie for the currently logged-in user.
  * Called when an admin updates a user's role or overrides while that user may still be logged in.
- * (Primarily used when the current user is editing their own perms — not a hard requirement.)
  */
 export async function refreshPermissionsAction(hname: string, username: string): Promise<void> {
   await ensureRBACTables(hname);

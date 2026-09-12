@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
 import { PencilIcon, TrashBinIcon, ChevronDownIcon } from "../../../components/icons";
 import { PAGE_REGISTRY } from "../../../lib/page-registry";
 import type { PageEntry } from "../../../lib/page-registry";
+import { useRBAC } from "../../../components/context/RBACContext";
 
 type UserRow = {
   id: number;
@@ -71,7 +72,19 @@ export default function ManageUsersPage() {
   const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
   const [overrideError, setOverrideError] = useState<string | null>(null);
 
-  const pagesByGroup = getPagesByGroup(PAGE_REGISTRY);
+  const { tenantFeatureGates } = useRBAC();
+
+  // Filter pages for override UI by tenant feature gates
+  const filteredRegistry = useMemo(() => {
+    if (tenantFeatureGates.size === 0) return PAGE_REGISTRY;
+    return PAGE_REGISTRY.filter((p) =>
+      !p.isAdminOnly &&
+      (tenantFeatureGates.has(p.key) ||
+        [...tenantFeatureGates].some((g) => p.key.startsWith(g + "/") || g.startsWith(p.key + "/")))
+    );
+  }, [tenantFeatureGates]);
+
+  const pagesByGroup = getPagesByGroup(filteredRegistry);
 
   async function loadRoles() {
     try {

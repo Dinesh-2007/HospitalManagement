@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyPermissionJWT, isPathPermitted, permsCookieName } from './lib/jwt';
 
+// Cookie names (mirrored from lib/super-admin.ts — no server imports in middleware)
+const SUPER_ADMIN_COOKIE = 'super_admin_session';
+
+function tenantGatesCookieName(hname: string): string {
+  return `tgates_${hname.replace(/[^a-zA-Z0-9]/g, '_')}`;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -9,14 +16,44 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.includes('.') || // static files
-    pathname.startsWith('/api') ||
     pathname === '/' ||
     pathname === '/create-account'
   ) {
     return NextResponse.next();
   }
 
-  // ── Route structure: /[Hname]/... ─────────────────────────────────────────
+  // ── API routes — pass through (they handle their own auth) ────────────────
+  if (pathname.startsWith('/api')) {
+    return NextResponse.next();
+  }
+
+  // ══ SUPER ADMIN ROUTES ════════════════════════════════════════════════════
+  if (pathname.startsWith('/SuperAdmin')) {
+    // Login page is always accessible
+    if (pathname === '/SuperAdmin/login' || pathname === '/SuperAdmin/login/') {
+      return NextResponse.next();
+    }
+
+    // All other /SuperAdmin/* routes require super admin session
+    const superAdminCookie = request.cookies.get(SUPER_ADMIN_COOKIE);
+
+    if (!superAdminCookie?.value) {
+      return NextResponse.redirect(new URL('/SuperAdmin/login', request.url));
+    }
+
+    // Verify the super admin JWT
+    const payload = await verifyPermissionJWT(superAdminCookie.value);
+    if (!payload || !payload.pages.includes('__super_admin__')) {
+      const response = NextResponse.redirect(new URL('/SuperAdmin/login', request.url));
+      response.cookies.delete(SUPER_ADMIN_COOKIE);
+      return response;
+    }
+
+    return NextResponse.next();
+  }
+
+  // ══ TENANT ROUTES ═════════════════════════════════════════════════════════
+  // Route structure: /[Hname]/...
   const parts = pathname.split('/').filter(Boolean);
 
   if (parts.length <= 1) {
@@ -37,7 +74,8 @@ export async function middleware(request: NextRequest) {
     'patient-profile',
     'patient-history',
     'manage-family',
-    'access-denied', // the access denied page itself must be accessible
+    'access-denied',
+    'feature-unavailable', // Tenant feature gate denied page
   ];
   if (publicSubRoutes.includes(parts[1])) {
     return NextResponse.next();
@@ -56,8 +94,7 @@ export async function middleware(request: NextRequest) {
   const permsCookieKey = permsCookieName(hname);
   const permsCookie = request.cookies.get(permsCookieKey);
 
-  // If no permissions cookie, the user logged in before RBAC was deployed.
-  // Force re-login to get fresh permissions.
+  // If no permissions cookie, force re-login to get fresh permissions
   if (!permsCookie?.value) {
     const loginUrl = new URL(`/${encodeURIComponent(hname)}`, request.url);
     loginUrl.searchParams.set('reason', 'session_expired');
@@ -78,7 +115,24 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Check if the requested sub-path is permitted
+  // ── Tenant feature gate check ─────────────────────────────────────────────
+  // Checks if the super admin has restricted this tenant's features.
+  const tenantGatesCookie = request.cookies.get(tenantGatesCookieName(hname));
+  if (tenantGatesCookie?.value) {
+    const gatePayload = await verifyPermissionJWT(tenantGatesCookie.value);
+    if (gatePayload) {
+      // gatePayload.pages = ["*"] means full access (no restriction)
+      const isFullAccess = gatePayload.pages.length === 1 && gatePayload.pages[0] === '*';
+      if (!isFullAccess && !isPathPermitted(gatePayload, subPath)) {
+        // Tenant does not have this feature licensed
+        const unavailableUrl = new URL(`/${encodeURIComponent(hname)}/feature-unavailable`, request.url);
+        unavailableUrl.searchParams.set('path', subPath);
+        return NextResponse.redirect(unavailableUrl);
+      }
+    }
+  }
+
+  // ── User-level RBAC check ─────────────────────────────────────────────────
   if (!isPathPermitted(payload, subPath)) {
     // Access denied — redirect to access-denied page
     const deniedUrl = new URL(`/${encodeURIComponent(hname)}/access-denied`, request.url);
@@ -91,13 +145,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };

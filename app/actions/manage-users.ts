@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getTenantDB } from "../../lib/db";
 import bcrypt from "bcrypt";
 import { ensureRBACTables } from "./rbac";
+import { getTenantSettings, ensureSuperAdminTables } from "../../lib/super-admin";
 
 async function ensureUsersTable(hname: string) {
   const pool = await getTenantDB(hname);
@@ -78,6 +79,27 @@ export async function addUser(hname: string, formData: FormData) {
   const hashedPassword = await bcrypt.hash(password, salt);
 
   const pool = await ensureUsersTable(hname);
+
+  // ── User limit enforcement ───────────────────────────────────────────────
+  try {
+    await ensureSuperAdminTables();
+    const { max_users } = await getTenantSettings(hname);
+    if (max_users !== null) {
+      const countRes = await pool.query<{ count: string }>(
+        `SELECT COUNT(*) FROM users WHERE role != 'admin'`
+      );
+      const currentCount = parseInt(countRes.rows[0]?.count ?? "0", 10);
+      if (currentCount >= max_users) {
+        throw new Error(
+          `User limit reached (max ${max_users}). Contact your administrator to increase the limit.`
+        );
+      }
+    }
+  } catch (err) {
+    // If the error is our limit error, rethrow it
+    if (err instanceof Error && err.message.startsWith("User limit")) throw err;
+    // Otherwise ignore (super admin tables may not exist yet in dev)
+  }
   try {
     await pool.query(
       "INSERT INTO users (username, password, role, role_id) VALUES ($1, $2, $3, $4)",

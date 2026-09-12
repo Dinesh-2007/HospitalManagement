@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
 import { PencilIcon, TrashBinIcon, PlusIcon } from "../../../components/icons";
 import { getAssignablePages, PAGE_GROUPS } from "../../../lib/page-registry";
 import type { PageEntry } from "../../../lib/page-registry";
+import { useRBAC } from "../../../components/context/RBACContext";
 
 type RoleRow = {
   id: number;
@@ -16,7 +17,28 @@ type RoleRow = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const assignablePages = getAssignablePages();
+const allAssignablePages = getAssignablePages();
+
+/** Filter assignable pages to only those enabled by the tenant feature gate. */
+function filterByGates(
+  gates: Set<string>
+): Record<string, Record<string, PageEntry[]>> {
+  if (gates.size === 0) return allAssignablePages; // no restriction
+
+  const result: Record<string, Record<string, PageEntry[]>> = {};
+  for (const [group, subgroups] of Object.entries(allAssignablePages)) {
+    for (const [subgroup, pages] of Object.entries(subgroups)) {
+      const allowed = pages.filter((p) =>
+        gates.has(p.key) || [...gates].some((g) => p.key.startsWith(g + "/") || g.startsWith(p.key + "/"))
+      );
+      if (allowed.length > 0) {
+        if (!result[group]) result[group] = {};
+        result[group][subgroup] = allowed;
+      }
+    }
+  }
+  return result;
+}
 
 // ── Tab types ────────────────────────────────────────────────────────────────
 type Tab = "roles" | "permissions";
@@ -26,6 +48,10 @@ export default function SettingsPage() {
   const params = useParams();
   const hname = decodeURIComponent((params?.Hname as string) ?? "");
   const [activeTab, setActiveTab] = useState<Tab>("roles");
+  const { tenantFeatureGates } = useRBAC();
+
+  // Filter assignable pages by the tenant's feature gates (super admin restriction)
+  const assignablePages = useMemo(() => filterByGates(tenantFeatureGates), [tenantFeatureGates]);
 
   return (
     <PageLayout title="Settings">
@@ -66,7 +92,7 @@ export default function SettingsPage() {
 
         {/* Tab content */}
         {activeTab === "roles" && <RolesTab hname={hname} />}
-        {activeTab === "permissions" && <PermissionsTab hname={hname} />}
+        {activeTab === "permissions" && <PermissionsTab hname={hname} assignablePages={assignablePages} />}
       </div>
     </PageLayout>
   );
@@ -288,7 +314,13 @@ function RolesTab({ hname }: { hname: string }) {
 }
 
 // ── Permissions Tab ───────────────────────────────────────────────────────────
-function PermissionsTab({ hname }: { hname: string }) {
+function PermissionsTab({
+  hname,
+  assignablePages,
+}: {
+  hname: string;
+  assignablePages: Record<string, Record<string, PageEntry[]>>;
+}) {
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
