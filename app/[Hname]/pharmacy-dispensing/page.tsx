@@ -22,6 +22,7 @@ type DispensingBillRecord = {
   id: number;
   token_number?: string | null;
   patient_name?: string | null;
+  patient_id?: string | null;
   payment_status?: string | null;
   billing_amount?: string | number | null;
   medicine_lines?: string | null;
@@ -1426,6 +1427,7 @@ export default function PharmacyDispensingPage() {
               {/* Info grid */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {[
+                  { label: "Patient ID", value: selectedBill.patient_id || "—" },
                   { label: "Patient Name", value: selectedBill.patient_name || "—" },
                   { label: "Mobile", value: selectedBill.patient_phone || "—" },
                   { label: "Token Number", value: selectedBill.token_number || "—" },
