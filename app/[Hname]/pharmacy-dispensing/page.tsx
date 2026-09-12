@@ -248,7 +248,8 @@ export default function PharmacyDispensingPage() {
       (m) =>
         m.name.toLowerCase().includes(medicineSearchQuery.toLowerCase()) ||
         m.code.toLowerCase().includes(medicineSearchQuery.toLowerCase()) ||
-        m.genericName.toLowerCase().includes(medicineSearchQuery.toLowerCase())
+        m.genericName.toLowerCase().includes(medicineSearchQuery.toLowerCase()) ||
+        m.type.toLowerCase().includes(medicineSearchQuery.toLowerCase())
     );
   }, [itemMasterMedicines, medicineSearchQuery]);
 
