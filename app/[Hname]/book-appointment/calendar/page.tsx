@@ -182,13 +182,16 @@ function buildHourBlocks(fromTime: string, toTime: string) {
   if (!cursor || !endTime) return blocks;
   while (cursor < endTime) {
     const nextHour = addMinutes(cursor, 60);
-    const end = nextHour > endTime ? endTime : nextHour;
+    // Wrap-around check: if nextHour is less than cursor, we've crossed midnight
+    const isWrapAround = nextHour < cursor;
+    const end = (isWrapAround || nextHour > endTime) ? endTime : nextHour;
     blocks.push({
       value: slotKey(cursor, end),
       start: cursor,
       end,
       label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}`,
     });
+    if (end === endTime) break;
     cursor = end;
   }
   return blocks;
@@ -203,7 +206,8 @@ function buildSubSlots(fromTime: string, toTime: string, step: number) {
   if (!cursor || !endTime) return slots;
   while (cursor < endTime) {
     const next = addMinutes(cursor, safeStep);
-    if (next > endTime) break;
+    // Wrap-around check: if next is less than cursor, we've crossed midnight
+    if (next < cursor || next > endTime) break;
     slots.push({
       value: slotKey(cursor, next),
       start: cursor,

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Country, State, City } from "country-state-city";
 import { CheckCircleIcon } from "../../../components/icons";
+import { validateDateOfBirth } from "../../../lib/date-validation";
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 import { PhoneInputField } from "../../../components/ui/phone-input";
 import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
@@ -201,6 +202,11 @@ export default function CheckInPage() {
     e.preventDefault();
     if (!walkInRegForm.patientName) {
       setWalkInError("Patient Name is required.");
+      return;
+    }
+    const dobError = validateDateOfBirth(walkInRegForm.dob);
+    if (dobError) {
+      setWalkInError(`Invalid Date of Birth: ${dobError}`);
       return;
     }
     setWalkInStep("consultation");
@@ -924,12 +930,22 @@ export default function CheckInPage() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</label>
-                    <input
-                      type="date"
-                      value={walkInRegForm.dob}
-                      onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, dob: e.target.value }))}
-                      className="h-11 w-full rounded-lg border border-gray-300 px-4 text-sm"
-                    />
+                    {(() => {
+                      const dobError = validateDateOfBirth(walkInRegForm.dob);
+                      const hasError = !!dobError;
+                      return (
+                        <>
+                          <input
+                            type="date"
+                            max="9999-12-31"
+                            value={walkInRegForm.dob}
+                            onChange={(e) => setWalkInRegForm((prev: any) => ({ ...prev, dob: e.target.value }))}
+                            className={`h-11 w-full rounded-lg border px-4 text-sm ${hasError ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500" : "border-gray-300 focus:border-brand-300 focus:ring-1 focus:ring-brand-500"}`}
+                          />
+                          {hasError && <p className="mt-1.5 text-xs text-red-500">{dobError}</p>}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Gender</label>

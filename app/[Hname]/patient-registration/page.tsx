@@ -52,7 +52,7 @@ export default function PatientRegistrationPage() {
     () => [
       { id: "patientId", label: "Patient ID", type: "display", size: "small", placeholder: "Auto-generated on check-in", hint: "Auto-generated when the patient checks in for the first time." },
       { id: "patientName", label: "Patient Name", type: mode === "edit" ? "display" : "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium", defaultValue: mode === "edit" ? localName : undefined },
-      { id: "dob", label: "Date of Birth", type: "date", size: "small" },
+      { id: "dob", label: "Date of Birth", type: "date", size: "small", max: new Date().toISOString().split("T")[0] },
       {
         id: "gender",
         label: "Gender",

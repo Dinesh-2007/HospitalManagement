@@ -8,6 +8,7 @@ import { InputField } from "../../../components/ui/input-field";
 import { Label } from "../../../components/ui/label";
 import { Button } from "../../../components/ui/button";
 import { PhoneInputField } from "../../../components/ui/phone-input";
+import { validateDateOfBirth } from "../../../lib/date-validation";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
 
 /* ── types ── */
@@ -216,6 +217,13 @@ export default function PatientLoginPage() {
   /* ── step 2: register and redirect ── */
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    const dobError = validateDateOfBirth(regForm.dob);
+    if (dobError) {
+      setRegError(`Invalid Date of Birth: ${dobError}`);
+      return;
+    }
+
     setRegError(null);
     setIsSaving(true);
     try {
@@ -321,13 +329,31 @@ export default function PatientLoginPage() {
 
                 <div>
                   <Label htmlFor="reg-dob">Date of Birth</Label>
-                  <input
-                    id="reg-dob"
-                    type="date"
-                    value={regForm.dob}
-                    onChange={(e) => updateReg("dob", e.target.value)}
-                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                  />
+                  {(() => {
+                    const dobError = validateDateOfBirth(regForm.dob);
+                    const hasError = !!dobError;
+                    return (
+                      <>
+                        <input
+                          id="reg-dob"
+                          type="date"
+                          max="9999-12-31"
+                          value={regForm.dob}
+                          onChange={(e) => updateReg("dob", e.target.value)}
+                          className={`h-11 w-full rounded-lg border bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:outline-none focus:ring-2 ${
+                            hasError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-200"
+                              : "border-gray-300 focus:border-brand-300 focus:ring-brand-100"
+                          }`}
+                        />
+                        {hasError && (
+                          <p className="mt-1.5 text-xs text-red-500">
+                            {dobError}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>

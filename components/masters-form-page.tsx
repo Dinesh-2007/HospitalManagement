@@ -9,6 +9,7 @@ import { PatientProfileLayout } from "./patient-profile-layout";
 import { PencilIcon, TrashBinIcon } from "./icons";
 import { PhoneInputField } from "./ui/phone-input";
 import { comparePhoneNumbers } from "../lib/phone";
+import { validateDateOfBirth } from "../lib/date-validation";
 
 const HIDDEN_FIELD_NOTES = new Set([
   "character",
@@ -44,8 +45,8 @@ export type MastersFormField = {
   placeholder?: string;
   hint?: string;
   maxLength?: number;
-  min?: number;
-  max?: number;
+  min?: number | string;
+  max?: number | string;
   step?: string;
   pattern?: string;
   inputMode?: "text" | "numeric" | "tel" | "email" | "url";
@@ -378,6 +379,19 @@ export function MastersFormPage({
     setSubmitError(null);
     setSubmitMessage(null);
 
+    // Validate all date fields
+    for (const field of fields) {
+      if (field.type === "date") {
+        const value = typeof formValues[field.id] === "string" ? formValues[field.id] : undefined;
+        const err = validateDateOfBirth(value);
+        if (err) {
+          setSubmitError(`Invalid ${field.label}: ${err}`);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+    }
+
     const values = serializeFormValues(formValues, fields);
 
     try {
@@ -624,7 +638,7 @@ export function MastersFormPage({
                         type={field.type === "display" ? "text" : field.type}
                         placeholder={field.placeholder}
                         min={field.min}
-                        max={field.max}
+                        max={field.type === "date" ? "9999-12-31" : field.max}
                         step={field.step}
                         maxLength={field.maxLength}
                         pattern={field.pattern}
@@ -632,36 +646,41 @@ export function MastersFormPage({
                         readOnly={field.type === "display"}
                         value={typeof formValues[field.id] === "string" ? formValues[field.id] : ""}
                         onChange={(e) => {
+                          let val = e.target.value;
+                          let changed = false;
                           if (field.pattern === "[a-zA-Z\\s]*") {
-                            e.target.value = e.target.value.replace(
-                              /[^a-zA-Z\s]/g,
-                              "",
-                            );
+                            val = val.replace(/[^a-zA-Z\s]/g, "");
+                            changed = true;
                           } else if (
                             field.pattern === "[0-9]*" ||
                             field.pattern === "[0-9]{10}" ||
                             field.pattern === "[0-9]{6}"
                           ) {
-                            e.target.value = e.target.value.replace(
-                              /[^0-9]/g,
-                              "",
-                            );
+                            val = val.replace(/[^0-9]/g, "");
                             if (field.pattern === "[0-9]{10}" || field.inputMode === "tel") {
-                              e.target.value = e.target.value.slice(0, 10);
+                              val = val.slice(0, 10);
                             }
+                            changed = true;
                           } else if (field.pattern === "[a-zA-Z0-9]*") {
-                            e.target.value = e.target.value.replace(
-                              /[^a-zA-Z0-9]/g,
-                              "",
-                            );
+                            val = val.replace(/[^a-zA-Z0-9]/g, "");
+                            changed = true;
                           }
-                          updateFieldValue(field, e.target.value);
+                          if (changed) e.target.value = val;
+                          updateFieldValue(field, val);
                         }}
-                        className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                        className={`h-11 w-full rounded-lg border bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${
+                          hasError
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500"
+                            : "border-gray-300 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:focus:border-brand-800"
+                        }`}
                       />
                     )}
 
-                    {shouldShowHelperText ? (
+                    {hasError ? (
+                      <p className="mt-1.5 text-xs text-red-500">
+                        {dobError}
+                      </p>
+                    ) : shouldShowHelperText ? (
                       <p className="mt-1.5 text-xs text-slate-500 dark:text-gray-400">
                         {helperText}
                       </p>

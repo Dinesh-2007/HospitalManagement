@@ -5,6 +5,7 @@ import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
 import { PatientProfileLayout } from "../../../components/patient-profile-layout";
 import { PhoneInputField } from "../../../components/ui/phone-input";
+import { validateDateOfBirth } from "../../../lib/date-validation";
 
 type ProfileFormValues = {
   patientId: string;
@@ -153,6 +154,13 @@ export default function PatientProfilePage() {
     setSaving(true);
     setError(null);
     setMessage(null);
+
+    const dobError = validateDateOfBirth(patientData.dob);
+    if (dobError) {
+      setError(`Invalid Date of Birth: ${dobError}`);
+      setSaving(false);
+      return;
+    }
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/patient-auth`, {
         method: "PUT",
@@ -298,7 +306,16 @@ export default function PatientProfilePage() {
                 </div>
                 <div>
                   <label className={labelCls}>Date of Birth</label>
-                  <input type="date" value={patientData.dob} onChange={e => updateField("dob", e.target.value)} className={inputCls} />
+                  {(() => {
+                    const dobError = validateDateOfBirth(patientData.dob);
+                    const hasError = !!dobError;
+                    return (
+                      <>
+                        <input type="date" max="9999-12-31" value={patientData.dob} onChange={e => updateField("dob", e.target.value)} className={`${inputCls} ${hasError ? "border-red-500 focus:border-red-500 focus:ring-red-200" : ""}`} />
+                        {hasError && <p className="mt-1.5 text-xs text-red-500">{dobError}</p>}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className={labelCls}>Gender</label>

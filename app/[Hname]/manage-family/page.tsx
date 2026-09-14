@@ -5,6 +5,7 @@ import { Country, State, City } from "country-state-city";
 import { useParams } from "next/navigation";
 import { PatientProfileLayout } from "../../../components/patient-profile-layout";
 import { PhoneInputField } from "../../../components/ui/phone-input";
+import { validateDateOfBirth } from "../../../lib/date-validation";
 import { isValidPhoneNumber } from "libphonenumber-js";
 
 type FamilyFormValues = {
@@ -210,6 +211,12 @@ export default function HospitalManageFamilyPage() {
     setMessage(null);
     if (!isValidPhoneNumber(formValues.mobile)) {
       setError("Please enter a valid mobile number with country code.");
+      setSaving(false);
+      return;
+    }
+    const dobError = validateDateOfBirth(formValues.dob);
+    if (dobError) {
+      setError(`Invalid Date of Birth: ${dobError}`);
       setSaving(false);
       return;
     }
@@ -472,18 +479,24 @@ export default function HospitalManageFamilyPage() {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
                 {[
                   { key: "patientName", label: "Patient Name", type: "text" },
-                  { key: "dob", label: "Date of Birth", type: "date" },
-                ].map(({ key, label, type }) => (
-                  <div key={key}>
-                    <label className={labelCls}>{label}</label>
-                    <input
-                      type={type}
-                      value={formValues[key as keyof FamilyFormValues]}
-                      onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                ))}
+                  { key: "dob", label: "Date of Birth", type: "date", max: "9999-12-31" },
+                ].map(({ key, label, type, max }) => {
+                  const error = type === "date" ? validateDateOfBirth(formValues[key as keyof FamilyFormValues]) : null;
+                  const hasError = !!error;
+                  return (
+                    <div key={key}>
+                      <label className={labelCls}>{label}</label>
+                      <input
+                        type={type}
+                        max={max}
+                        value={formValues[key as keyof FamilyFormValues]}
+                        onChange={(e) => updateField(key as keyof FamilyFormValues, e.target.value)}
+                        className={`${inputCls} ${hasError ? "border-red-500 focus:border-red-500 focus:ring-red-200" : ""}`}
+                      />
+                      {hasError && <p className="mt-1.5 text-xs text-red-500">{error}</p>}
+                    </div>
+                  );
+                })}
 
                 {/* Mobile and OTP field */}
                 <div>
