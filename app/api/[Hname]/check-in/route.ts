@@ -197,12 +197,39 @@ export async function POST(
           const parsed = splitPhoneNumber(patientPhone);
           const phone = parsed.phoneNumber;
           const countryCode = parsed.countryCode;
-          await pool.query(
-            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (patient_id) DO NOTHING`,
-            [resolvedPatientId, patientName, phone || null, countryCode || null]
-          );
+          if (phone) {
+            const existingPhone = await pool.query(
+              `SELECT patient_id FROM ${quoteIdentifier(PATIENTS_TABLE)} WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g') LIMIT 1`,
+              [phone]
+            );
+            if ((existingPhone.rowCount ?? 0) > 0) {
+              if (existingPhone.rows[0].patient_id) {
+                resolvedPatientId = String(existingPhone.rows[0].patient_id);
+              }
+            } else {
+              try {
+                await pool.query(
+                  `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
+                   VALUES ($1, $2, $3, $4)
+                   ON CONFLICT DO NOTHING`,
+                  [resolvedPatientId, patientName, phone || null, countryCode || null]
+                );
+              } catch {
+                // Ignore conflict if phone or patient_id already inserted concurrently
+              }
+            }
+          } else {
+            try {
+              await pool.query(
+                `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT DO NOTHING`,
+                [resolvedPatientId, patientName, null, countryCode || null]
+              );
+            } catch {
+              // Ignore conflict
+            }
+          }
         }
       }
 
@@ -380,12 +407,16 @@ export async function POST(
           );
         } else {
           const parsedPhone = splitPhoneNumber(apptRecord.patient_phone);
-          await pool.query(
-            `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (patient_id) DO NOTHING`,
-            [resolvedPatientId, apptRecord.patient_name, parsedPhone.phoneNumber || null, parsedPhone.countryCode || null]
-          );
+          try {
+            await pool.query(
+              `INSERT INTO ${quoteIdentifier(PATIENTS_TABLE)} (patient_id, patient_name, mobile, mobile_country_code)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT DO NOTHING`,
+              [resolvedPatientId, apptRecord.patient_name, parsedPhone.phoneNumber || null, parsedPhone.countryCode || null]
+            );
+          } catch {
+            // Ignore conflict if mobile already exists
+          }
         }
       }
 

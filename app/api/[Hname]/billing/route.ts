@@ -40,6 +40,12 @@ async function ensureBillingInvoiceTable(pool: Pool): Promise<void> {
   await pool.query(`ALTER TABLE ${quoteIdentifier(INVOICE_TABLE)} ADD COLUMN IF NOT EXISTS patient_id TEXT`);
 
   try {
+    await pool.query(`ALTER TABLE ${quoteIdentifier(DISPENSING_TABLE)} ADD COLUMN IF NOT EXISTS patient_phone TEXT`);
+  } catch (err) {
+    // Ignore if table doesn't exist yet
+  }
+
+  try {
     await pool.query(`ALTER TABLE ${quoteIdentifier(CONSULTATION_TABLE)} ADD COLUMN IF NOT EXISTS billing_status TEXT DEFAULT 'Unbilled'`);
   } catch (err) {
     // Ignore if table doesn't exist yet

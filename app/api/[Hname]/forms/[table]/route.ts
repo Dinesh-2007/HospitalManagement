@@ -256,7 +256,10 @@ export async function GET(
         : "";
 
       rowsResult = await pool.query(
-        `SELECT dce.*, appt.check_in_time, appt.patient_type 
+        `SELECT dce.id, dce.status, dce.token_number, dce.sended, dce.created_at, dce.patient_details,
+                dce.symptoms, dce.diagnosis_name, dce.remarks, dce.prescription_data, dce.doctor,
+                COALESCE(dce.patient_type, 'OP') AS patient_type, dce.rno, dce.billing_status,
+                appt.check_in_time, appt.patient_type AS appt_patient_type 
          FROM doctor_consultation_entry dce
          LEFT JOIN appointments appt ON appt.id::text = dce.token_number::text
          ${dceWhereClause}

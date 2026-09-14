@@ -87,11 +87,11 @@ export default function OutPatientQueuePage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load.");
         const allRows: ConsultationRow[] = data.rows || [];
-        // Filter to OP only (also include records with no patient_type set — treated as OP by default)
+        // Filter to OP only (also include records with no patient_type set or scheduled/walk-in — treated as OP by default)
         const opRows = allRows.filter(
           (r) => {
-            const pt = text(r as Record<string, unknown>, ["patientType", "patient_type"]);
-            return pt === "" || pt === "OP";
+            const pt = text(r as Record<string, unknown>, ["patientType", "patient_type"]).toUpperCase();
+            return pt === "" || pt === "OP" || pt === "SCHEDULED" || pt === "WALK-IN" || pt === "WALK IN";
           }
         );
         setRows(opRows);
