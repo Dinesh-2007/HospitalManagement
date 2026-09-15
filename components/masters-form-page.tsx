@@ -382,8 +382,8 @@ export function MastersFormPage({
     // Validate all date fields
     for (const field of fields) {
       if (field.type === "date") {
-        const rawVal = formValues[field.id];
-        const value = typeof rawVal === "string" ? rawVal : undefined;
+        const raw = formValues[field.id];
+        const value = typeof raw === "string" ? raw : undefined;
         const err = validateDateOfBirth(value);
         if (err) {
           setSubmitError(`Invalid ${field.label}: ${err}`);
@@ -521,9 +521,12 @@ export function MastersFormPage({
                   ? fieldColumnClasses.full
                   : fieldColumnClasses[fieldSize];
                 const colStartClass = field.colStart ? colStartClasses[field.colStart] : "";
-                const rawFieldValue = formValues[field.id];
-                const dobError = field.type === "date" && typeof rawFieldValue === "string" ? validateDateOfBirth(rawFieldValue) : null;
-                const hasError = Boolean(dobError);
+                const fieldVal = formValues[field.id];
+                const dobError =
+                  field.type === "date" && typeof fieldVal === "string"
+                    ? validateDateOfBirth(fieldVal)
+                    : null;
+                const hasError = !!dobError;
 
                 return (
                   <div
@@ -672,11 +675,10 @@ export function MastersFormPage({
                           if (changed) e.target.value = val;
                           updateFieldValue(field, val);
                         }}
-                        className={`h-11 w-full rounded-lg border bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${
-                          hasError
+                        className={`h-11 w-full rounded-lg border bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${hasError
                             ? "border-red-500 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500"
                             : "border-gray-300 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:focus:border-brand-800"
-                        }`}
+                          }`}
                       />
                     )}
 

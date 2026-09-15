@@ -754,10 +754,10 @@ export default function BookAppointmentPage() {
 
       const now = new Date();
       const activeAppts = scheduled.filter((a: any) => {
-        if (a.appointment_date && a.appointment_time) {
-          const apptDate = new Date(`${a.appointment_date}T${a.appointment_time}`);
-          if (!isNaN(apptDate.getTime()) && apptDate < now) {
-            return false; // exclude expired
+        if (a.appointment_date) {
+          const endOfDay = new Date(`${a.appointment_date}T23:59:59.999`);
+          if (!isNaN(endOfDay.getTime()) && endOfDay < now) {
+            return false; // exclude expired after day ends
           }
         }
         return true;

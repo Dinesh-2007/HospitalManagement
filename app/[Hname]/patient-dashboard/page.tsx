@@ -53,7 +53,7 @@ export default function PatientDashboardPage() {
 
   useEffect(() => {
     try {
-      const name = window.localStorage.getItem("patientName") ?? "Patient";
+      const name = window.localStorage.getItem("patientName") ?? "";
       const phone = window.localStorage.getItem("patientPhone") ?? "";
       setPatientName(name || "Patient");
       setPatientPhone(phone);
@@ -61,23 +61,30 @@ export default function PatientDashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!hname || !patientPhone) return;
+    if (!hname) return;
+    const phone = patientPhone || (typeof window !== "undefined" ? window.localStorage.getItem("patientPhone") ?? "" : "");
+    const name = (patientName && patientName !== "Patient" ? patientName : "") || (typeof window !== "undefined" ? window.localStorage.getItem("patientName") ?? "" : "");
+    if (!phone && !name) return;
+
     async function loadData() {
       setLoading(true);
       try {
-        // Load appointments for the patient
+        // Load appointments for the patient using phone or name
+        const targetKey = phone || name;
+        const params = new URLSearchParams({ patientId: targetKey });
+        if (name) {
+          params.set("patientName", name);
+        }
         const res = await fetch(
-          `/api/${encodeURIComponent(hname)}/appointments?patientId=${encodeURIComponent(patientPhone)}`,
+          `/api/${encodeURIComponent(hname)}/appointments?${params.toString()}`,
           { cache: "no-store" }
         );
         const data = (await res.json().catch(() => ({}))) as { rows?: AppointmentRow[] };
         setAppointments(data.rows ?? []);
 
         // Load family members count
-        const parentPhone = window.localStorage.getItem("patientPhone") ?? "";
-        const parentName = window.localStorage.getItem("patientName") ?? "";
         const famRes = await fetch(
-          `/api/${encodeURIComponent(hname)}/patient-auth?parentPhone=${encodeURIComponent(parentPhone)}&parentName=${encodeURIComponent(parentName)}`,
+          `/api/${encodeURIComponent(hname)}/patient-auth?parentPhone=${encodeURIComponent(phone)}&parentName=${encodeURIComponent(name)}`,
           { cache: "no-store" }
         );
         const famData = (await famRes.json().catch(() => ({}))) as { rows?: unknown[] };
@@ -87,7 +94,7 @@ export default function PatientDashboardPage() {
       }
     }
     void loadData();
-  }, [hname, patientPhone]);
+  }, [hname, patientPhone, patientName]);
 
   const now = new Date();
 
@@ -95,9 +102,9 @@ export default function PatientDashboardPage() {
 
   const upcomingAppointments = useMemo(() =>
     appointments.filter((a) => {
-      if (!a.appointment_date || !a.appointment_time) return false;
-      const d = new Date(`${a.appointment_date}T${a.appointment_time}`);
-      return !isNaN(d.getTime()) && d >= now && (a.status === "Scheduled" || !a.status);
+      if (!a.appointment_date) return false;
+      const endOfDay = new Date(`${a.appointment_date}T23:59:59.999`);
+      return !isNaN(endOfDay.getTime()) && endOfDay >= now && (a.status === "Scheduled" || !a.status);
     }), [appointments]);
 
   const lastVisit = useMemo(() => {

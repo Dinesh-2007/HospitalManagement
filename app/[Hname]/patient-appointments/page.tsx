@@ -136,9 +136,9 @@ function synthesizeRows(appts: AppointmentRow[], patientLabel: string | null): D
       // 3. Scheduled / Expired / Other Active Statuses
       let isExpired = false;
       if (currentStatus === "Scheduled") {
-        if (date && time) {
-          const apptDate = new Date(`${date}T${time}`);
-          if (!isNaN(apptDate.getTime()) && apptDate < new Date()) {
+        if (date) {
+          const endOfApptDay = new Date(`${date}T23:59:59.999`);
+          if (!isNaN(endOfApptDay.getTime()) && endOfApptDay < new Date()) {
             isExpired = true;
           }
         }

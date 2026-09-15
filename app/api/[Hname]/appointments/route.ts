@@ -624,24 +624,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
     }
 
     if (patientId && !department && requestedDoctorNames.length === 0) {
-      const clauses: string[] = [
-        `patient_id = $1`,
-        `patient_phone = $1`,
-        `regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')`,
-      ];
+      const cleanPhone = patientId.replace(/\D/g, "");
+      const isPhoneOrId = cleanPhone.length >= 7 || /^\d+$/.test(patientId);
+
+      let whereClause: string;
       const values: unknown[] = [patientId];
-      // Also match by patient name if the patientId looks like a name (non-numeric) or a separate patientName is provided
-      const isNonNumeric = patientId && !/^\d+$/.test(patientId);
-      if (isNonNumeric) {
-        clauses.push(`LOWER(patient_name) = LOWER($1)`);
+
+      if (isPhoneOrId) {
+        // Strictly match by patient_id or patient_phone
+        whereClause = `(patient_id = $1 OR patient_phone = $1 OR regexp_replace(COALESCE(patient_phone, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))`;
+        if (patientName) {
+          // If patientName is also passed, ensure it doesn't collide with another patient on a shared phone or verify name
+          values.push(patientName);
+          whereClause += ` AND LOWER(patient_name) = LOWER($2)`;
+        }
+      } else {
+        // patientId is a name string
+        whereClause = `LOWER(patient_name) = LOWER($1)`;
       }
-      if (patientName) {
-        clauses.push(`LOWER(patient_name) = LOWER($2)`);
-        values.push(patientName);
-      }
+
       const result = await pool.query(
         `SELECT * FROM ${quoteIdentifier(TABLE_NAME)}
-         WHERE ${clauses.join(" OR ")}
+         WHERE ${whereClause}
          ORDER BY updated_at DESC, appointment_date DESC, appointment_time DESC`,
         values,
       );
