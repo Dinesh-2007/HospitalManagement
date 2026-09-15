@@ -382,7 +382,8 @@ export function MastersFormPage({
     // Validate all date fields
     for (const field of fields) {
       if (field.type === "date") {
-        const value = typeof formValues[field.id] === "string" ? formValues[field.id] : undefined;
+        const rawVal = formValues[field.id];
+        const value = typeof rawVal === "string" ? rawVal : undefined;
         const err = validateDateOfBirth(value);
         if (err) {
           setSubmitError(`Invalid ${field.label}: ${err}`);
@@ -520,6 +521,9 @@ export function MastersFormPage({
                   ? fieldColumnClasses.full
                   : fieldColumnClasses[fieldSize];
                 const colStartClass = field.colStart ? colStartClasses[field.colStart] : "";
+                const rawFieldValue = formValues[field.id];
+                const dobError = field.type === "date" && typeof rawFieldValue === "string" ? validateDateOfBirth(rawFieldValue) : null;
+                const hasError = Boolean(dobError);
 
                 return (
                   <div

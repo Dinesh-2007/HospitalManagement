@@ -152,17 +152,6 @@ function formatTimeRange(start: string, end?: string | null) {
   return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
-function addMinutes(value: string, minutesToAdd: number) {
-  const [hoursText, minutesText = "00"] = value.split(":");
-  const date = new Date();
-  date.setHours(Number(hoursText), Number(minutesText) + minutesToAdd, 0, 0);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function slotKey(start: string, end: string) {
-  return `${start}|${end}`;
-}
-
 function normalizeTime(value: string) {
   const match = String(value ?? "")
     .trim()
@@ -171,50 +160,83 @@ function normalizeTime(value: string) {
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return "";
+  if (hours === 24 && minutes > 0) return "";
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function timeToMinutes(value: string) {
+  const norm = normalizeTime(value);
+  if (!norm) return 0;
+  const [hours, minutes] = norm.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(value: number) {
+  const clamped = Math.min(1440, Math.max(0, value));
+  const hours = Math.floor(clamped / 60);
+  const minutes = clamped % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function addMinutes(value: string, minutesToAdd: number) {
+  return minutesToTime(timeToMinutes(value) + minutesToAdd);
+}
+
+function slotKey(start: string, end: string) {
+  return `${start}|${end}`;
 }
 
 function buildHourBlocks(fromTime: string, toTime: string) {
   const blocks: Slot[] = [];
-  let cursor = normalizeTime(fromTime);
-  const endTime = normalizeTime(toTime);
-  if (!cursor || !endTime) return blocks;
-  while (cursor < endTime) {
-    const nextHour = addMinutes(cursor, 60);
-    // Wrap-around check: if nextHour is less than cursor, we've crossed midnight
-    const isWrapAround = nextHour < cursor;
-    const end = (isWrapAround || nextHour > endTime) ? endTime : nextHour;
+  const startNorm = normalizeTime(fromTime);
+  const endNorm = normalizeTime(toTime);
+  if (!startNorm || !endNorm) return blocks;
+
+  const startMinutes = timeToMinutes(startNorm);
+  let endMinutes = timeToMinutes(endNorm);
+  if (endMinutes === 0 || endNorm === "23:59" || endNorm === "24:00") {
+    endMinutes = 1440;
+  }
+  if (endMinutes <= startMinutes && endNorm !== "00:00" && endNorm !== "24:00") return blocks;
+
+  for (let cursor = startMinutes; cursor < endMinutes; cursor += 60) {
+    const nextCursor = Math.min(cursor + 60, endMinutes);
+    const startStr = minutesToTime(cursor);
+    const endStr = minutesToTime(nextCursor);
     blocks.push({
-      value: slotKey(cursor, end),
-      start: cursor,
-      end,
-      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}`,
+      value: slotKey(startStr, endStr),
+      start: startStr,
+      end: endStr,
+      label: `${formatDisplayTime(startStr)}-${formatDisplayTime(endStr)}`,
     });
-    if (end === endTime) break;
-    cursor = end;
   }
   return blocks;
 }
 
 function buildSubSlots(fromTime: string, toTime: string, step: number) {
   const slots: Slot[] = [];
-  // Guard: need a positive integer step
   const safeStep = Math.max(1, Math.round(step));
-  let cursor = normalizeTime(fromTime);
-  const endTime = normalizeTime(toTime);
-  if (!cursor || !endTime) return slots;
-  while (cursor < endTime) {
-    const next = addMinutes(cursor, safeStep);
-    // Wrap-around check: if next is less than cursor, we've crossed midnight
-    if (next < cursor || next > endTime) break;
+  const startNorm = normalizeTime(fromTime);
+  const endNorm = normalizeTime(toTime);
+  if (!startNorm || !endNorm) return slots;
+
+  const startMinutes = timeToMinutes(startNorm);
+  let endMinutes = timeToMinutes(endNorm);
+  if (endMinutes === 0 || endNorm === "23:59" || endNorm === "24:00") {
+    endMinutes = 1440;
+  }
+
+  for (let cursor = startMinutes; cursor < endMinutes; cursor += safeStep) {
+    const nextCursor = Math.min(cursor + safeStep, endMinutes);
+    const startStr = minutesToTime(cursor);
+    const endStr = minutesToTime(nextCursor);
     slots.push({
-      value: slotKey(cursor, next),
-      start: cursor,
-      end: next,
-      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(next)}`,
+      value: slotKey(startStr, endStr),
+      start: startStr,
+      end: endStr,
+      label: `${formatDisplayTime(startStr)}-${formatDisplayTime(endStr)}`,
     });
-    cursor = next;
   }
   return slots;
 }
@@ -714,7 +736,8 @@ export default function AppointmentCalendarPage() {
                       <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available hours.</div>
                     ) : (
                       availableHours.map((hour) => {
-                        const isPast = isToday && hour.end <= nowTime;
+                        const hourEndMinutes = hour.end === "24:00" || hour.end === "00:00" ? 1440 : timeToMinutes(hour.end);
+                        const isPast = isToday && hourEndMinutes <= timeToMinutes(nowTime);
                         return (
                           <button
                             key={hour.value}
@@ -744,7 +767,7 @@ export default function AppointmentCalendarPage() {
                         <div className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">No available slots.</div>
                       ) : (
                         availableSubSlots.map((slot) => {
-                          const isPast = isToday && slot.start <= nowTime;
+                          const isPast = isToday && timeToMinutes(slot.start) <= timeToMinutes(nowTime);
                           const isBooked = bookedSlots.has(slot.value) && !currentPatientBookedSlots.has(slot.value);
                           const isDisabled = isBooked || isPast;
                           return (

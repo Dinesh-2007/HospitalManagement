@@ -82,22 +82,26 @@ function normalizeTime(value: string) {
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return "";
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return "";
+  if (hours === 24 && minutes > 0) return "";
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 function isValidTime(value: string) {
-  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) || value === "24:00";
 }
 
 function timeToMinutes(value: string) {
-  const [hours, minutes] = normalizeTime(value).split(":").map(Number);
+  const norm = normalizeTime(value);
+  if (!norm) return 0;
+  const [hours, minutes] = norm.split(":").map(Number);
   return hours * 60 + minutes;
 }
 
 function minutesToTime(value: number) {
-  const hours = Math.floor(value / 60);
-  const minutes = value % 60;
+  const clamped = Math.min(1440, Math.max(0, value));
+  const hours = Math.floor(clamped / 60);
+  const minutes = clamped % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
@@ -161,7 +165,10 @@ function generateSlots(schedule: ScheduleRow, appointmentDate: string) {
   if (schedule.days.length > 0 && !schedule.days.includes(dayName)) return [];
 
   const slots: Slot[] = [];
-  const end = timeToMinutes(schedule.toTime);
+  let end = timeToMinutes(schedule.toTime);
+  if (end === 0 || schedule.toTime === "23:59" || schedule.toTime === "24:00") {
+    end = 1440;
+  }
   for (let cursor = timeToMinutes(schedule.fromTime); cursor + schedule.slotMinutes <= end; cursor += schedule.slotMinutes) {
     slots.push({ start: minutesToTime(cursor), end: minutesToTime(cursor + schedule.slotMinutes) });
   }
