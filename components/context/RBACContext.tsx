@@ -106,6 +106,18 @@ export function RBACProvider({ children }: { children: React.ReactNode }) {
     (pageKey: string): boolean => {
       if (isLoading) return true; // optimistic while loading
 
+      const isCoreAdminPage =
+        pageKey === "/manage-users" ||
+        pageKey === "/settings" ||
+        pageKey.startsWith("/manage-users/") ||
+        pageKey.startsWith("/settings/");
+
+      // Core administration pages are accessible to tenant admins
+      // and are not restricted by clinical/billing feature gates.
+      if (isCoreAdminPage) {
+        return isAdmin;
+      }
+
       // ── Layer 1: Tenant feature gate check ──────────────────────────────────
       // If tenantFeatureGates is non-empty, the super admin has restricted features.
       // The page must be within the allowed tenant features.

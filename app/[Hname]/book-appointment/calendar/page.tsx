@@ -152,17 +152,6 @@ function formatTimeRange(start: string, end?: string | null) {
   return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
 }
 
-function addMinutes(value: string, minutesToAdd: number) {
-  const [hoursText, minutesText = "00"] = value.split(":");
-  const date = new Date();
-  date.setHours(Number(hoursText), Number(minutesText) + minutesToAdd, 0, 0);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function slotKey(start: string, end: string) {
-  return `${start}|${end}`;
-}
-
 function normalizeTime(value: string) {
   const match = String(value ?? "")
     .trim()
@@ -175,40 +164,71 @@ function normalizeTime(value: string) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function timeToMinutes(value: string) {
+  const norm = normalizeTime(value);
+  if (!norm) return null;
+  const [hours, minutes] = norm.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(value: number) {
+  const safe = Math.max(0, Math.round(value));
+  const hours = Math.floor(safe / 60) % 24;
+  const minutes = safe % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function addMinutes(value: string, minutesToAdd: number) {
+  const startMin = timeToMinutes(value);
+  if (startMin === null) return "";
+  const safeAdd = Number.isFinite(minutesToAdd) ? Math.round(minutesToAdd) : 0;
+  return minutesToTime(startMin + safeAdd);
+}
+
+function slotKey(start: string, end: string) {
+  return `${start}|${end}`;
+}
+
 function buildHourBlocks(fromTime: string, toTime: string) {
   const blocks: Slot[] = [];
-  let cursor = normalizeTime(fromTime);
-  const endTime = normalizeTime(toTime);
-  if (!cursor || !endTime) return blocks;
-  while (cursor < endTime) {
-    const nextHour = addMinutes(cursor, 60);
-    const end = nextHour > endTime ? endTime : nextHour;
+  const startMin = timeToMinutes(fromTime);
+  const endMin = timeToMinutes(toTime);
+  if (startMin === null || endMin === null || startMin >= endMin) return blocks;
+
+  let cursor = startMin;
+  while (cursor < endMin) {
+    const nextHour = Math.min(cursor + 60, endMin);
+    const startStr = minutesToTime(cursor);
+    const endStr = minutesToTime(nextHour);
     blocks.push({
-      value: slotKey(cursor, end),
-      start: cursor,
-      end,
-      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(end)}`,
+      value: slotKey(startStr, endStr),
+      start: startStr,
+      end: endStr,
+      label: `${formatDisplayTime(startStr)}-${formatDisplayTime(endStr)}`,
     });
-    cursor = end;
+    cursor = nextHour;
   }
   return blocks;
 }
 
 function buildSubSlots(fromTime: string, toTime: string, step: number) {
   const slots: Slot[] = [];
-  // Guard: need a positive integer step
-  const safeStep = Math.max(1, Math.round(step));
-  let cursor = normalizeTime(fromTime);
-  const endTime = normalizeTime(toTime);
-  if (!cursor || !endTime) return slots;
-  while (cursor < endTime) {
-    const next = addMinutes(cursor, safeStep);
-    if (next > endTime) break;
+  const startMin = timeToMinutes(fromTime);
+  const endMin = timeToMinutes(toTime);
+  const safeStep = Number.isFinite(step) && step > 0 ? Math.round(step) : 10;
+  if (startMin === null || endMin === null || startMin >= endMin) return slots;
+
+  let cursor = startMin;
+  while (cursor + safeStep <= endMin) {
+    const next = cursor + safeStep;
+    const startStr = minutesToTime(cursor);
+    const endStr = minutesToTime(next);
     slots.push({
-      value: slotKey(cursor, next),
-      start: cursor,
-      end: next,
-      label: `${formatDisplayTime(cursor)}-${formatDisplayTime(next)}`,
+      value: slotKey(startStr, endStr),
+      start: startStr,
+      end: endStr,
+      label: `${formatDisplayTime(startStr)}-${formatDisplayTime(endStr)}`,
     });
     cursor = next;
   }
@@ -312,14 +332,6 @@ export default function AppointmentCalendarPage() {
     void loadPatientAppointments().catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load patient appointments."));
   }, [department, doctor, hname, patientId]);
 
-  useEffect(() => {
-    if (!selectedDate || !doctor) return;
-    const dateKey = toKey(selectedDate);
-    void loadRows(hname, `/appointments?date=${encodeURIComponent(dateKey)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`)
-      .then((rows) => setAppointmentRows(rows.map(normalizeAppointmentRow)))
-      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load appointments."));
-  }, [department, doctor, hname, selectedDate]);
-
   const weekDaysList = useMemo(() => buildWeek(selectedWeekStart), [selectedWeekStart]);
   const todayDate = useMemo(() => {
     const date = new Date();
@@ -339,17 +351,6 @@ export default function AppointmentCalendarPage() {
       });
     };
   }, [scheduleRows, todayDate]);
-  const selectedDaySchedules = useMemo(() => {
-    if (!selectedDate) return [];
-    const dayName = weekDayNames[selectedDate.getDay()];
-    return scheduleRows.filter((row) => {
-      const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
-      const to = row.appointmentToDate ? parseKey(row.appointmentToDate) : null;
-      if (from && selectedDate < from) return false;
-      if (to && selectedDate > to) return false;
-      return row.daysAvailable.length === 0 || row.daysAvailable.includes(dayName);
-    });
-  }, [scheduleRows, selectedDate]);
 
   const firstAvailableDate = useMemo(() => {
     const today = new Date();
@@ -369,6 +370,26 @@ export default function AppointmentCalendarPage() {
   }, [scheduleRows, weekDaysList]);
 
   const effectiveSelectedDate = selectedDate ?? firstAvailableDate;
+
+  useEffect(() => {
+    if (!effectiveSelectedDate || !doctor) return;
+    const dateKey = toKey(effectiveSelectedDate);
+    void loadRows(hname, `/appointments?date=${encodeURIComponent(dateKey)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`)
+      .then((rows) => setAppointmentRows(rows.map(normalizeAppointmentRow)))
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Failed to load appointments."));
+  }, [department, doctor, hname, effectiveSelectedDate]);
+
+  const selectedDaySchedules = useMemo(() => {
+    if (!effectiveSelectedDate) return [];
+    const dayName = weekDayNames[effectiveSelectedDate.getDay()];
+    return scheduleRows.filter((row) => {
+      const from = row.appointmentFromDate ? parseKey(row.appointmentFromDate) : null;
+      const to = row.appointmentToDate ? parseKey(row.appointmentToDate) : null;
+      if (from && effectiveSelectedDate < from) return false;
+      if (to && effectiveSelectedDate > to) return false;
+      return row.daysAvailable.length === 0 || row.daysAvailable.includes(dayName);
+    });
+  }, [scheduleRows, effectiveSelectedDate]);
   const scheduleSlotMinutes = useMemo(() => {
     // Accept any positive integer from the schedule — not just 10 or 20
     const values = selectedDaySchedules

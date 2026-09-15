@@ -117,23 +117,40 @@ export async function middleware(request: NextRequest) {
 
   // ── Tenant feature gate check ─────────────────────────────────────────────
   // Checks if the super admin has restricted this tenant's features.
-  const tenantGatesCookie = request.cookies.get(tenantGatesCookieName(hname));
-  if (tenantGatesCookie?.value) {
-    const gatePayload = await verifyPermissionJWT(tenantGatesCookie.value);
-    if (gatePayload) {
-      // gatePayload.pages = ["*"] means full access (no restriction)
-      const isFullAccess = gatePayload.pages.length === 1 && gatePayload.pages[0] === '*';
-      if (!isFullAccess && !isPathPermitted(gatePayload, subPath)) {
-        // Tenant does not have this feature licensed
-        const unavailableUrl = new URL(`/${encodeURIComponent(hname)}/feature-unavailable`, request.url);
-        unavailableUrl.searchParams.set('path', subPath);
-        return NextResponse.redirect(unavailableUrl);
+  // Core admin pages (/manage-users, /settings) are tenant administration tools,
+  // not tenant feature modules, and are thus exempt from tenant feature gates.
+  const isCoreAdminPage =
+    subPath === '/manage-users' ||
+    subPath.startsWith('/manage-users/') ||
+    subPath === '/settings' ||
+    subPath.startsWith('/settings/');
+
+  if (!isCoreAdminPage) {
+    const tenantGatesCookie = request.cookies.get(tenantGatesCookieName(hname));
+    if (tenantGatesCookie?.value) {
+      const gatePayload = await verifyPermissionJWT(tenantGatesCookie.value);
+      if (gatePayload) {
+        // gatePayload.pages = ["*"] means full access (no restriction)
+        const isFullAccess = gatePayload.pages.length === 1 && gatePayload.pages[0] === '*';
+        if (!isFullAccess && !isPathPermitted(gatePayload, subPath)) {
+          // Tenant does not have this feature licensed
+          const unavailableUrl = new URL(`/${encodeURIComponent(hname)}/feature-unavailable`, request.url);
+          unavailableUrl.searchParams.set('path', subPath);
+          return NextResponse.redirect(unavailableUrl);
+        }
       }
     }
   }
 
   // ── User-level RBAC check ─────────────────────────────────────────────────
-  if (!isPathPermitted(payload, subPath)) {
+  if (isCoreAdminPage) {
+    const isUserAdmin = payload.pages.includes('*');
+    if (!isUserAdmin) {
+      const deniedUrl = new URL(`/${encodeURIComponent(hname)}/access-denied`, request.url);
+      deniedUrl.searchParams.set('path', subPath);
+      return NextResponse.redirect(deniedUrl);
+    }
+  } else if (!isPathPermitted(payload, subPath)) {
     // Access denied — redirect to access-denied page
     const deniedUrl = new URL(`/${encodeURIComponent(hname)}/access-denied`, request.url);
     deniedUrl.searchParams.set('path', subPath);
