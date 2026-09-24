@@ -93,9 +93,11 @@ export async function GET(
     const { Hname } = await params;
     const pool = await getTenantDB(decodeURIComponent(Hname));
     const { searchParams } = new URL(request.url);
-    const phone = normalizePhone(searchParams.get("phone"));
+    // Keep the raw phone (with + prefix) for splitPhoneNumber to parse correctly
+    const rawPhone = (searchParams.get("phone") ?? "").trim();
+    const phone = normalizePhone(rawPhone); // digits-only fallback
 
-    if (!phone) {
+    if (!rawPhone) {
       return NextResponse.json({ error: "Phone number is required." }, { status: 400 });
     }
 
@@ -103,12 +105,14 @@ export async function GET(
     await ensureDispensingTable(pool);
 
     // 1. Look up patient by phone
-    const parsed = splitPhoneNumber(phone);
+    // Pass the original raw string (with +) so splitPhoneNumber can detect the country code
+    const parsed = splitPhoneNumber(rawPhone);
     const patientResult = await pool.query(
       `SELECT *, COALESCE(mobile_country_code, '') || COALESCE(mobile, '') AS mobile FROM ${quoteIdentifier(PATIENT_TABLE)} 
        WHERE (mobile = $1 AND (mobile_country_code = $2 OR mobile_country_code IS NULL OR mobile_country_code = ''))
-          OR mobile = $3 LIMIT 1`,
-      [parsed.phoneNumber, parsed.countryCode, phone]
+          OR mobile = $3
+          OR mobile = $4 LIMIT 1`,
+      [parsed.phoneNumber, parsed.countryCode, phone, rawPhone]
     );
 
     const exists = (patientResult.rowCount ?? 0) > 0;

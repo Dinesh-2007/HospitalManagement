@@ -12,7 +12,7 @@ type MedicineRow = {
   receivedQty: string;
 };
 
-const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
+const paymentStatusOptions = ["Partially Paid", "Paid", "Cancelled"];
 
 export default function PharmacyDispensingPage() {
   const router = useRouter();

@@ -90,7 +90,7 @@ type ItemMasterRow = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
+const paymentStatusOptions = ["Partially Paid", "Paid", "Cancelled"];
 
 const DISPENSING_FIELDS: DispensingField[] = [
   { id: "tokenNumber", type: "text" },
@@ -194,6 +194,11 @@ export default function PharmacyDispensingPage() {
   const [foundPatient, setFoundPatient] = useState<PatientRow | null>(null);
   const [dispenseHistory, setDispenseHistory] = useState<DispensingBillRecord[]>([]);
   const [selectedBill, setSelectedBill] = useState<DispensingBillRecord | null>(null);
+
+  // ── Bills date filter (defaults to today) ───────────────────────────────────
+  const [billsDateFilter, setBillsDateFilter] = useState<string>(
+    () => new Date().toISOString().slice(0, 10)
+  );
 
   // ── Medicine selection modal state ───────────────────────────────────────────
   const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
@@ -419,6 +424,12 @@ export default function PharmacyDispensingPage() {
       );
     });
   }, [pricingMap]);
+
+  // Auto-update payment status based on billing amount
+  useEffect(() => {
+    const amount = Number(billingAmount);
+    setPaymentStatus(Number.isFinite(amount) && amount > 0 ? "Paid" : "Not Paid");
+  }, [billingAmount]);
 
   const updateMedicineRow = (rowId: number, field: keyof Omit<MedicineRow, "id">, value: string) => {
     setMedicineRows((currentRows) =>
@@ -1071,20 +1082,7 @@ export default function PharmacyDispensingPage() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                          Payment Status
-                        </label>
-                        <select
-                          value={paymentStatus}
-                          onChange={(e) => setPaymentStatus(e.target.value)}
-                          className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                        >
-                          {paymentStatusOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      </div>
+
                     </>
                   )}
                 </div>
@@ -1106,20 +1104,7 @@ export default function PharmacyDispensingPage() {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-gray-300">
-                        Payment Status
-                      </label>
-                      <select
-                        value={paymentStatus}
-                        onChange={(e) => setPaymentStatus(e.target.value)}
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-transparent px-4 py-2.5 text-sm text-slate-700 shadow-theme-xs focus:border-brand-400 focus:outline-hidden focus:ring-3 focus:ring-brand-400/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                      >
-                        {paymentStatusOptions.map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </div>
+
                   </div>
                 )}
 
@@ -1276,60 +1261,108 @@ export default function PharmacyDispensingPage() {
             ════════════════════════════════════════════════════════════════ */}
             {activeView === "bills" ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white/90">
                     Dispensed Bills &amp; History
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => void refreshBills()}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                  >
-                    Refresh
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Date filter */}
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 dark:border-gray-700 dark:bg-gray-900">
+                      <svg className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <input
+                        type="date"
+                        value={billsDateFilter}
+                        onChange={(e) => setBillsDateFilter(e.target.value)}
+                        className="text-xs text-slate-700 bg-transparent border-0 focus:outline-none dark:text-gray-300"
+                      />
+                      {billsDateFilter && (
+                        <button
+                          type="button"
+                          onClick={() => setBillsDateFilter("")}
+                          className="text-slate-400 hover:text-slate-600 dark:text-gray-500 dark:hover:text-gray-300"
+                          title="Clear date filter"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void refreshBills()}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
                 </div>
                 {isLoadingBills ? (
                   <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">Loading bills...</p>
-                ) : dispensingBills.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">No dispensing records found.</p>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
-                      <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
-                        <tr>
-                          <th className="px-2.5 py-2">Token</th>
-                          <th className="px-2.5 py-2">Patient Name</th>
-                          <th className="px-2.5 py-2">Mobile</th>
-                          <th className="px-2.5 py-2">Type</th>
-                          <th className="px-2.5 py-2">Billing Amount</th>
-                          <th className="px-2.5 py-2">Status</th>
-                          <th className="px-2.5 py-2">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                        {dispensingBills.map((bill) => (
-                          <tr
-                            key={bill.id}
-                            onClick={() => setSelectedBill(bill)}
-                            className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
-                          >
-                            <td className="px-2.5 py-2 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
-                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
-                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
-                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
-                              {bill.pharmacy_only === "1" || bill.pharmacy_only === "true" ? "Pharmacy Only" : "Consultation"}
-                            </td>
-                            <td className="px-2.5 py-2 font-medium text-slate-700 dark:text-gray-300">
-                              Rs. {bill.billing_amount ? Number(bill.billing_amount).toFixed(2) : "0.00"}
-                            </td>
-                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.payment_status || "Pending"}</td>
-                            <td className="px-2.5 py-2 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
+                ) : (() => {
+                  const filteredBills = billsDateFilter
+                    ? dispensingBills.filter((bill) => {
+                        if (!bill.created_at) return false;
+                        return new Date(bill.created_at).toISOString().slice(0, 10) === billsDateFilter;
+                      })
+                    : dispensingBills;
+                  return filteredBills.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">
+                      {billsDateFilter ? `No records found for ${formatDate(billsDateFilter + "T00:00:00")}.` : "No dispensing records found."}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                      <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                        <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
+                          <tr>
+                            <th className="px-2.5 py-2">Token</th>
+                            <th className="px-2.5 py-2">Patient Name</th>
+                            <th className="px-2.5 py-2">Mobile</th>
+                            <th className="px-2.5 py-2">Type</th>
+                            <th className="px-2.5 py-2">Billing Amount</th>
+                            <th className="px-2.5 py-2">Status</th>
+                            <th className="px-2.5 py-2">Date</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                          {filteredBills.map((bill) => (
+                            <tr
+                              key={bill.id}
+                              onClick={() => setSelectedBill(bill)}
+                              className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
+                            >
+                              <td className="px-2.5 py-2 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
+                                {bill.pharmacy_only === "1" || bill.pharmacy_only === "true" ? "Pharmacy Only" : "Consultation"}
+                              </td>
+                              <td className="px-2.5 py-2 font-medium text-slate-700 dark:text-gray-300">
+                                Rs. {bill.billing_amount ? Number(bill.billing_amount).toFixed(2) : "0.00"}
+                              </td>
+                              <td className="px-2.5 py-2">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  bill.payment_status === "Paid"
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                    : bill.payment_status === "Partially Paid"
+                                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                    : bill.payment_status === "Cancelled"
+                                    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                    : "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-400"
+                                }`}>
+                                  {bill.payment_status || "Pending"}
+                                </span>
+                              </td>
+                              <td className="px-2.5 py-2 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             ) : null}
 
