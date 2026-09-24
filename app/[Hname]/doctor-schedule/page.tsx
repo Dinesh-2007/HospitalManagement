@@ -22,6 +22,7 @@ type ScheduleRow = {
 };
 type AppointmentRow = {
   id?: number;
+  appointment_id_display?: string | null;
   appointment_date?: string;
   appointment_time?: string | null;
   appointment_end_time?: string | null;
@@ -101,6 +102,7 @@ function normalizeScheduleRow(row: RawRow): ScheduleRow {
 function normalizeAppointmentRow(row: RawRow): AppointmentRow {
   return {
     id: row.id ? Number(row.id) : undefined,
+    appointment_id_display: readText(row, ["appointment_id_display", "appointmentIdDisplay"]) || null,
     appointment_date: normalizeDateKey(readText(row, ["appointment_date", "appointmentDate"])),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
     appointment_end_time: readText(row, ["appointment_end_time", "appointmentEndTime"]) || null,
@@ -270,6 +272,16 @@ export default function DoctorSchedulePage() {
   const [openActionDropdownId, setOpenActionDropdownId] = useState<number | string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [blockingLoading, setBlockingLoading] = useState<string | null>(null);
+  const [transferSuccessData, setTransferSuccessData] = useState<{
+    appointmentNumber?: string;
+    patientName: string;
+    doctorName: string;
+  } | null>(null);
+  const [cancelSuccessData, setCancelSuccessData] = useState<{
+    appointmentNumber?: string;
+    patientName: string;
+  } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -602,6 +614,7 @@ export default function DoctorSchedulePage() {
   async function transferAppointment(doctorName: string) {
     if (!transferTarget?.id) return;
     setIsTransferring(true);
+    setBlockingLoading(`Transferring appointment to Dr. ${doctorName}, please wait...`);
     setErrorMessage("");
     setMessage("");
     try {
@@ -620,6 +633,15 @@ export default function DoctorSchedulePage() {
       const updated = normalizeAppointmentRow(data.row ?? {});
       setWeekAppointments((current) => current.map((row) => (row.id === updated.id ? updated : row)));
       if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
+      const apptNo =
+        updated.appointment_id_display ||
+        transferTarget.appointment_id_display ||
+        (transferTarget.id ? `APT-${transferTarget.id}` : "");
+      setTransferSuccessData({
+        appointmentNumber: apptNo,
+        patientName: transferTarget.patient_name || "Patient",
+        doctorName,
+      });
       setTransferTarget(null);
       setTransferDoctors([]);
       setMessage(`Appointment transferred to ${doctorName}.`);
@@ -627,6 +649,7 @@ export default function DoctorSchedulePage() {
       setErrorMessage(error instanceof Error ? error.message : "Failed to transfer appointment.");
     } finally {
       setIsTransferring(false);
+      setBlockingLoading(null);
     }
   }
 
@@ -671,6 +694,7 @@ export default function DoctorSchedulePage() {
     if (!cancelTarget?.id) return;
 
     setIsCancelling(true);
+    setBlockingLoading("Cancelling appointment, please wait...");
     setErrorMessage("");
     setMessage("");
     try {
@@ -689,12 +713,18 @@ export default function DoctorSchedulePage() {
 
       setWeekAppointments((current) => current.filter((row) => row.id !== cancelTarget.id));
       if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
+      const apptNo = cancelTarget.appointment_id_display || (cancelTarget.id ? `APT-${cancelTarget.id}` : "");
+      setCancelSuccessData({
+        appointmentNumber: apptNo,
+        patientName: cancelTarget.patient_name || "Patient",
+      });
       setMessage(`Appointment cancelled for ${cancelTarget.patient_name ?? "patient"}.`);
       setCancelTarget(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment.");
     } finally {
       setIsCancelling(false);
+      setBlockingLoading(null);
     }
   }
 
@@ -702,6 +732,7 @@ export default function DoctorSchedulePage() {
     if (!selectedDateKey || matchedDoctorNames.length === 0) return;
 
     setIsCancellingAll(true);
+    setBlockingLoading("Cancelling appointments, please wait...");
     setErrorMessage("");
     setMessage("");
     try {
@@ -732,12 +763,16 @@ export default function DoctorSchedulePage() {
         )
       );
       if (showRecords) void loadRecords(recordsDate, recordsStatus, recordsSearch, recordsPage);
-      setMessage(`All appointments cancelled for ${formatDisplayDate(selectedDateKey)}.`);
+      setCancelSuccessData({
+        patientName: `all appointments on ${formatDisplayDate(selectedDateKey)}`,
+      });
+      setMessage(`All appointments cancelled for ${selectedDateKey}.`);
       setShowCancelAllConfirm(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to cancel all appointments.");
     } finally {
       setIsCancellingAll(false);
+      setBlockingLoading(null);
     }
   }
 
@@ -1024,6 +1059,89 @@ export default function DoctorSchedulePage() {
             </div>
           </div>
         ) : null}
+
+        {transferSuccessData && (
+          <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-blue-100 dark:border-blue-900/30 text-center">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Transferred!
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Appointment has been successfully transferred to Dr. {transferSuccessData.doctorName}.
+              </p>
+
+              {transferSuccessData.appointmentNumber && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 shadow-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">Appointment No:</span>
+                  <span className="font-mono text-sm font-extrabold text-blue-600 dark:text-blue-400">{transferSuccessData.appointmentNumber}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setTransferSuccessData(null)}
+                className="mt-8 w-full rounded-xl bg-brand-600 py-3 text-sm font-bold text-white shadow-lg hover:bg-brand-700 transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cancelSuccessData && (
+          <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-red-100 dark:border-red-900/30 text-center">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Cancelled!
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Appointment for {cancelSuccessData.patientName} has been cancelled successfully.
+              </p>
+
+              {cancelSuccessData.appointmentNumber && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 shadow-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Appointment No:</span>
+                  <span className="font-mono text-sm font-extrabold text-red-600 dark:text-red-400">{cancelSuccessData.appointmentNumber}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setCancelSuccessData(null)}
+                className="mt-8 w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-lg hover:bg-gray-800 transition dark:bg-gray-700 dark:hover:bg-gray-600"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {blockingLoading && (
+          <div className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center bg-black/60 p-4 backdrop-blur-sm select-none">
+            <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800 max-w-sm text-center">
+              <div className="relative flex h-16 w-16 items-center justify-center">
+                <div className="absolute h-16 w-16 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400" />
+                <svg className="h-7 w-7 text-brand-600 dark:text-brand-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Please wait</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{blockingLoading}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1505,6 +1623,89 @@ export default function DoctorSchedulePage() {
             </div>
           </div>
         ) : null}
+
+        {transferSuccessData && (
+          <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-blue-100 dark:border-blue-900/30 text-center">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Transferred!
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Appointment has been successfully transferred to Dr. {transferSuccessData.doctorName}.
+              </p>
+
+              {transferSuccessData.appointmentNumber && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 shadow-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">Appointment No:</span>
+                  <span className="font-mono text-sm font-extrabold text-blue-600 dark:text-blue-400">{transferSuccessData.appointmentNumber}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setTransferSuccessData(null)}
+                className="mt-8 w-full rounded-xl bg-brand-600 py-3 text-sm font-bold text-white shadow-lg hover:bg-brand-700 transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cancelSuccessData && (
+          <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-red-100 dark:border-red-900/30 text-center">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Cancelled!
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Appointment for {cancelSuccessData.patientName} has been cancelled successfully.
+              </p>
+
+              {cancelSuccessData.appointmentNumber && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 shadow-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Appointment No:</span>
+                  <span className="font-mono text-sm font-extrabold text-red-600 dark:text-red-400">{cancelSuccessData.appointmentNumber}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setCancelSuccessData(null)}
+                className="mt-8 w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-lg hover:bg-gray-800 transition dark:bg-gray-700 dark:hover:bg-gray-600"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {blockingLoading && (
+          <div className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center bg-black/60 p-4 backdrop-blur-sm select-none">
+            <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800 max-w-sm text-center">
+              <div className="relative flex h-16 w-16 items-center justify-center">
+                <div className="absolute h-16 w-16 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400" />
+                <svg className="h-7 w-7 text-brand-600 dark:text-brand-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Please wait</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{blockingLoading}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

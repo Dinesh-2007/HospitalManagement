@@ -19,9 +19,12 @@ type ScheduleRow = {
 };
 type AppointmentRow = {
   id?: number;
+  appointment_id_display?: string | null;
   appointment_date?: string;
   appointment_time?: string | null;
   appointment_end_time?: string | null;
+  department?: string | null;
+  doctor?: string | null;
   patient_id?: string | null;
   patient_name?: string | null;
   patient_phone?: string | null;
@@ -86,9 +89,12 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
   const history = row.reschedule_history;
   return {
     id: row.id ? Number(row.id) : undefined,
+    appointment_id_display: readText(row, ["appointment_id_display", "appointmentIdDisplay"]) || null,
     appointment_date: readText(row, ["appointment_date", "appointmentDate"]),
     appointment_time: readText(row, ["appointment_time", "appointmentTime"]) || null,
     appointment_end_time: readText(row, ["appointment_end_time", "appointmentEndTime"]) || null,
+    department: readText(row, ["department"]) || null,
+    doctor: readText(row, ["doctor"]) || null,
     patient_id: readText(row, ["patient_id", "patientId"]) || null,
     patient_name: readText(row, ["patient_name", "patientName"]) || null,
     patient_phone: readText(row, ["patient_phone", "patientPhone"]) || null,
@@ -280,11 +286,23 @@ export default function AppointmentCalendarPage() {
   const [confirmDialog, setConfirmDialog] = useState<{ type: "book" | "reschedule" | "cancel" | null } | null>(null);
   const [successData, setSuccessData] = useState<{
     type: "book" | "reschedule";
+    appointmentNumber?: string;
     doctor: string;
     department: string;
     date: string;
     slot: string;
   } | null>(null);
+  const [cancelSuccessData, setCancelSuccessData] = useState<{
+    appointmentNumber?: string;
+    doctor?: string;
+    department?: string;
+    date?: string;
+    slot?: string;
+    patientName?: string;
+  } | null>(null);
+  const [blockingLoading, setBlockingLoading] = useState<string | null>(null);
+  const [patientAllAppointments, setPatientAllAppointments] = useState<AppointmentRow[]>([]);
+  const [duplicateWarningAppointment, setDuplicateWarningAppointment] = useState<AppointmentRow | null>(null);
 
   useEffect(() => {
     async function loadPatient() {
@@ -424,13 +442,38 @@ export default function AppointmentCalendarPage() {
       .join("") || "U";
 
   async function refreshPatientAppointments() {
-    if (!patientId || !department || !doctor) return;
-    const rows = await loadRows(
-      hname,
-      `/appointments?patientId=${encodeURIComponent(patientId)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`,
-    );
-    setPatientAppointments(rows.map(normalizeAppointmentRow));
+    const pId = patientId || patient?.mobile || searchParams.get("patientPhone") || "";
+    if (pId && department && doctor) {
+      const rows = await loadRows(
+        hname,
+        `/appointments?patientId=${encodeURIComponent(pId)}&department=${encodeURIComponent(department)}&doctor=${encodeURIComponent(doctor)}`,
+      );
+      setPatientAppointments(rows.map(normalizeAppointmentRow));
+    }
+    if (pId || patient?.patient_name) {
+      try {
+        const params = new URLSearchParams();
+        if (pId) params.set("patientId", pId);
+        if (patient?.patient_name) params.set("patientName", patient.patient_name);
+        const allRows = await loadRows(hname, `/appointments?${params.toString()}`);
+        setPatientAllAppointments(allRows.map(normalizeAppointmentRow));
+      } catch {
+        // ignore
+      }
+    }
   }
+
+  const existingAppointmentOnSelectedDate = useMemo(() => {
+    if (!effectiveSelectedDate || isRescheduling) return null;
+    const selectedDateKey = toKey(effectiveSelectedDate);
+    return (
+      patientAllAppointments.find((appt) => {
+        const apptDateKey = appt.appointment_date ? appt.appointment_date.split("T")[0] : "";
+        const isCancelled = appt.status?.toLowerCase() === "cancelled";
+        return apptDateKey === selectedDateKey && !isCancelled;
+      }) ?? null
+    );
+  }, [effectiveSelectedDate, patientAllAppointments, isRescheduling]);
 
   function handlePreviousWeek() {
     setSelectedWeekStart((current) => {
@@ -527,11 +570,17 @@ export default function AppointmentCalendarPage() {
         timeSlotMinutes: activeStep,
       }),
     });
-    const data = (await response.json()) as { error?: string };
+    const data = (await response.json()) as { error?: string; row?: Record<string, unknown> };
     if (!response.ok) throw new Error(data.error ?? "Failed to save appointment.");
+
+    const apptNumber =
+      (data.row?.appointment_id_display ? String(data.row.appointment_id_display) : "") ||
+      (patientAppointment?.appointment_id_display ? String(patientAppointment.appointment_id_display) : "") ||
+      (data.row?.id ? `APT-${data.row.id}` : "");
 
     setSuccessData({
       type: isReschedule ? "reschedule" : "book",
+      appointmentNumber: apptNumber,
       doctor,
       department,
       date: toKey(effectiveSelectedDate),
@@ -565,6 +614,21 @@ export default function AppointmentCalendarPage() {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Failed to cancel appointment.");
 
+    const cancelledApptNumber =
+      patientAppointment?.appointment_id_display ||
+      (patientAppointment?.id ? `APT-${patientAppointment.id}` : "");
+
+    setCancelSuccessData({
+      appointmentNumber: cancelledApptNumber,
+      doctor: patientAppointment?.doctor || doctor,
+      department: patientAppointment?.department || department,
+      date: patientAppointment?.appointment_date || (effectiveSelectedDate ? toKey(effectiveSelectedDate) : ""),
+      slot: patientAppointment?.appointment_time
+        ? formatTimeRange(patientAppointment.appointment_time, patientAppointment.appointment_end_time)
+        : selectedSlot,
+      patientName: patient?.patient_name || "",
+    });
+
     setMessage("Appointment cancelled.");
     setDialogMessage("Appointment cancelled.");
     setIsRescheduling(false);
@@ -596,6 +660,10 @@ export default function AppointmentCalendarPage() {
   }
 
   function showBookConfirmation() {
+    if (existingAppointmentOnSelectedDate) {
+      setDuplicateWarningAppointment(existingAppointmentOnSelectedDate);
+      return;
+    }
     setConfirmDialog({ type: "book" });
   }
 
@@ -609,28 +677,37 @@ export default function AppointmentCalendarPage() {
 
   async function handleConfirmBook() {
     setConfirmDialog(null);
+    setBlockingLoading("Booking your appointment, please wait...");
     try {
       await bookSlot();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment.");
+    } finally {
+      setBlockingLoading(null);
     }
   }
 
   async function handleConfirmReschedule() {
     setConfirmDialog(null);
+    setBlockingLoading("Rescheduling your appointment, please wait...");
     try {
       await bookSlot();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to save appointment.");
+    } finally {
+      setBlockingLoading(null);
     }
   }
 
   async function handleConfirmCancel() {
     setConfirmDialog(null);
+    setBlockingLoading("Cancelling your appointment, please wait...");
     try {
       await cancelAppointment();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment.");
+    } finally {
+      setBlockingLoading(null);
     }
   }
 
@@ -904,7 +981,20 @@ export default function AppointmentCalendarPage() {
               Your appointment has been successfully {successData.type === "reschedule" ? "rescheduled" : "booked"}.
             </p>
 
+            {successData.appointmentNumber && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-50 px-4 py-2 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/20 shadow-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-300">Appointment No:</span>
+                <span className="font-mono text-sm font-extrabold text-brand-600 dark:text-brand-400">{successData.appointmentNumber}</span>
+              </div>
+            )}
+
             <div className="mt-6 space-y-3 rounded-2xl bg-gray-50 p-4 text-left dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+              {successData.appointmentNumber && (
+                <div className="flex justify-between text-sm pb-2 border-b border-gray-200/60 dark:border-gray-700/60">
+                  <span className="text-gray-500">Appointment No</span>
+                  <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{successData.appointmentNumber}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Doctor</span>
                 <span className="font-semibold text-gray-900 dark:text-white">{successData.doctor}</span>
@@ -933,6 +1023,165 @@ export default function AppointmentCalendarPage() {
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Success Modal */}
+      {cancelSuccessData && (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-red-100 dark:border-red-900/30 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Cancelled!
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Your appointment has been successfully cancelled.
+            </p>
+
+            {cancelSuccessData.appointmentNumber && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 shadow-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Appointment No:</span>
+                <span className="font-mono text-sm font-extrabold text-red-600 dark:text-red-400">{cancelSuccessData.appointmentNumber}</span>
+              </div>
+            )}
+
+            {(cancelSuccessData.doctor || cancelSuccessData.date) && (
+              <div className="mt-6 space-y-3 rounded-2xl bg-gray-50 p-4 text-left dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+                {cancelSuccessData.doctor && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Doctor</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessData.doctor}</span>
+                  </div>
+                )}
+                {cancelSuccessData.department && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Dept</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessData.department}</span>
+                  </div>
+                )}
+                {cancelSuccessData.date && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Date</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessData.date}</span>
+                  </div>
+                )}
+                {cancelSuccessData.slot && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Slot</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessData.slot}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setCancelSuccessData(null);
+                router.push(`/${hname}/patient-dashboard`);
+              }}
+              className="mt-8 w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-lg hover:bg-gray-800 transition dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Blocking Loading Overlay */}
+      {blockingLoading && (
+        <div className="fixed inset-0 z-[9999999] flex flex-col items-center justify-center bg-black/60 p-4 backdrop-blur-sm select-none">
+          <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800 max-w-sm text-center">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <div className="absolute h-16 w-16 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400" />
+              <svg className="h-7 w-7 text-brand-600 dark:text-brand-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Please wait</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{blockingLoading}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Appointment Warning Modal */}
+      {duplicateWarningAppointment && (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl dark:bg-gray-900 border border-amber-200 dark:border-amber-900/30 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              Existing Appointment Found
+            </h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              {patient?.patient_name ? <span className="font-semibold">{patient.patient_name}</span> : "You"} already {patient?.patient_name ? "has" : "have"} an appointment scheduled on{" "}
+              <span className="font-semibold text-gray-900 dark:text-white">{effectiveSelectedDate ? formatDay(effectiveSelectedDate) : "this day"}</span>:
+            </p>
+
+            <div className="mt-5 space-y-2.5 rounded-2xl bg-amber-50/80 p-4 text-left dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-900/30 text-sm">
+              <div className="flex justify-between">
+                <span className="text-amber-800 dark:text-amber-300 font-medium">Appointment No</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">
+                  {duplicateWarningAppointment.appointment_id_display || (duplicateWarningAppointment.id ? `APT-${duplicateWarningAppointment.id}` : "-")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-amber-800 dark:text-amber-300 font-medium">Doctor</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{duplicateWarningAppointment.doctor || doctor}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-amber-800 dark:text-amber-300 font-medium">Department</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{duplicateWarningAppointment.department || department}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-amber-800 dark:text-amber-300 font-medium">Time / Slot</span>
+                <span className="font-semibold text-amber-900 dark:text-amber-200">
+                  {duplicateWarningAppointment.appointment_time
+                    ? formatTimeRange(duplicateWarningAppointment.appointment_time, duplicateWarningAppointment.appointment_end_time)
+                    : "-"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-amber-800 dark:text-amber-300 font-medium">Status</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 dark:bg-amber-400/20 dark:text-amber-300">
+                  {duplicateWarningAppointment.status || "Scheduled"}
+                </span>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Are you sure you want to add another appointment for this day?
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDuplicateWarningAppointment(null)}
+                className="flex-1 rounded-xl border border-gray-300 bg-white py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              >
+                No, Keep Existing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateWarningAppointment(null);
+                  setConfirmDialog({ type: "book" });
+                }}
+                className="flex-1 rounded-xl bg-amber-600 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 transition shadow-lg shadow-amber-600/30"
+              >
+                Yes, Book Another
+              </button>
+            </div>
           </div>
         </div>
       )}

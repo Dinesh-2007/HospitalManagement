@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
 import { useHospitalCurrency } from "../../../components/context/HospitalCurrencyContext";
 
@@ -14,6 +15,7 @@ type MedicineRow = {
 const paymentStatusOptions = ["Pending", "Partially Paid", "Paid", "Cancelled"];
 
 export default function PharmacyDispensingPage() {
+  const router = useRouter();
   const [patientName, setPatientName] = useState("");
   const [billingAmount, setBillingAmount] = useState("");
   const [paymentStatus, setPaymentStatus] = useState(paymentStatusOptions[0]);
@@ -67,11 +69,24 @@ export default function PharmacyDispensingPage() {
     <PageLayout title="Pharmacy - Pharmacy Dispensing">
       <div className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="border-b border-slate-200 px-6 py-5 dark:border-gray-800">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white/90">Pharmacy Dispensing</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
-              Capture prescription details, quantities, and billing status.
-            </p>
+          <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-5 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 focus:ring-slate-500/25"
+              title="Back"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+              Back
+            </button>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white/90">Pharmacy Dispensing</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
+                Capture prescription details, quantities, and billing status.
+              </p>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8 px-6 py-6">
@@ -122,64 +137,66 @@ export default function PharmacyDispensingPage() {
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-900 dark:text-white/90">Medicine List</h3>
-                  <p className="text-sm text-slate-500 dark:text-gray-400">Add the dispensed medicines with prescribed and received quantities.</p>
+                  <p className="text-sm text-slate-500 dark:text-gray-400">
+                    Track the quantities requested and delivered to the patient.
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={addMedicineRow}
-                  className="rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
+                  className="rounded-lg bg-brand-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-brand-600 focus:outline-hidden focus:ring-3 focus:ring-brand-500/25"
                 >
                   Add Row
                 </button>
               </div>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
-                  <thead className="bg-slate-100 dark:bg-gray-950">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                  <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
                     <tr>
-                      <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Medicine Name</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Prescribed Qty</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Received Qty</th>
+                      <th className="px-2.5 py-2">Medicine Name</th>
+                      <th className="px-2.5 py-2">Prescribed Qty</th>
+                      <th className="px-2.5 py-2">Received Qty</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                     {medicineRows.map((row, index) => (
                       <tr key={row.id}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
+                        <td className="px-2.5 py-1.5">
+                          <div className="flex items-center gap-2">
                             <input
                               type="text"
                               value={row.medicineName}
                               onChange={(event) => updateMedicineRow(row.id, "medicineName", event.target.value)}
                               placeholder={`Medicine ${index + 1}`}
-                              className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                              className="h-8 w-full rounded-lg border border-slate-300 bg-transparent px-2.5 text-xs text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                             />
                             <button
                               type="button"
                               onClick={() => removeMedicineRow(row.id)}
-                              className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                              className="h-8 shrink-0 rounded-lg border border-slate-300 px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                               disabled={medicineRows.length === 1}
                             >
                               Remove
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2.5 py-1.5">
                           <input
                             type="number"
                             min="0"
                             value={row.prescribedQty}
                             onChange={(event) => updateMedicineRow(row.id, "prescribedQty", event.target.value)}
-                            className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                            className="h-8 w-full rounded-lg border border-slate-300 bg-transparent px-2.5 text-xs text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                           />
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2.5 py-1.5">
                           <input
                             type="number"
                             min="0"
                             value={row.receivedQty}
                             onChange={(event) => updateMedicineRow(row.id, "receivedQty", event.target.value)}
-                            className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                            className="h-8 w-full rounded-lg border border-slate-300 bg-transparent px-2.5 text-xs text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                           />
                         </td>
                       </tr>

@@ -70,6 +70,8 @@ export default function CheckInPage() {
   const [walkInPhone, setWalkInPhone] = useState("");
   const [showWalkInOtp, setShowWalkInOtp] = useState(false);
   const [walkInEnteredOtp, setWalkInEnteredOtp] = useState("");
+  const [duplicateWarningAppointment, setDuplicateWarningAppointment] = useState<VitalsRow | null>(null);
+  const [pendingWalkInStep, setPendingWalkInStep] = useState<"consultation" | "register" | null>(null);
   const [walkInRegForm, setWalkInRegForm] = useState<any>({
     patientName: "",
     dob: "",
@@ -149,6 +151,18 @@ export default function CheckInPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to check phone number.");
 
+      const cleanPhone = walkInPhone.replace(/\D/g, "");
+      const existingAppt = rows.find((r) => {
+        const rStatus = text(r, ["appointment_status", "status", "vitals_status"]).toLowerCase();
+        if (rStatus === "cancelled") return false;
+        const rPhone = text(r, ["patient_phone", "mobile"]).replace(/\D/g, "");
+        const rPid = text(r, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+        if (cleanPhone && rPhone && (cleanPhone.endsWith(rPhone) || rPhone.endsWith(cleanPhone))) return true;
+        if (data.row?.patient_id && rPid && rPid === String(data.row.patient_id)) return true;
+        if (data.row?.id && rPid && rPid === String(data.row.id)) return true;
+        return false;
+      });
+
       if (data.exists && data.row) {
         // Patient exists!
         setWalkInRegForm({
@@ -169,6 +183,11 @@ export default function CheckInPage() {
           patientId: data.row.patient_id || "",
           internalId: data.row.id || "",
         });
+        if (existingAppt) {
+          setDuplicateWarningAppointment(existingAppt);
+          setPendingWalkInStep("consultation");
+          return;
+        }
         setWalkInStep("consultation");
       } else {
         // Patient does not exist, go to registration step
@@ -189,6 +208,11 @@ export default function CheckInPage() {
           profession: "",
           patientType: "Walk in",
         });
+        if (existingAppt) {
+          setDuplicateWarningAppointment(existingAppt);
+          setPendingWalkInStep("register");
+          return;
+        }
         setWalkInStep("register");
       }
     } catch (err: any) {
@@ -1220,6 +1244,92 @@ export default function CheckInPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Appointment Warning Modal */}
+      {duplicateWarningAppointment && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-amber-200 dark:border-amber-800 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Existing Appointment Found</h3>
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Duplicate Check-in / Booking Warning</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+              This patient already has an appointment scheduled for today. Are you sure you want to add a new appointment?
+            </p>
+
+            <div className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Patient:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {text(duplicateWarningAppointment, ["registration_patient_name", "appointment_patient_name", "patient_name"]) || walkInRegForm.patientName || "Patient"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Appointment No:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {text(duplicateWarningAppointment, ["appointment_id_display"]) ||
+                    (duplicateWarningAppointment.appointment_number ? `APT-${duplicateWarningAppointment.appointment_number}` : "-")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Doctor:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{text(duplicateWarningAppointment, ["doctor"]) || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Department:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{text(duplicateWarningAppointment, ["department"]) || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Time / Slot:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {text(duplicateWarningAppointment, ["appointment_time"])
+                    ? formatTimeRange(text(duplicateWarningAppointment, ["appointment_time"]), duplicateWarningAppointment.appointment_end_time)
+                    : "-"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Status:</span>
+                <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                  {text(duplicateWarningAppointment, ["appointment_status", "status", "vitals_status"]) || "Scheduled"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateWarningAppointment(null);
+                  setPendingWalkInStep(null);
+                }}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                No, Keep Existing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetStep = pendingWalkInStep || "consultation";
+                  setDuplicateWarningAppointment(null);
+                  setPendingWalkInStep(null);
+                  setWalkInStep(targetStep);
+                }}
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition shadow"
+              >
+                Yes, Add New Appointment
+              </button>
+            </div>
           </div>
         </div>
       )}

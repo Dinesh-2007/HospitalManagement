@@ -1007,6 +1007,30 @@ export default function DoctorConsultationPage() {
     return rows;
   }, [consultationRows, selectedDoctor]);
 
+  // Auto-select first/next patient when list loads or updates and no patient is selected
+  useEffect(() => {
+    if (isLoading) return;
+    if (queueTab === "Upcoming" && upcomingRows.length > 0) {
+      const isCurrentlySelected =
+        selectedPatientRow &&
+        upcomingRows.some(
+          (r) =>
+            (r.vitals_id && text(selectedPatientRow, ["vitals_id"]) === String(r.vitals_id)) ||
+            (r.appointment_id && text(selectedPatientRow, ["appointment_id"]) === String(r.appointment_id)) ||
+            (patientName(selectedPatientRow) && patientName(selectedPatientRow) === patientName(r))
+        );
+      if (!isCurrentlySelected) {
+        handleVitalsClick(upcomingRows[0]);
+      }
+    } else if (queueTab === "Draft" && draftRows.length > 0) {
+      const isCurrentlySelected =
+        editingRecordId && draftRows.some((r) => Number(r.id) === Number(editingRecordId));
+      if (!isCurrentlySelected && !selectedPatientRow) {
+        handleConsultationClick(draftRows[0]);
+      }
+    }
+  }, [upcomingRows, draftRows, queueTab, isLoading]);
+
   const patientDetailFields = useMemo(() => {
     if (!selectedPatientRow) return [];
     const rawPid = text(selectedPatientRow, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
@@ -1180,6 +1204,7 @@ export default function DoctorConsultationPage() {
       if (!response.ok) throw new Error(data.error || "Failed to save.");
 
       setSuccessMessage(status === "Completed" ? "Consultation completed successfully." : "Consultation saved as draft.");
+      setSelectedPatientRow(null);
       setFormValues({ ...DEFAULT_FORM_VALUES });
       setPatientType("OP");
       setEditingRecordId(null);
@@ -1201,7 +1226,7 @@ export default function DoctorConsultationPage() {
         }
       }
 
-      setQueueTab(status === "Draft" ? "Draft" : "Completed");
+      setQueueTab(status === "Draft" ? "Draft" : "Upcoming");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -1360,67 +1385,116 @@ export default function DoctorConsultationPage() {
                   upcomingRows.length === 0 ? (
                     <div className="text-center text-sm text-gray-500 p-4">No patients with completed vitals.</div>
                   ) : (
-                    upcomingRows.map((row, i) => (
-                      <button
-                        key={String(row.vitals_id ?? row.appointment_id ?? i)}
-                        type="button"
-                        onClick={() => handleVitalsClick(row)}
-                        className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
-                      >
-                        <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                          {text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"])}
-                        </span>
-                        {(() => {
-                          const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
-                          const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
-                          const isValidPid = rawPid && rawPid.toLowerCase() !== name.toLowerCase();
-                          return isValidPid ? (
-                            <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start">
-                              {rawPid}
+                    upcomingRows.map((row, i) => {
+                      const isSelected = Boolean(
+                        selectedPatientRow &&
+                          ((row.vitals_id && text(selectedPatientRow, ["vitals_id"]) === String(row.vitals_id)) ||
+                            (row.appointment_id && text(selectedPatientRow, ["appointment_id"]) === String(row.appointment_id)) ||
+                            (patientName(selectedPatientRow) && patientName(selectedPatientRow) === patientName(row)))
+                      );
+                      return (
+                        <button
+                          key={String(row.vitals_id ?? row.appointment_id ?? i)}
+                          type="button"
+                          onClick={() => handleVitalsClick(row)}
+                          className={`w-full text-left flex flex-col gap-1 rounded-xl p-3 transition ${
+                            isSelected
+                              ? "border-2 border-brand-300 bg-brand-50/70 shadow-xs dark:border-brand-500/60 dark:bg-brand-950/40 ring-1 ring-brand-400/20"
+                              : "border border-gray-100 bg-white hover:bg-gray-50/80 dark:border-gray-800 dark:bg-gray-900/40 dark:hover:bg-gray-800/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm font-semibold ${isSelected ? "text-brand-950 dark:text-brand-200" : "text-gray-800 dark:text-white/90"}`}>
+                              {text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"])}
                             </span>
-                          ) : null;
-                        })()}
-                        <div className="text-xs text-gray-500">{text(row, ["appointment_time"]) || "Walk-in"}</div>
-                      </button>
-                    ))
+                            {isSelected && (
+                              <span className="h-2 w-2 rounded-full bg-brand-500 ring-2 ring-brand-200 dark:ring-brand-900" />
+                            )}
+                          </div>
+                          {(() => {
+                            const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+                            const name = text(row, ["registration_patient_name", "appointment_patient_name", "patient_name"]);
+                            const isValidPid = rawPid && rawPid.toLowerCase() !== name.toLowerCase();
+                            return isValidPid ? (
+                              <span className="text-xs font-mono text-brand-600 bg-brand-50 rounded px-1.5 py-0.5 self-start dark:bg-brand-900/30 dark:text-brand-300">
+                                {rawPid}
+                              </span>
+                            ) : null;
+                          })()}
+                          <div className="text-xs text-gray-500">{text(row, ["appointment_time"]) || "Walk-in"}</div>
+                        </button>
+                      );
+                    })
                   )
                 ) : queueTab === "Draft" ? (
                   draftRows.length === 0 ? (
                     <div className="text-center text-sm text-gray-500 p-4">No drafts.</div>
                   ) : (
-                    draftRows.map(row => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={() => handleConsultationClick(row)}
-                        className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
-                      >
-                        <div className="flex items-center gap-2 justify-between">
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white/90 truncate">{text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}</span>
-                          <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
-                        </div>
-                        <div className="text-xs text-gray-500">Token: {text(row, ["tokenNumber", "token_number"]) || "N/A"}</div>
-                      </button>
-                    ))
+                    draftRows.map(row => {
+                      const isSelected = Boolean(
+                        (editingRecordId && Number(row.id) === Number(editingRecordId)) ||
+                          (selectedPatientRow &&
+                            ((text(row, ["tokenNumber", "token_number"]) &&
+                              text(selectedPatientRow, ["appointment_id"]) === text(row, ["tokenNumber", "token_number"])) ||
+                              (text(row, ["patientDetails", "patient_details"]) &&
+                                patientName(selectedPatientRow) === text(row, ["patientDetails", "patient_details"]))))
+                      );
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => handleConsultationClick(row)}
+                          className={`w-full text-left flex flex-col gap-1 rounded-xl p-3 transition ${
+                            isSelected
+                              ? "border-2 border-brand-300 bg-brand-50/70 shadow-xs dark:border-brand-500/60 dark:bg-brand-950/40 ring-1 ring-brand-400/20"
+                              : "border border-gray-100 bg-white hover:bg-gray-50/80 dark:border-gray-800 dark:bg-gray-900/40 dark:hover:bg-gray-800/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 justify-between">
+                            <span className={`text-sm font-semibold truncate ${isSelected ? "text-brand-950 dark:text-brand-200" : "text-gray-800 dark:text-white/90"}`}>
+                              {text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}
+                            </span>
+                            <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
+                          </div>
+                          <div className="text-xs text-gray-500">Token: {text(row, ["tokenNumber", "token_number"]) || "N/A"}</div>
+                        </button>
+                      );
+                    })
                   )
                 ) : (
                   completedRows.length === 0 ? (
                     <div className="text-center text-sm text-gray-500 p-4">No completed consultations.</div>
                   ) : (
-                    completedRows.map(row => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={() => handleConsultationClick(row)}
-                        className="w-full text-left flex flex-col gap-1 rounded-xl border border-gray-100 p-3 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50 transition"
-                      >
-                        <div className="flex items-center gap-2 justify-between">
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white/90 truncate">{text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}</span>
-                          <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
-                        </div>
-                        <div className="text-xs text-gray-500">Diagnosis: {text(row, ["diagnosisName", "diagnosis_name"]) || "N/A"}</div>
-                      </button>
-                    ))
+                    completedRows.map(row => {
+                      const isSelected = Boolean(
+                        (editingRecordId && Number(row.id) === Number(editingRecordId)) ||
+                          (selectedPatientRow &&
+                            ((text(row, ["tokenNumber", "token_number"]) &&
+                              text(selectedPatientRow, ["appointment_id"]) === text(row, ["tokenNumber", "token_number"])) ||
+                              (text(row, ["patientDetails", "patient_details"]) &&
+                                patientName(selectedPatientRow) === text(row, ["patientDetails", "patient_details"]))))
+                      );
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => handleConsultationClick(row)}
+                          className={`w-full text-left flex flex-col gap-1 rounded-xl p-3 transition ${
+                            isSelected
+                              ? "border-2 border-brand-300 bg-brand-50/70 shadow-xs dark:border-brand-500/60 dark:bg-brand-950/40 ring-1 ring-brand-400/20"
+                              : "border border-gray-100 bg-white hover:bg-gray-50/80 dark:border-gray-800 dark:bg-gray-900/40 dark:hover:bg-gray-800/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 justify-between">
+                            <span className={`text-sm font-semibold truncate ${isSelected ? "text-brand-950 dark:text-brand-200" : "text-gray-800 dark:text-white/90"}`}>
+                              {text(row, ["patientDetails", "patient_details"]) || "Unknown Patient"}
+                            </span>
+                            <PatientTypeBadge type={text(row, ["patientType", "patient_type"])} />
+                          </div>
+                          <div className="text-xs text-gray-500">Diagnosis: {text(row, ["diagnosisName", "diagnosis_name"]) || "N/A"}</div>
+                        </button>
+                      );
+                    })
                   )
                 )}
               </div>
@@ -1792,49 +1866,51 @@ export default function DoctorConsultationPage() {
                     </div>
                   </div>
 
-                  {/* Section 6: Disposition */}
-                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
-                    <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
-                      6. Disposition
-                    </h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Disposition</label>
-                        <select value={formValues.disposition} onChange={e => updateFormValue("disposition", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
-                          <option value="">Select Disposition</option>
-                          <option value="Admission">Admission</option>
-                          <option value="Discharge">Discharge</option>
-                          <option value="LAMA">LAMA</option>
-                          <option value="Transferred / Refer to other hospital">Transferred / Refer to other hospital</option>
-                        </select>
-                      </div>
-
-                      {formValues.disposition === "Transferred / Refer to other hospital" && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
-                          <div>
-                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Referral / Transfer Details</label>
-                            <textarea
-                              value={formValues.referralDetails}
-                              onChange={e => updateFormValue("referralDetails", e.target.value)}
-                              rows={3}
-                              className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                              placeholder="Enter hospital name, reason for transfer, or notes..."
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Transfer Date & Time</label>
-                            <input
-                              type="datetime-local"
-                              value={formValues.referralDateTime}
-                              onChange={e => updateFormValue("referralDateTime", e.target.value)}
-                              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            />
-                          </div>
+                  {/* Section 6: Disposition (Only for Inpatient / IP) */}
+                  {patientType === "IP" && (
+                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">
+                      <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-gray-100 border-b border-gray-100 pb-3 dark:border-gray-800">
+                        6. Disposition
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Disposition</label>
+                          <select value={formValues.disposition} onChange={e => updateFormValue("disposition", e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                            <option value="">Select Disposition</option>
+                            <option value="Admission">Admission</option>
+                            <option value="Discharge">Discharge</option>
+                            <option value="LAMA">LAMA</option>
+                            <option value="Transferred / Refer to other hospital">Transferred / Refer to other hospital</option>
+                          </select>
                         </div>
-                      )}
 
+                        {formValues.disposition === "Transferred / Refer to other hospital" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                            <div>
+                              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Referral / Transfer Details</label>
+                              <textarea
+                                value={formValues.referralDetails}
+                                onChange={e => updateFormValue("referralDetails", e.target.value)}
+                                rows={3}
+                                className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                placeholder="Enter hospital name, reason for transfer, or notes..."
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Transfer Date & Time</label>
+                              <input
+                                type="datetime-local"
+                                value={formValues.referralDateTime}
+                                onChange={e => updateFormValue("referralDateTime", e.target.value)}
+                                className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Section 7: Others */}
                   <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/50">

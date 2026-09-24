@@ -714,7 +714,44 @@ export default function BookAppointmentPage() {
     router.push(`/${encodeURIComponent(hname)}/book-appointment/calendar?${query.toString()}`);
   }
 
+function formatDisplayTime(value: string) {
+  if (!value) return "";
+  const [hoursText, minutesText = "00"] = value.split(":");
+  const d = new Date();
+  d.setHours(Number(hoursText), Number(minutesText), 0, 0);
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(d).replace(/\s/g, "");
+}
+
+function formatTimeRange(start: string, end?: string | null) {
+  if (!start) return "-";
+  const endText = end ? formatDisplayTime(end) : "";
+  return endText ? `${formatDisplayTime(start)} - ${endText}` : formatDisplayTime(start);
+}
+
   function handleContinue() {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const forPatient = bookingFor ?? authenticatedPatient;
+    const forPatientPhone = forPatient?.phone ? String(forPatient.phone).replace(/\D/g, "") : "";
+    const forPatientName = forPatient?.name ? String(forPatient.name).trim().toLowerCase() : "";
+
+    const existingToday = activeAppointments.find((a: any) => {
+      if (a.appointment_date !== todayKey) return false;
+      const status = String(a.status || "").toLowerCase();
+      if (status === "cancelled") return false;
+      if (forPatient?.id && String(a.patient_id) === String(forPatient.id)) return true;
+      const aPhone = String(a.patient_phone || a.mobile || "").replace(/\D/g, "");
+      if (forPatientPhone && aPhone && (forPatientPhone.endsWith(aPhone) || aPhone.endsWith(forPatientPhone))) return true;
+      const aName = String(a.patient_name || "").trim().toLowerCase();
+      if (forPatientName && aName && forPatientName === aName) return true;
+      return true;
+    });
+
+    if (existingToday) {
+      setDuplicateWarningAppointment(existingToday);
+      return;
+    }
+
     setShowBookConfirmation(true);
   }
 
@@ -723,6 +760,7 @@ export default function BookAppointmentPage() {
     const department = selectedDepartment || selectedDoctorOption?.department || doctorDetails?.department || "";
     const doctorName = selectedDoctor || selectedDoctorOption?.name || doctorDetails?.firstName || doctorDetails?.lastName || "";
     if (!department || !doctorName) return;
+    setBlockingLoading("Loading appointment calendar, please wait...");
     const forPatient = bookingFor ?? authenticatedPatient;
     const query = new URLSearchParams({
       department,
@@ -735,10 +773,18 @@ export default function BookAppointmentPage() {
   }
 
   const [activeAppointments, setActiveAppointments] = useState<any[]>([]);
+  const [duplicateWarningAppointment, setDuplicateWarningAppointment] = useState<any | null>(null);
   const [selectedPreviewAppointment, setSelectedPreviewAppointment] = useState<any | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showRescheduleConfirm, setShowRescheduleConfirm] = useState(false);
+  const [blockingLoading, setBlockingLoading] = useState<string | null>(null);
+  const [cancelSuccessModal, setCancelSuccessModal] = useState<{
+    appointmentNumber?: string;
+    doctor?: string;
+    department?: string;
+    date?: string;
+  } | null>(null);
 
   async function loadActiveAppointments() {
     if (!hname || !authenticatedPatient) return;
@@ -775,6 +821,7 @@ export default function BookAppointmentPage() {
   async function handleCancelAppointment(appt: any) {
     if (!hname || !appt) return;
     setIsProcessingAction(true);
+    setBlockingLoading("Cancelling appointment, please wait...");
     try {
       const response = await fetch(`/api/${encodeURIComponent(hname)}/appointments`, {
         method: "DELETE",
@@ -794,10 +841,17 @@ export default function BookAppointmentPage() {
 
       setSelectedPreviewAppointment(null);
       await loadActiveAppointments();
+      setCancelSuccessModal({
+        appointmentNumber: appt.appointment_id_display || (appt.id ? `APT-${appt.id}` : ""),
+        doctor: appt.doctor || "",
+        department: appt.department || "",
+        date: appt.appointment_date || "",
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to cancel appointment.");
     } finally {
       setIsProcessingAction(false);
+      setBlockingLoading(null);
     }
   }
 
@@ -1270,8 +1324,8 @@ export default function BookAppointmentPage() {
                 type="button"
                 disabled={isProcessingAction}
                 onClick={async () => {
-                  await handleCancelAppointment(selectedPreviewAppointment);
                   setShowCancelConfirm(false);
+                  await handleCancelAppointment(selectedPreviewAppointment);
                 }}
                 className="w-full rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50"
               >
@@ -1285,6 +1339,81 @@ export default function BookAppointmentPage() {
               >
                 Keep Appointment
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Success Modal */}
+      {cancelSuccessModal && (
+        <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-red-100 dark:border-red-900/30 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Cancelled!
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Your appointment has been successfully cancelled.
+            </p>
+
+            {cancelSuccessModal.appointmentNumber && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 shadow-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Appointment No:</span>
+                <span className="font-mono text-sm font-extrabold text-red-600 dark:text-red-400">{cancelSuccessModal.appointmentNumber}</span>
+              </div>
+            )}
+
+            {(cancelSuccessModal.doctor || cancelSuccessModal.date) && (
+              <div className="mt-6 space-y-3 rounded-2xl bg-gray-50 p-4 text-left dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+                {cancelSuccessModal.doctor && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Doctor</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessModal.doctor}</span>
+                  </div>
+                )}
+                {cancelSuccessModal.department && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Dept</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessModal.department}</span>
+                  </div>
+                )}
+                {cancelSuccessModal.date && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Date</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{cancelSuccessModal.date}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setCancelSuccessModal(null)}
+              className="mt-8 w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white shadow-lg hover:bg-gray-800 transition dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Blocking Loading Overlay */}
+      {blockingLoading && (
+        <div className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center bg-black/60 p-4 backdrop-blur-sm select-none">
+          <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800 max-w-sm text-center">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <div className="absolute h-16 w-16 animate-spin rounded-full border-4 border-brand-200 border-t-brand-600 dark:border-brand-900 dark:border-t-brand-400" />
+              <svg className="h-7 w-7 text-brand-600 dark:text-brand-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Please wait</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{blockingLoading}</p>
             </div>
           </div>
         </div>
@@ -1482,6 +1611,78 @@ export default function BookAppointmentPage() {
           </div>
         </div>
       ) : null}
+      {duplicateWarningAppointment && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-amber-200 dark:border-amber-800 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Existing Appointment Today</h3>
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Duplicate Booking Warning</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+              You already have an active appointment scheduled for today. Are you sure you want to book another appointment?
+            </p>
+
+            <div className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Appointment No:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {duplicateWarningAppointment.appointment_id_display || (duplicateWarningAppointment.id ? `APT-${duplicateWarningAppointment.id}` : "-")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Doctor:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{duplicateWarningAppointment.doctor || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Department:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{duplicateWarningAppointment.department || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Time / Slot:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {duplicateWarningAppointment.appointment_time
+                    ? formatTimeRange(duplicateWarningAppointment.appointment_time, duplicateWarningAppointment.appointment_end_time)
+                    : "-"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Status:</span>
+                <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                  {duplicateWarningAppointment.status || "Scheduled"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setDuplicateWarningAppointment(null)}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                No, Keep Existing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateWarningAppointment(null);
+                  setShowBookConfirmation(true);
+                }}
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition shadow"
+              >
+                Yes, Book Another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

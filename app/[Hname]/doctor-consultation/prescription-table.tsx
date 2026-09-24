@@ -63,7 +63,52 @@ type PrescriptionTableProps = {
 };
 
 const DEFAULT_FOOD_TIMING = "After Food";
-const FOOD_TIMING_OPTIONS = [DEFAULT_FOOD_TIMING, "Before Food"] as const;
+const FOOD_TIMING_OPTIONS = [
+  "After Food",
+  "Before Food",
+  "With Food",
+  "Empty Stomach",
+  "As Directed",
+] as const;
+
+const FALLBACK_UOM_OPTIONS = [
+  "Tabs",
+  "Caps",
+  "Syrup",
+  "Inj",
+  "Drops",
+  "Ointment",
+  "Sachet",
+  "Bottle",
+  "Vial",
+  "Ampoule",
+  "Pcs",
+  "Nos",
+  "Ml",
+  "Mg",
+  "Gm",
+  "Puffs",
+  "Tube",
+  "Strip",
+];
+
+const FALLBACK_MEDICINE_TYPE_OPTIONS = [
+  "Tablet",
+  "Capsule",
+  "Syrup",
+  "Injection",
+  "Drops",
+  "Ointment",
+  "Gel",
+  "Cream",
+  "Inhaler",
+  "Sachet",
+  "Lotion",
+  "Suspension",
+  "Powder",
+  "Spray",
+  "Other",
+];
 
 function buildEmptyMedicine(): Medicine {
   return {
@@ -78,16 +123,6 @@ function buildEmptyMedicine(): Medicine {
   };
 }
 
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(text.trim() ? "Unexpected non-JSON response from server." : "Empty response from server.");
-  }
-}
-
 function buildEmptySchedule() {
   return {
     morning: false,
@@ -97,17 +132,19 @@ function buildEmptySchedule() {
 }
 
 function serializeSchedule(schedule: PrescriptionRow["schedule"]): string {
-  return [schedule.morning, schedule.afternoon, schedule.night].map((value) => (value ? "1" : "0")).join("");
+  return [schedule.morning, schedule.afternoon, schedule.night]
+    .map((val) => (val ? "1" : "0"))
+    .join("");
 }
 
 function calculateTotalQty(schedule: PrescriptionRow["schedule"], days: string): string {
   const totalDays = Number(days);
-
-  if (!Number.isFinite(totalDays) || totalDays < 0) {
+  if (!Number.isFinite(totalDays) || totalDays <= 0) {
     return "";
   }
-
-  const dosesPerDay = Number(schedule.morning) + Number(schedule.afternoon) + Number(schedule.night);
+  const dosesPerDay =
+    Number(schedule.morning) + Number(schedule.afternoon) + Number(schedule.night);
+  if (dosesPerDay === 0) return "";
   return String(dosesPerDay * totalDays);
 }
 
@@ -126,26 +163,21 @@ function serializeRows(rows: PrescriptionRow[]): string {
     days: row.days,
     totalQty: row.totalQty,
   }));
-
   return JSON.stringify(serializedRows);
 }
 
 function parseRows(value?: string): PrescriptionRow[] {
-  if (!value) {
-    return [];
-  }
-
+  if (!value) return [];
   try {
     const parsed = JSON.parse(value);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+    if (!Array.isArray(parsed)) return [];
 
     return parsed.map((item) => {
       const line = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
       const schedule =
-        typeof line.morning === "boolean" || typeof line.afternoon === "boolean" || typeof line.night === "boolean"
+        typeof line.morning === "boolean" ||
+        typeof line.afternoon === "boolean" ||
+        typeof line.night === "boolean"
           ? {
               morning: Boolean(line.morning),
               afternoon: Boolean(line.afternoon),
@@ -158,6 +190,12 @@ function parseRows(value?: string): PrescriptionRow[] {
                 night: line.frequency[2] === "1",
               }
             : buildEmptySchedule();
+
+      const daysVal = typeof line.days === "string" ? line.days : (line.days ? String(line.days) : "");
+      const totalQtyVal =
+        typeof line.totalQty === "string"
+          ? line.totalQty
+          : (line.totalQty ? String(line.totalQty) : calculateTotalQty(schedule, daysVal));
 
       return {
         id: crypto.randomUUID(),
@@ -181,11 +219,11 @@ function parseRows(value?: string): PrescriptionRow[] {
         },
         schedule,
         foodTiming:
-          typeof line.foodTiming === "string" && FOOD_TIMING_OPTIONS.includes(line.foodTiming as (typeof FOOD_TIMING_OPTIONS)[number])
+          typeof line.foodTiming === "string" && line.foodTiming.trim()
             ? line.foodTiming
             : DEFAULT_FOOD_TIMING,
-        days: typeof line.days === "string" ? line.days : "",
-        totalQty: calculateTotalQty(schedule, typeof line.days === "string" ? line.days : ""),
+        days: daysVal,
+        totalQty: totalQtyVal,
       };
     });
   } catch {
@@ -193,86 +231,173 @@ function parseRows(value?: string): PrescriptionRow[] {
   }
 }
 
-export function PrescriptionTable({ value = "", onChange, isSended = false, onSendToPharmacy, isSubmitting = false }: PrescriptionTableProps) {
+type ModalFormState = {
+  id: string | null;
+  name: string;
+  code: string;
+  genericName: string;
+  type: string;
+  uom: string;
+  strength: string;
+  morning: boolean;
+  afternoon: boolean;
+  night: boolean;
+  foodTiming: string;
+  days: string;
+  totalQty: string;
+  stock?: number;
+};
+
+function emptyFormState(defaultType = "", defaultUom = ""): ModalFormState {
+  return {
+    id: null,
+    name: "",
+    code: "",
+    genericName: "",
+    type: defaultType || "Tablet",
+    uom: defaultUom || "Tabs",
+    strength: "",
+    morning: false,
+    afternoon: false,
+    night: false,
+    foodTiming: DEFAULT_FOOD_TIMING,
+    days: "5",
+    totalQty: "",
+  };
+}
+
+export function PrescriptionTable({
+  value = "",
+  onChange,
+  isSended = false,
+  onSendToPharmacy,
+  isSubmitting = false,
+}: PrescriptionTableProps) {
   const params = useParams();
   const hname = params?.Hname as string;
   const [rows, setRows] = useState<PrescriptionRow[]>(() => parseRows(value));
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [medicineTypeOptions, setMedicineTypeOptions] = useState<string[]>(FALLBACK_MEDICINE_TYPE_OPTIONS);
+  const [uomOptions, setUomOptions] = useState<string[]>(FALLBACK_UOM_OPTIONS);
   const [isLoadingMedicines, setIsLoadingMedicines] = useState(true);
-  const [medicineLoadError, setMedicineLoadError] = useState<string | null>(null);
 
-  // Inline medicine name autocomplete state (per row)
-  const [nameInputs, setNameInputs] = useState<Record<string, string>>({});
-  const [openDropdownRowId, setOpenDropdownRowId] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  // Modal State for Add / Edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalForm, setModalForm] = useState<ModalFormState>(() => emptyFormState());
+  const [formError, setFormError] = useState("");
 
-  // Modal state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  // Medicine Autocomplete in Modal
+  const [medicineSearchQuery, setMedicineSearchQuery] = useState("");
+  const [showMedicineSuggestions, setShowMedicineSuggestions] = useState(false);
+  const autocompleteContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Sync rows if external value changes (e.g. consultation loaded)
+  useEffect(() => {
+    if (value) {
+      const parsed = parseRows(value);
+      if (parsed.length > 0 && rows.length === 0) {
+        setRows(parsed);
+      }
+    }
+  }, [value]);
+
+  // Load medicines, Item Category (Medicine Type), and Item UOM from Masters
   useEffect(() => {
     let isMounted = true;
 
-    async function loadMedicines() {
-      if (!hname) {
-        return;
-      }
-
+    async function loadData() {
+      if (!hname) return;
       setIsLoadingMedicines(true);
-      setMedicineLoadError(null);
 
       try {
-        const response = await fetch(`/api/${hname}/forms/item_master_medicine`, {
-          method: "GET",
-          cache: "no-store",
-        });
-        const data = await readJsonResponse<{
-          rows?: ItemMasterRow[];
-          error?: string;
-        }>(response);
+        const [medRes, catRes, uomRes] = await Promise.all([
+          // 1. Medicines
+          fetch(`/api/${encodeURIComponent(hname)}/forms/item_master_medicine`, {
+            method: "GET",
+            cache: "no-store",
+          }),
+          // 2. Item Category (/masters/pharmacy-inventory-masters/item-category)
+          fetch(`/api/${encodeURIComponent(hname)}/forms/item_category_master`, {
+            method: "GET",
+            cache: "no-store",
+          }).catch(() => null),
+          // 3. Item UOM (/masters/pharmacy-inventory-masters/item-uom)
+          fetch(`/api/${encodeURIComponent(hname)}/forms/uom_master`, {
+            method: "GET",
+            cache: "no-store",
+          }).catch(() => null),
+        ]);
 
-        if (!response.ok) {
-          throw new Error(data.error ?? "Failed to load medicines from item master.");
+        let loadedMedicines: Medicine[] = [];
+
+        if (medRes.ok) {
+          const medData = await medRes.json().catch(() => ({}));
+          const rowsList: ItemMasterRow[] = medData.rows ?? [];
+          loadedMedicines = rowsList
+            .map((row, index) => {
+              const code = String(row.item_code ?? "").trim();
+              const name = String(row.item_name ?? "").trim();
+              if (!name) return null;
+
+              return {
+                id: String((row.id ?? code) || `med-${index}`),
+                code,
+                name,
+                genericName: String(row.medicine_combination ?? "").trim(),
+                type: String(row.item_category ?? "").trim() || "Tablet",
+                strength: "",
+                uom: String(row.sale_uom ?? row.purchase_uom ?? "").trim() || "Tabs",
+                stock: Number(row.current_stock ?? 0) || 0,
+              } satisfies Medicine;
+            })
+            .filter((m): m is Medicine => m !== null);
+
+          if (isMounted) {
+            setMedicines(loadedMedicines);
+          }
         }
 
-        const nextMedicines = (data.rows ?? [])
-          .map((row, index) => {
-            const code = String(row.item_code ?? "").trim();
-            const name = String(row.item_name ?? "").trim();
+        // Process Item Category (Medicine Type) from item_category_master
+        if (catRes && catRes.ok) {
+          const catData = await catRes.json().catch(() => ({}));
+          const catRows = catData.rows || [];
+          const fetchedCats = catRows
+            .map((r: any) => String(r.group_name || r.groupName || r.name || r.item_category || "").trim())
+            .filter(Boolean);
 
-            if (!name) {
-              return null;
-            }
-
-            return {
-              id: String((row.id ?? code) || `medicine-${index}`),
-              code,
-              name,
-              genericName: String(row.medicine_combination ?? "").trim(),
-              type: String(row.item_category ?? "").trim(),
-              strength: "",
-              uom: String(row.sale_uom ?? row.purchase_uom ?? "").trim(),
-              stock: Number(row.current_stock ?? 0) || 0,
-            } satisfies Medicine;
-          })
-          .filter((medicine): medicine is Medicine => medicine !== null);
-
-        if (isMounted) {
-          setMedicines(nextMedicines);
+          // Merge with categories from loaded medicines and fallbacks
+          const medCats = loadedMedicines.map((m) => m.type).filter(Boolean);
+          const mergedCats = Array.from(new Set([...fetchedCats, ...medCats, ...FALLBACK_MEDICINE_TYPE_OPTIONS]));
+          if (mergedCats.length > 0 && isMounted) {
+            setMedicineTypeOptions(mergedCats);
+          }
+        } else if (loadedMedicines.length > 0 && isMounted) {
+          const medCats = loadedMedicines.map((m) => m.type).filter(Boolean);
+          setMedicineTypeOptions(Array.from(new Set([...medCats, ...FALLBACK_MEDICINE_TYPE_OPTIONS])));
         }
-      } catch (error) {
-        if (isMounted) {
-          setMedicineLoadError(
-            error instanceof Error
-              ? error.message
-              : "Failed to load medicines from item master.",
-          );
-          setMedicines([]);
+
+        // Process Item UOM from uom_master
+        if (uomRes && uomRes.ok) {
+          const uomData = await uomRes.json().catch(() => ({}));
+          const uomRows = uomData.rows || [];
+          const fetchedUoms = uomRows
+            .map((r: any) => {
+              const code = String(r.uom_code || r.uomCode || r.name || r.code || "").trim();
+              return code;
+            })
+            .filter(Boolean);
+
+          const medUoms = loadedMedicines.map((m) => m.uom).filter(Boolean);
+          const mergedUoms = Array.from(new Set([...fetchedUoms, ...medUoms, ...FALLBACK_UOM_OPTIONS]));
+          if (mergedUoms.length > 0 && isMounted) {
+            setUomOptions(mergedUoms);
+          }
+        } else if (loadedMedicines.length > 0 && isMounted) {
+          const medUoms = loadedMedicines.map((m) => m.uom).filter(Boolean);
+          setUomOptions(Array.from(new Set([...medUoms, ...FALLBACK_UOM_OPTIONS])));
         }
+      } catch (err) {
+        console.error("Failed to load medicines/UOMs/categories", err);
       } finally {
         if (isMounted) {
           setIsLoadingMedicines(false);
@@ -280,244 +405,236 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
       }
     }
 
-    void loadMedicines();
-
+    void loadData();
     return () => {
       isMounted = false;
     };
   }, [hname]);
 
-  // Close dropdown when clicking outside
+  // Close medicine autocomplete dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenDropdownRowId(null);
+      if (
+        autocompleteContainerRef.current &&
+        !autocompleteContainerRef.current.contains(e.target as Node)
+      ) {
+        setShowMedicineSuggestions(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredMedicines = useMemo(() => {
-    return medicines.filter(
-      (m) =>
-        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.genericName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [medicines, searchQuery]);
+  // Filtered medicines for autocomplete (prefix match first, then substring)
+  const matchingMedicines = useMemo(() => {
+    const q = medicineSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const startsWithMatches: Medicine[] = [];
+    const containsMatches: Medicine[] = [];
 
-  const totalPages = Math.ceil(filteredMedicines.length / itemsPerPage);
-  const currentMedicines = filteredMedicines.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+    for (const m of medicines) {
+      const name = m.name.toLowerCase();
+      const code = m.code.toLowerCase();
+      const generic = m.genericName.toLowerCase();
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on search
-  };
-
-  const toggleSelection = (id: string) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
+      if (name.startsWith(q) || code.startsWith(q)) {
+        startsWithMatches.push(m);
+      } else if (name.includes(q) || code.includes(q) || generic.includes(q)) {
+        containsMatches.push(m);
+      }
     }
-    setSelectedIds(newSelected);
-  };
 
-  const toggleAllSelections = () => {
-    if (selectedIds.size === currentMedicines.length && currentMedicines.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(currentMedicines.map(m => m.id)));
-    }
-  };
+    return [...startsWithMatches, ...containsMatches].slice(0, 10);
+  }, [medicines, medicineSearchQuery]);
 
-  const addSelectedMedicines = () => {
-    const medicinesToAdd = medicines.filter((m) => selectedIds.has(m.id));
-    const newRows: PrescriptionRow[] = medicinesToAdd.map((m) => ({
-      id: crypto.randomUUID(),
-      medicine: m,
-      schedule: buildEmptySchedule(),
-      foodTiming: DEFAULT_FOOD_TIMING,
-      days: "",
-      totalQty: "",
-    }));
-    
-    const updatedRows = [...rows, ...newRows];
-    setRows(updatedRows);
-    onChange?.(serializeRows(updatedRows));
-    setIsModalOpen(false);
-    setSelectedIds(new Set());
-    setSearchQuery("");
-    setCurrentPage(1);
-  };
-
-  const addEmptyRow = () => {
+  // Open modal in "Add" mode
+  const handleOpenAddModal = () => {
     if (isSended) return;
-    const rowId = crypto.randomUUID();
-    const emptyRow: PrescriptionRow = {
-      id: rowId,
-      medicine: buildEmptyMedicine(),
-      schedule: buildEmptySchedule(),
-      foodTiming: DEFAULT_FOOD_TIMING,
-      days: "",
-      totalQty: "",
+    const initial = emptyFormState(medicineTypeOptions[0] || "Tablet", uomOptions[0] || "Tabs");
+    setModalForm(initial);
+    setMedicineSearchQuery("");
+    setShowMedicineSuggestions(false);
+    setFormError("");
+    setIsModalOpen(true);
+  };
+
+  // Open modal in "Edit" mode
+  const handleOpenEditModal = (row: PrescriptionRow) => {
+    if (isSended) return;
+    setModalForm({
+      id: row.id,
+      name: row.medicine.name,
+      code: row.medicine.code,
+      genericName: row.medicine.genericName,
+      type: row.medicine.type || medicineTypeOptions[0] || "Tablet",
+      uom: row.medicine.uom || uomOptions[0] || "Tabs",
+      strength: row.medicine.strength || "",
+      morning: row.schedule.morning,
+      afternoon: row.schedule.afternoon,
+      night: row.schedule.night,
+      foodTiming: row.foodTiming || DEFAULT_FOOD_TIMING,
+      days: row.days || "5",
+      totalQty: row.totalQty || calculateTotalQty(row.schedule, row.days),
+      stock: row.medicine.stock,
+    });
+    setMedicineSearchQuery(row.medicine.name);
+    setShowMedicineSuggestions(false);
+    setFormError("");
+    setIsModalOpen(true);
+  };
+
+  // When medicine is selected from suggestions
+  const handleSelectMedicine = (med: Medicine) => {
+    setModalForm((prev) => {
+      const updated = {
+        ...prev,
+        name: med.name,
+        code: med.code,
+        genericName: med.genericName,
+        type: med.type || prev.type || medicineTypeOptions[0] || "Tablet",
+        uom: med.uom || prev.uom || uomOptions[0] || "Tabs",
+        strength: med.strength || prev.strength || "",
+        stock: med.stock,
+      };
+      const schedule = {
+        morning: updated.morning,
+        afternoon: updated.afternoon,
+        night: updated.night,
+      };
+      updated.totalQty = calculateTotalQty(schedule, updated.days);
+      return updated;
+    });
+    setMedicineSearchQuery(med.name);
+    setShowMedicineSuggestions(false);
+  };
+
+  // Auto-calculate quantity on days / schedule changes in modal
+  const handleModalScheduleChange = (
+    key: "morning" | "afternoon" | "night",
+    value: boolean
+  ) => {
+    setModalForm((prev) => {
+      const schedule = {
+        morning: key === "morning" ? value : prev.morning,
+        afternoon: key === "afternoon" ? value : prev.afternoon,
+        night: key === "night" ? value : prev.night,
+      };
+      return {
+        ...prev,
+        [key]: value,
+        totalQty: calculateTotalQty(schedule, prev.days),
+      };
+    });
+  };
+
+  const handleModalDaysChange = (daysVal: string) => {
+    setModalForm((prev) => {
+      const schedule = {
+        morning: prev.morning,
+        afternoon: prev.afternoon,
+        night: prev.night,
+      };
+      return {
+        ...prev,
+        days: daysVal,
+        totalQty: calculateTotalQty(schedule, daysVal),
+      };
+    });
+  };
+
+  // Save Modal Form (Add or Edit) - Prevent any form reload!
+  const handleSaveModal = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const medName = modalForm.name.trim() || medicineSearchQuery.trim();
+    if (!medName) {
+      setFormError("Please enter or select a medicine name.");
+      return;
+    }
+
+    const schedule = {
+      morning: modalForm.morning,
+      afternoon: modalForm.afternoon,
+      night: modalForm.night,
     };
-    const updatedRows = [...rows, emptyRow];
+
+    const finalTotalQty =
+      modalForm.totalQty.trim() || calculateTotalQty(schedule, modalForm.days) || "1";
+
+    const medicineObj: Medicine = {
+      id: modalForm.code || modalForm.id || `med-${Date.now()}`,
+      code: modalForm.code,
+      name: medName,
+      genericName: modalForm.genericName.trim(),
+      type: modalForm.type.trim() || medicineTypeOptions[0] || "Tablet",
+      strength: modalForm.strength.trim(),
+      uom: modalForm.uom.trim() || uomOptions[0] || "Tabs",
+      stock: modalForm.stock ?? 0,
+    };
+
+    if (modalForm.id) {
+      // Edit existing row
+      const updatedRows = rows.map((r) =>
+        r.id === modalForm.id
+          ? {
+              ...r,
+              medicine: medicineObj,
+              schedule,
+              foodTiming: modalForm.foodTiming,
+              days: modalForm.days,
+              totalQty: finalTotalQty,
+            }
+          : r
+      );
+      setRows(updatedRows);
+      onChange?.(serializeRows(updatedRows));
+    } else {
+      // Add new row
+      const newRow: PrescriptionRow = {
+        id: crypto.randomUUID(),
+        medicine: medicineObj,
+        schedule,
+        foodTiming: modalForm.foodTiming,
+        days: modalForm.days,
+        totalQty: finalTotalQty,
+      };
+      const updatedRows = [...rows, newRow];
+      setRows(updatedRows);
+      onChange?.(serializeRows(updatedRows));
+    }
+
+    setIsModalOpen(false);
+  };
+
+  // Delete row
+  const handleDeleteRow = (rowId: string) => {
+    if (isSended) return;
+    const updatedRows = rows.filter((r) => r.id !== rowId);
     setRows(updatedRows);
     onChange?.(serializeRows(updatedRows));
-    setEditingRowId(rowId);
   };
-
-  const deleteRow = (rowId: string) => {
-    if (isSended) return;
-    setRows((currentRows) => {
-      const updatedRows = currentRows.filter((row) => row.id !== rowId);
-      onChange?.(serializeRows(updatedRows));
-      return updatedRows;
-    });
-    setEditingRowId((currentEditingId) =>
-      currentEditingId === rowId ? null : currentEditingId
-    );
-  };
-
-  const editRow = (rowId: string) => {
-    if (isSended) return;
-    setEditingRowId((currentEditingId) =>
-      currentEditingId === rowId ? null : rowId
-    );
-  };
-
-  const updateRowField = (
-    rowId: string,
-    field: keyof Pick<PrescriptionRow, "foodTiming" | "days">,
-    value: string
-  ) => {
-    if (isSended) return;
-    const nextValue =
-      field === "days" && value !== ""
-        ? String(Math.max(0, Number(value)))
-        : value;
-
-    setRows((currentRows) => {
-      const updatedRows = currentRows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [field]: nextValue,
-              totalQty: calculateTotalQty(row.schedule, field === "days" ? nextValue : row.days),
-            }
-          : row
-      );
-      onChange?.(serializeRows(updatedRows));
-      return updatedRows;
-    });
-  };
-
-  const updateScheduleField = (rowId: string, field: keyof PrescriptionRow["schedule"], checked: boolean) => {
-    if (isSended) return;
-    setRows((currentRows) => {
-      const updatedRows = currentRows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              schedule: {
-                ...row.schedule,
-                [field]: checked,
-              },
-              totalQty: calculateTotalQty(
-                {
-                  ...row.schedule,
-                  [field]: checked,
-                },
-                row.days,
-              ),
-            }
-          : row,
-      );
-      onChange?.(serializeRows(updatedRows));
-      return updatedRows;
-    });
-  };
-
-  const updateMedicineField = (
-    rowId: string,
-    field: keyof Pick<Medicine, "type" | "genericName" | "uom" | "strength">,
-    value: string
-  ) => {
-    if (isSended) return;
-    setRows((currentRows) => {
-      const updatedRows = currentRows.map((row) =>
-        row.id === rowId
-          ? { ...row, medicine: { ...row.medicine, [field]: value } }
-          : row
-      );
-      onChange?.(serializeRows(updatedRows));
-      return updatedRows;
-    });
-  };
-
-  const selectMedicineForRow = (rowId: string, medicine: Medicine) => {
-    if (isSended) return;
-    setRows((currentRows) => {
-      const updatedRows = currentRows.map((row) =>
-        row.id === rowId ? { ...row, medicine } : row
-      );
-      onChange?.(serializeRows(updatedRows));
-      return updatedRows;
-    });
-    setNameInputs((prev) => ({ ...prev, [rowId]: medicine.name }));
-    setOpenDropdownRowId(null);
-  };
-
-  const handleNameInputChange = (rowId: string, inputValue: string) => {
-    if (isSended) return;
-    setNameInputs((prev) => ({ ...prev, [rowId]: inputValue }));
-    setOpenDropdownRowId(inputValue.trim() ? rowId : null);
-    // Clear the medicine selection if user clears the field
-    if (!inputValue.trim()) {
-      setRows((currentRows) => {
-        const updatedRows = currentRows.map((row) =>
-          row.id === rowId ? { ...row, medicine: { ...row.medicine, name: "", id: "", code: "" } } : row
-        );
-        onChange?.(serializeRows(updatedRows));
-        return updatedRows;
-      });
-    }
-  };
-
-  const editableInputClass = (minWidth: string, isEditing: boolean) =>
-    `w-full ${minWidth} rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
-      isEditing && !isSended
-        ? "border-gray-300 bg-transparent focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:bg-gray-900"
-        : "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300"
-    }`;
-
-  const lineNumberInputClass =
-    "w-12 rounded-md border border-gray-300 bg-gray-50 px-2 py-1.5 text-center text-sm dark:border-gray-700 dark:bg-gray-900/50";
-
-  const actionButtonClass =
-    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white";
-  const deleteButtonClass =
-    "inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 transition hover:bg-red-50 hover:text-red-600 focus:outline-hidden focus:ring-2 focus:ring-red-500/30 dark:border-red-900/40 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30";
 
   return (
-    <div className="mt-8 space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-gray-800 dark:text-white/90">
-          Prescription Table
-        </h4>
-        <div className="flex gap-2">
-          {!isSended && (
+    <div className="mt-6 space-y-4">
+      {/* Header and Top Action Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            Prescription Table
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {rows.length} {rows.length === 1 ? "medicine" : "medicines"} prescribed
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isSended && onSendToPharmacy && (
             <button
               type="button"
               onClick={onSendToPharmacy}
-              disabled={isSubmitting}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500 bg-white px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 transition disabled:opacity-50 dark:bg-gray-900 dark:hover:bg-gray-800"
+              disabled={isSubmitting || rows.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500 bg-white px-3.5 py-2 text-xs font-semibold text-brand-600 shadow-xs hover:bg-brand-50 transition disabled:opacity-50 dark:bg-gray-900 dark:hover:bg-gray-800"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -526,7 +643,7 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
             </button>
           )}
           {isSended ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/40">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/40">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -535,9 +652,9 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
           ) : (
             <button
               type="button"
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenAddModal}
               disabled={isSubmitting}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-brand-600 disabled:opacity-50"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -547,409 +664,502 @@ export function PrescriptionTable({ value = "", onChange, isSended = false, onSe
           )}
         </div>
       </div>
-      
-      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-          <thead className="bg-gray-50 dark:bg-gray-800/50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Line No</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Name</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Type</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Generic Name</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UOM</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Strength</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">M/A/N</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Food Timings</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">No of Days</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Total Qty</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-transparent">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                  No medicines added yet. Click Add Medicine to select.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, index) => {
-                const isEditing = editingRowId === row.id;
 
-                return (
-                  <tr key={row.id}>
-                    <td className="px-4 py-2">
-                      <input type="text" readOnly value={index + 1} className={lineNumberInputClass} />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="relative min-w-[180px]" ref={openDropdownRowId === row.id ? dropdownRef : null}>
-                        <input
-                          type="text"
-                          value={nameInputs[row.id] ?? row.medicine.name}
-                          placeholder="Type to search medicine…"
-                          readOnly={isSended}
-                          onChange={(e) => handleNameInputChange(row.id, e.target.value)}
-                          onFocus={() => {
-                            const current = nameInputs[row.id] ?? row.medicine.name;
-                            if (current.trim()) setOpenDropdownRowId(row.id);
-                          }}
-                          className={`w-full rounded-md border px-3 py-1.5 text-sm dark:border-gray-700 ${
-                            isSended
-                              ? "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300"
-                              : "border-gray-300 bg-transparent focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:bg-gray-900"
-                          }`}
-                        />
-                        {openDropdownRowId === row.id && (() => {
-                          const query = (nameInputs[row.id] ?? "").toLowerCase();
-                          const filtered = medicines.filter(
-                            (m) =>
-                              m.name.toLowerCase().includes(query) ||
-                              m.code.toLowerCase().includes(query) ||
-                              m.genericName.toLowerCase().includes(query)
-                          ).slice(0, 8);
-                          return filtered.length > 0 ? (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
-                              <ul className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-                                {filtered.map((m) => (
-                                  <li
-                                    key={m.id}
-                                    onMouseDown={(e) => { e.preventDefault(); selectMedicineForRow(row.id, m); }}
-                                    className="flex flex-col px-3 py-2 cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
-                                  >
-                                    <span className="text-sm font-medium text-gray-900 dark:text-white">{m.name}</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">{m.type}{m.genericName ? ` · ${m.genericName}` : ""}{m.uom ? ` · ${m.uom}` : ""}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null;
-                        })()}
+      {/* Clean Read-only Prescription Table */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-800">
+            <thead className="bg-gray-50/80 font-semibold uppercase tracking-wider text-gray-600 dark:bg-gray-800/60 dark:text-gray-300">
+              <tr>
+                <th scope="col" className="w-8 px-2.5 py-2 text-center">#</th>
+                <th scope="col" className="px-2.5 py-2">Medicine Name</th>
+                <th scope="col" className="px-2.5 py-2">Type</th>
+                <th scope="col" className="px-2.5 py-2">Generic Name</th>
+                <th scope="col" className="px-2.5 py-2">UOM</th>
+                <th scope="col" className="px-2.5 py-2">Strength</th>
+                <th scope="col" className="px-2.5 py-2">Schedule</th>
+                <th scope="col" className="px-2.5 py-2">Food Timing</th>
+                <th scope="col" className="px-2.5 py-2 text-center">Days</th>
+                <th scope="col" className="px-2.5 py-2 text-center">Total Qty</th>
+                {!isSended && <th scope="col" className="w-16 px-2.5 py-2 text-right">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={isSended ? 10 : 11}
+                    className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    <div className="mx-auto flex max-w-sm flex-col items-center justify-center">
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-500 dark:bg-brand-900/20">
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
                       </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        value={row.medicine.type}
-                        onChange={(e) => updateMedicineField(row.id, "type", e.target.value)}
-                        className={editableInputClass("min-w-[120px]", isEditing)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        value={row.medicine.genericName}
-                        onChange={(e) => updateMedicineField(row.id, "genericName", e.target.value)}
-                        className={editableInputClass("min-w-[120px]", isEditing)}
-                        placeholder={row.medicine.name || "Generic name"}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        value={row.medicine.uom}
-                        onChange={(e) => updateMedicineField(row.id, "uom", e.target.value)}
-                        className={editableInputClass("min-w-[80px]", isEditing)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        readOnly={!isEditing}
-                        value={row.medicine.strength}
-                        onChange={(e) => updateMedicineField(row.id, "strength", e.target.value)}
-                        className={editableInputClass("min-w-[80px]", isEditing)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      {isEditing ? (
-                        <div className="flex min-w-[200px] items-center gap-3">
-                          {([
-                            ["morning", "Morning"],
-                            ["afternoon", "Afternoon"],
-                            ["night", "Night"],
-                          ] as const).map(([key, label]) => (
-                            <label key={key} className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                              <input
-                                type="checkbox"
-                                checked={row.schedule[key]}
-                                onChange={(e) => updateScheduleField(row.id, key, e.target.checked)}
-                                className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                              />
-                              <span>{label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <input
-                          type="text"
-                          readOnly
-                          value={serializeSchedule(row.schedule)}
-                          className={editableInputClass("min-w-[80px]", false)}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <select
-                        disabled={!isEditing}
-                        value={row.foodTiming}
-                        onChange={(e) => updateRowField(row.id, "foodTiming", e.target.value)}
-                        className={editableInputClass("min-w-[120px]", isEditing)}
-                      >
-                        {FOOD_TIMING_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        readOnly={!isEditing}
-                        value={row.days}
-                        onChange={(e) => updateRowField(row.id, "days", e.target.value)}
-                        className={editableInputClass("min-w-[80px]", isEditing)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        readOnly
-                        value={row.totalQty}
-                        className={editableInputClass("min-w-[80px]", false)}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
+                      <p className="font-medium text-gray-700 dark:text-gray-200">No medicines prescribed yet</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        Click &ldquo;Add Medicine&rdquo; to prescribe medication for this patient.
+                      </p>
                       {!isSended && (
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => editRow(row.id)}
-                            className={`${actionButtonClass} ${isEditing ? "border-brand-200 text-brand-600 dark:border-brand-500/40 dark:text-brand-400" : ""}`}
-                            aria-label={`${isEditing ? "Finish editing" : "Edit"} prescription row ${index + 1}`}
-                            title={isEditing ? "Finish editing" : "Edit"}
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteRow(row.id)}
-                            className={deleteButtonClass}
-                            aria-label={`Delete prescription row ${index + 1}`}
-                            title="Delete"
-                          >
-                            <TrashBinIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddModal}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-600 transition"
+                        >
+                          + Add Medicine
+                        </button>
                       )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, index) => {
+                  return (
+                    <tr
+                      key={row.id}
+                      className="group transition hover:bg-gray-50/70 dark:hover:bg-gray-800/40"
+                    >
+                      {/* Line Number */}
+                      <td className="px-2.5 py-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500">
+                        {index + 1}
+                      </td>
+
+                      {/* Medicine Name */}
+                      <td className="px-2.5 py-2 font-medium text-gray-900 dark:text-white">
+                        {row.medicine.name || "—"}
+                      </td>
+
+                      {/* Medicine Type */}
+                      <td className="px-2.5 py-2 text-gray-600 dark:text-gray-300">
+                        {row.medicine.type || "Tablet"}
+                      </td>
+
+                      {/* Generic Name */}
+                      <td className="px-2.5 py-2 text-gray-600 dark:text-gray-300">
+                        {row.medicine.genericName || "—"}
+                      </td>
+
+                      {/* UOM */}
+                      <td className="px-2.5 py-2 text-gray-700 dark:text-gray-300">
+                        {row.medicine.uom || "Tabs"}
+                      </td>
+
+                      {/* Strength */}
+                      <td className="px-2.5 py-2 text-gray-600 dark:text-gray-300">
+                        {row.medicine.strength || "—"}
+                      </td>
+
+                      {/* Dosage Schedule */}
+                      <td className="px-2.5 py-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {row.schedule.morning && (
+                            <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 border border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
+                              Morning
+                            </span>
+                          )}
+                          {row.schedule.afternoon && (
+                            <span className="inline-flex items-center rounded-md bg-orange-50 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 border border-orange-200/60 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/40">
+                              Afternoon
+                            </span>
+                          )}
+                          {row.schedule.night && (
+                            <span className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 border border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/40">
+                              Night
+                            </span>
+                          )}
+                          {!row.schedule.morning && !row.schedule.afternoon && !row.schedule.night && (
+                            <span className="text-gray-400">As needed</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Food Timing */}
+                      <td className="px-2.5 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                        {row.foodTiming || DEFAULT_FOOD_TIMING}
+                      </td>
+
+                      {/* Days */}
+                      <td className="px-2.5 py-2 text-center font-medium text-gray-800 dark:text-gray-200">
+                        {row.days ? `${row.days} d` : "—"}
+                      </td>
+
+                      {/* Total Qty */}
+                      <td className="px-2.5 py-2 text-center font-bold text-brand-600 dark:text-brand-400">
+                        {row.totalQty || "—"}
+                      </td>
+
+                      {/* Actions */}
+                      {!isSended && (
+                        <td className="px-2.5 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(row)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                              title="Edit Medicine"
+                            >
+                              <PencilIcon className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRow(row.id)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-red-500 transition hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:border-gray-700 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-950/30"
+                              title="Delete Medicine"
+                            >
+                              <TrashBinIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Add Row Button Below Table */}
-      {!isSended && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={addEmptyRow}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Row
-          </button>
-        </div>
-      )}
-
-      {/* Modal Overlay */}
+      {/* Add / Edit Prescription Modal Dialog (Using div, not form, to prevent page reloads) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white shadow-2xl dark:bg-gray-900">
-            
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900 border border-gray-100 dark:border-gray-800 animate-fadeIn my-8">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-200 p-5 dark:border-gray-800">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Select Medicines</h3>
+            <div className="mb-5 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {modalForm.id ? "Edit Prescription Item" : "Add Medicine to Prescription"}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Search medicine or enter custom prescription details
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                ✕
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="flex flex-1 flex-col overflow-hidden p-5">
-              <div className="mb-4 flex items-center gap-4">
-                <div className="relative flex-1">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {formError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300">
+                {formError}
+              </div>
+            )}
+
+            {/* Modal Form Content */}
+            <div className="space-y-4">
+              {/* Medicine Name with Autocomplete */}
+              <div className="relative" ref={autocompleteContainerRef}>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Medicine Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Type starting letters (e.g. Paracetamol, Amoxicillin)..."
+                    value={medicineSearchQuery}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMedicineSearchQuery(val);
+                      setModalForm((prev) => ({ ...prev, name: val }));
+                      setShowMedicineSuggestions(val.trim().length > 0);
+                    }}
+                    onFocus={() => {
+                      if (medicineSearchQuery.trim().length > 0) {
+                        setShowMedicineSuggestions(true);
+                      }
+                    }}
+                    className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 pr-10 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                  <span className="absolute right-3.5 top-3 text-gray-400">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </span>
+                </div>
+
+                {/* Suggestions Dropdown */}
+                {showMedicineSuggestions && matchingMedicines.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+                    <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Medicines starting with &ldquo;{medicineSearchQuery}&rdquo;
+                    </div>
+                    {matchingMedicines.map((med) => (
+                      <div
+                        key={med.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSelectMedicine(med);
+                        }}
+                        className="flex cursor-pointer items-center justify-between px-3.5 py-2.5 hover:bg-brand-50/80 dark:hover:bg-brand-900/20 transition"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                              {med.name}
+                            </span>
+                            {med.type && (
+                              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                {med.type}
+                              </span>
+                            )}
+                          </div>
+                          {med.genericName && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {med.genericName}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
+                            {med.uom || "Tabs"}
+                          </span>
+                          {med.stock !== undefined && (
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              Stock: {med.stock}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Grid 1: Medicine Type (Item Category), Generic Name, UOM, Strength */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+                {/* Medicine Type (Dynamically loaded from Item Category Master) */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Medicine Type
+                  </label>
+                  <select
+                    value={modalForm.type}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, type: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  >
+                    {medicineTypeOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* UOM Dropdown (Dynamically loaded from UOM Master) */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    UOM (Unit) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={modalForm.uom}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, uom: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  >
+                    {uomOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Strength */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Strength (e.g. 500mg)
+                  </label>
                   <input
                     type="text"
-                    placeholder="Search by medicine code or name"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    className="h-10 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:text-white"
+                    placeholder="e.g. 500 mg / 10 ml"
+                    value={modalForm.strength}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, strength: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Generic Name */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Generic Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Generic salt / name"
+                    value={modalForm.genericName}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, genericName: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   />
                 </div>
               </div>
 
-              {medicineLoadError ? (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
-                  {medicineLoadError}
-                </div>
-              ) : null}
-
-              <div className="flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
-                <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-md">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                          checked={selectedIds.size === currentMedicines.length && currentMedicines.length > 0}
-                          onChange={toggleAllSelections}
-                        />
-                      </th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Code</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Name</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Generic Name</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Type</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Strength</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UOM</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Stock Available</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
-                    {isLoadingMedicines ? (
-                      <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                          Loading medicines from Item Master...
-                        </td>
-                      </tr>
-                    ) : currentMedicines.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No medicines found in Item Master.</td>
-                      </tr>
-                    ) : (
-                      currentMedicines.map((medicine) => (
-                        <tr 
-                          key={medicine.id} 
-                          onClick={() => toggleSelection(medicine.id)}
-                          className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                        >
-                          <td className="px-4 py-3">
-                            <input 
-                              type="checkbox" 
-                              className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                              checked={selectedIds.has(medicine.id)}
-                              onChange={() => toggleSelection(medicine.id)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.code}</td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.name}</td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.genericName}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.type}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.strength}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.uom}</td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-300">{medicine.stock}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-800">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredMedicines.length)} to {Math.min(currentPage * itemsPerPage, filteredMedicines.length)} of {filteredMedicines.length} items
-                </span>
-                
-                <div className="flex items-center gap-1">
+              {/* Meaningful Schedule / Dosage Selector (Morning, Afternoon, Night) */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-800/40">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                  Dosage Timing (Schedule)
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Morning Toggle */}
                   <button
                     type="button"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleModalScheduleChange("morning", !modalForm.morning);
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-semibold transition ${
+                      modalForm.morning
+                        ? "border-amber-400 bg-amber-50 text-amber-900 shadow-xs dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-200"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
                   >
-                    Prev
+                    <span>Morning</span>
+                    <span
+                      className={`ml-auto flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        modalForm.morning
+                          ? "bg-amber-500 text-white"
+                          : "border border-gray-300 text-transparent dark:border-gray-600"
+                      }`}
+                    >
+                      ✓
+                    </span>
                   </button>
-                  
-                  {Array.from({ length: Math.min(3, totalPages) }).map((_, idx) => {
-                    // Simple logic to show a few page numbers centered currently around currentPage if possible
-                    let pageNum = currentPage;
-                    if (currentPage === 1) pageNum = idx + 1;
-                    else if (currentPage === totalPages && totalPages > 2) pageNum = totalPages - 2 + idx;
-                    else pageNum = currentPage - 1 + idx;
 
-                    if (pageNum > totalPages || pageNum < 1) return null;
-
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`min-w-[32px] rounded border px-2 py-1.5 text-sm font-medium ${
-                          currentPage === pageNum 
-                            ? 'border-brand-500 bg-brand-500 text-white' 
-                            : 'border-transparent text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
+                  {/* Afternoon Toggle */}
                   <button
                     type="button"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleModalScheduleChange("afternoon", !modalForm.afternoon);
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-semibold transition ${
+                      modalForm.afternoon
+                        ? "border-orange-400 bg-orange-50 text-orange-900 shadow-xs dark:border-orange-600 dark:bg-orange-950/40 dark:text-orange-200"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
                   >
-                    Next
+                    <span>Afternoon</span>
+                    <span
+                      className={`ml-auto flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        modalForm.afternoon
+                          ? "bg-orange-500 text-white"
+                          : "border border-gray-300 text-transparent dark:border-gray-600"
+                      }`}
+                    >
+                      ✓
+                    </span>
+                  </button>
+
+                  {/* Night Toggle */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleModalScheduleChange("night", !modalForm.night);
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-semibold transition ${
+                      modalForm.night
+                        ? "border-indigo-400 bg-indigo-50 text-indigo-900 shadow-xs dark:border-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-200"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
+                  >
+                    <span>Night</span>
+                    <span
+                      className={`ml-auto flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        modalForm.night
+                          ? "bg-indigo-600 text-white"
+                          : "border border-gray-300 text-transparent dark:border-gray-600"
+                      }`}
+                    >
+                      ✓
+                    </span>
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 border-t border-gray-200 p-5 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={addSelectedMedicines}
-                disabled={selectedIds.size === 0}
-                className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
-              >
-                Add Selected ({selectedIds.size})
-              </button>
-            </div>
+              {/* Grid 2: Food Timings, No of Days, Total Qty */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {/* Food Timing */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Food Timing
+                  </label>
+                  <select
+                    value={modalForm.foodTiming}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, foodTiming: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  >
+                    {FOOD_TIMING_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
+                {/* No. of Days */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Number of Days
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={modalForm.days}
+                    onChange={(e) => handleModalDaysChange(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Total Quantity */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    Total Quantity ({modalForm.uom || "Units"})
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={modalForm.totalQty}
+                    onChange={(e) => setModalForm((prev) => ({ ...prev, totalQty: e.target.value }))}
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm font-bold text-brand-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-brand-400"
+                    placeholder="Auto"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSaveModal(e)}
+                  className="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-brand-600 transition"
+                >
+                  {modalForm.id ? "Update Medicine" : "Add to Prescription"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

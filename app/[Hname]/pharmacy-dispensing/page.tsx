@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PageLayout } from "../../../components/page-layout";
 import { PhoneInputField } from "../../../components/ui/phone-input";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -139,6 +139,7 @@ function formatDate(value?: string | null): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PharmacyDispensingPage() {
+  const router = useRouter();
   const params = useParams();
   const hname = params?.Hname as string;
 
@@ -654,13 +655,32 @@ export default function PharmacyDispensingPage() {
 
           {/* ── Header toolbar ─────────────────────────────────────────────── */}
           <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white/90">
-                Pharmacy Dispensing
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
-                Pick a consultation record, then enter received quantity and medicine amount.
-              </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeView !== "records") {
+                    setActiveView("records");
+                  } else {
+                    router.back();
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-hidden focus:ring-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 focus:ring-slate-500/25"
+                title="Back"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                Back
+              </button>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white/90">
+                  Pharmacy Dispensing
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
+                  Pick a consultation record, then enter received quantity and medicine amount.
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -897,15 +917,15 @@ export default function PharmacyDispensingPage() {
                         </div>
                       ) : (
                         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                          <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
-                            <thead className="bg-slate-50 dark:bg-gray-950">
+                          <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                            <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
                               <tr>
-                                <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token</th>
-                                <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Date</th>
-                                <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Status</th>
-                                <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Amount</th>
-                                <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Type</th>
-                                <th className="px-4 py-3" />
+                                <th className="px-2.5 py-2">Token</th>
+                                <th className="px-2.5 py-2">Date</th>
+                                <th className="px-2.5 py-2">Status</th>
+                                <th className="px-2.5 py-2">Amount</th>
+                                <th className="px-2.5 py-2">Type</th>
+                                <th className="px-2.5 py-2 text-right" />
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
@@ -915,31 +935,23 @@ export default function PharmacyDispensingPage() {
                                   className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
                                   onClick={() => openHistoryRecord(bill)}
                                 >
-                                  <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-gray-300">
+                                  <td className="px-2.5 py-2 font-mono text-slate-600 dark:text-gray-300">
                                     {bill.token_number || "—"}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-gray-300">
+                                  <td className="px-2.5 py-2 text-slate-600 dark:text-gray-300">
                                     {bill.created_at ? new Date(bill.created_at).toLocaleDateString("en-IN") : "—"}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-gray-300">
+                                  <td className="px-2.5 py-2 text-slate-600 dark:text-gray-300">
                                     {bill.payment_status || "—"}
                                   </td>
-                                  <td className="px-4 py-3 text-slate-600 dark:text-gray-300">
+                                  <td className="px-2.5 py-2 font-medium text-slate-700 dark:text-gray-300">
                                     {bill.billing_amount != null ? `Rs. ${bill.billing_amount}` : "—"}
                                   </td>
-                                  <td className="px-4 py-3">
-                                    {bill.pharmacy_only === "Yes" ? (
-                                      <span className="inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-                                        Pharmacy Only
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-gray-800 dark:text-gray-400">
-                                        Consultation
-                                      </span>
-                                    )}
+                                  <td className="px-2.5 py-2 text-slate-600 dark:text-gray-300">
+                                    {bill.pharmacy_only === "Yes" ? "Pharmacy Only" : "Consultation"}
                                   </td>
-                                  <td className="px-4 py-3 text-right">
-                                    <span className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                                  <td className="px-2.5 py-2 text-right">
+                                    <span className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
                                       Use →
                                     </span>
                                   </td>
@@ -1149,80 +1161,80 @@ export default function PharmacyDispensingPage() {
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
-                      <thead className="bg-slate-100 dark:bg-gray-950">
+                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                      <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Medicine Name</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Prescribed Qty</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Received Qty</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Per Unit Price</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Medicine Amount</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300" />
+                          <th className="px-2.5 py-2">Medicine Name</th>
+                          <th className="px-2.5 py-2">Prescribed Qty</th>
+                          <th className="px-2.5 py-2">Received Qty</th>
+                          <th className="px-2.5 py-2">Per Unit Price</th>
+                          <th className="px-2.5 py-2">Medicine Amount</th>
+                          <th className="w-16 px-2.5 py-2 text-right" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                         {medicineRows.map((row, index) => (
                           <tr key={row.id}>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5">
                               <input
                                 type="text"
                                 value={row.medicineName}
                                 readOnly={!isPharmacyOnly && row.medicineName.trim().length > 0}
                                 onChange={(e) => updateMedicineRow(row.id, "medicineName", e.target.value)}
                                 placeholder={`Medicine ${index + 1}`}
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.medicineName.trim().length > 0
+                                className={`h-8 w-full rounded-lg border px-2.5 text-xs dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.medicineName.trim().length > 0
                                   ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
                                   : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
                                   }`}
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5">
                               <input
                                 type="number"
                                 min="0"
                                 value={row.prescribedQty}
                                 readOnly={!isPharmacyOnly && row.prescribedQty.trim().length > 0}
                                 onChange={(e) => updateMedicineRow(row.id, "prescribedQty", e.target.value)}
-                                className={`h-10 w-full rounded-lg border px-3 text-sm dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.prescribedQty.trim().length > 0
+                                className={`h-8 w-full rounded-lg border px-2.5 text-xs dark:border-gray-700 dark:text-white/90 ${!isPharmacyOnly && row.prescribedQty.trim().length > 0
                                   ? "border-slate-300 bg-slate-50 text-slate-700 dark:bg-gray-800/60"
                                   : "border-slate-300 bg-transparent text-slate-700 focus:border-brand-300 focus:outline-hidden"
                                   }`}
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5">
                               <input
                                 type="number"
                                 min="0"
                                 value={row.receivedQty}
                                 onChange={(e) => updateMedicineRow(row.id, "receivedQty", e.target.value)}
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-transparent px-3 text-sm text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
+                                className="h-8 w-full rounded-lg border border-slate-300 bg-transparent px-2.5 text-xs text-slate-700 focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:text-white/90"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5">
                               <input
                                 type="text"
                                 readOnly
                                 value={row.perUnitPrice ? `Rs. ${row.perUnitPrice}` : ""}
                                 placeholder="—"
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
+                                className="h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5">
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
                                 value={row.medicineAmount}
                                 readOnly
-                                className="h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
+                                className="h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 dark:border-gray-700 dark:bg-gray-800/60 dark:text-white/90"
                               />
                             </td>
 
-                            <td className="px-4 py-3">
+                            <td className="px-2.5 py-1.5 text-right">
                               <button
                                 type="button"
                                 onClick={() => removeMedicineRow(row.id)}
-                                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                className="h-8 shrink-0 rounded-lg border border-slate-300 px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                 disabled={medicineRows.length === 1}
                               >
                                 Remove
@@ -1282,16 +1294,16 @@ export default function PharmacyDispensingPage() {
                   <p className="py-8 text-center text-sm text-slate-500 dark:text-gray-400">No dispensing records found.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
-                      <thead className="bg-slate-100 dark:bg-gray-950">
+                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                      <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Patient Name</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Mobile</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Type</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Billing Amount</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Status</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Date</th>
+                          <th className="px-2.5 py-2">Token</th>
+                          <th className="px-2.5 py-2">Patient Name</th>
+                          <th className="px-2.5 py-2">Mobile</th>
+                          <th className="px-2.5 py-2">Type</th>
+                          <th className="px-2.5 py-2">Billing Amount</th>
+                          <th className="px-2.5 py-2">Status</th>
+                          <th className="px-2.5 py-2">Date</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
@@ -1301,25 +1313,17 @@ export default function PharmacyDispensingPage() {
                             onClick={() => setSelectedBill(bill)}
                             className="cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-900/10"
                           >
-                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
-                              {bill.pharmacy_only === "1" || bill.pharmacy_only === "true" ? (
-                                <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                                  Pharmacy Only
-                                </span>
-                              ) : (
-                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                                  Consultation
-                                </span>
-                              )}
+                            <td className="px-2.5 py-2 font-medium text-slate-900 dark:text-white/90">{bill.token_number || "—"}</td>
+                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_name || "—"}</td>
+                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.patient_phone || "—"}</td>
+                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
+                              {bill.pharmacy_only === "1" || bill.pharmacy_only === "true" ? "Pharmacy Only" : "Consultation"}
                             </td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                            <td className="px-2.5 py-2 font-medium text-slate-700 dark:text-gray-300">
                               Rs. {bill.billing_amount ? Number(bill.billing_amount).toFixed(2) : "0.00"}
                             </td>
-                            <td className="px-4 py-3 text-slate-700 dark:text-gray-300">{bill.payment_status || "Pending"}</td>
-                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
+                            <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">{bill.payment_status || "Pending"}</td>
+                            <td className="px-2.5 py-2 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1347,12 +1351,12 @@ export default function PharmacyDispensingPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-gray-800">
-                      <thead className="bg-slate-100 dark:bg-gray-950">
+                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-gray-800">
+                      <thead className="bg-slate-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-slate-600 dark:text-gray-300">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Token Number</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Patient Details</th>
-                          <th className="px-4 py-3 font-semibold text-slate-600 dark:text-gray-300">Type</th>
+                          <th className="px-2.5 py-2">Token Number</th>
+                          <th className="px-2.5 py-2">Patient Details</th>
+                          <th className="px-2.5 py-2">Type</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
@@ -1365,13 +1369,13 @@ export default function PharmacyDispensingPage() {
                               className={`cursor-pointer transition hover:bg-brand-50/60 dark:hover:bg-brand-500/10 ${selectedConsultationId === record.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
                                 }`}
                             >
-                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
                                 {record.token_number || "—"}
                               </td>
-                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
                                 {record.patient_details || "—"}
                               </td>
-                              <td className="px-4 py-3 text-slate-700 dark:text-gray-300">
+                              <td className="px-2.5 py-2 text-slate-700 dark:text-gray-300">
                                 {record.patient_type === "walk-in" ? "OP" : (record.patient_type || "OP").toUpperCase()}
                               </td>
                             </tr>
@@ -1455,24 +1459,24 @@ export default function PharmacyDispensingPage() {
                   <div>
                     <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Medicines Dispensed</h4>
                     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                      <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-                        <thead className="bg-gray-50 dark:bg-gray-800/60">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-800">
+                        <thead className="bg-gray-50 dark:bg-gray-800/60 font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
                           <tr>
-                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">#</th>
-                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Medicine Name</th>
-                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Prescribed</th>
-                            <th className="px-4 py-2.5 text-left font-semibold text-gray-600 dark:text-gray-300">Received</th>
-                            <th className="px-4 py-2.5 text-right font-semibold text-gray-600 dark:text-gray-300">Amount</th>
+                            <th className="px-2.5 py-2 text-left">#</th>
+                            <th className="px-2.5 py-2 text-left">Medicine Name</th>
+                            <th className="px-2.5 py-2 text-left">Prescribed</th>
+                            <th className="px-2.5 py-2 text-left">Received</th>
+                            <th className="px-2.5 py-2 text-right">Amount</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                           {lines.map((line, idx) => (
                             <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                              <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{idx + 1}</td>
-                              <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">{line.medicineName || "—"}</td>
-                              <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{line.prescribedQty || "—"}</td>
-                              <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{line.receivedQty || "—"}</td>
-                              <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-white">
+                              <td className="px-2.5 py-1.5 text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                              <td className="px-2.5 py-1.5 font-medium text-gray-900 dark:text-white">{line.medicineName || "—"}</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-300">{line.prescribedQty || "—"}</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-300">{line.receivedQty || "—"}</td>
+                              <td className="px-2.5 py-1.5 text-right font-medium text-gray-900 dark:text-white">
                                 {line.medicineAmount ? `Rs. ${line.medicineAmount}` : "—"}
                               </td>
                             </tr>
@@ -1546,10 +1550,10 @@ export default function PharmacyDispensingPage() {
               ) : null}
 
               <div className="flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
-                <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
-                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-md">
+                <table className="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-800">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/80 backdrop-blur-md font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
                     <tr>
-                      <th className="px-4 py-3 text-left">
+                      <th className="px-2.5 py-2 text-left">
                         <input
                           type="checkbox"
                           className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
@@ -1557,13 +1561,13 @@ export default function PharmacyDispensingPage() {
                           onChange={toggleAllMedicineSelections}
                         />
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Code</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Name</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Generic Name</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Medicine Type</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Strength</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">UOM</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Stock Available</th>
+                      <th className="px-2.5 py-2 text-left">Medicine Code</th>
+                      <th className="px-2.5 py-2 text-left">Medicine Name</th>
+                      <th className="px-2.5 py-2 text-left">Generic Name</th>
+                      <th className="px-2.5 py-2 text-left">Medicine Type</th>
+                      <th className="px-2.5 py-2 text-left">Strength</th>
+                      <th className="px-2.5 py-2 text-left">UOM</th>
+                      <th className="px-2.5 py-2 text-right">Stock Available</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-transparent">
@@ -1584,7 +1588,7 @@ export default function PharmacyDispensingPage() {
                           onClick={() => toggleMedicineSelection(medicine.id)}
                           className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
                         >
-                          <td className="px-4 py-3">
+                          <td className="px-2.5 py-1.5">
                             <input
                               type="checkbox"
                               className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
@@ -1593,13 +1597,13 @@ export default function PharmacyDispensingPage() {
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.code}</td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.name}</td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{medicine.genericName}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.type}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.strength}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{medicine.uom}</td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-300">{medicine.stock}</td>
+                          <td className="px-2.5 py-1.5 text-gray-900 dark:text-gray-300">{medicine.code}</td>
+                          <td className="px-2.5 py-1.5 font-medium text-gray-900 dark:text-gray-300">{medicine.name}</td>
+                          <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-300">{medicine.genericName}</td>
+                          <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-400">{medicine.type}</td>
+                          <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-400">{medicine.strength}</td>
+                          <td className="px-2.5 py-1.5 text-gray-600 dark:text-gray-400">{medicine.uom}</td>
+                          <td className="px-2.5 py-1.5 text-right font-medium text-gray-900 dark:text-gray-300">{medicine.stock}</td>
                         </tr>
                       ))
                     )}
