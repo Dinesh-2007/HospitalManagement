@@ -22,7 +22,9 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
     CREATE TABLE IF NOT EXISTS ${quoteIdentifier(TABLE_NAME)} (
       id BIGSERIAL PRIMARY KEY,
       patient_id TEXT,
-      patient_name TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      patient_name TEXT GENERATED ALWAYS AS (TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) STORED,
       dob DATE,
       gender TEXT,
       address TEXT,
@@ -57,6 +59,13 @@ async function ensurePatientTable(pool: Awaited<ReturnType<typeof getTenantDB>>)
   await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS dob DATE`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS gender TEXT`);
   await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS mobile_country_code TEXT`);
+  // Migrate existing patient_name -> first_name if needed, then add generated column
+  await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS first_name TEXT`);
+  await pool.query(`ALTER TABLE ${quoteIdentifier(TABLE_NAME)} ADD COLUMN IF NOT EXISTS last_name TEXT`);
+  // Back-fill first_name from patient_name where first_name is null
+  await pool.query(
+    `UPDATE ${quoteIdentifier(TABLE_NAME)} SET first_name = patient_name WHERE first_name IS NULL AND patient_name IS NOT NULL AND patient_name <> ''`
+  );
 }
 
 export async function POST(
@@ -92,7 +101,7 @@ export async function POST(
           [phone, countryCode, body.phone],
         )
         : await pool.query(
-          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+          `SELECT * FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = LOWER($1) LIMIT 1`,
           [name],
         );
 
@@ -119,7 +128,8 @@ export async function POST(
       `
         INSERT INTO ${quoteIdentifier(TABLE_NAME)} (
           patient_id,
-          patient_name,
+          first_name,
+          last_name,
           dob,
           gender,
           address,
@@ -148,13 +158,14 @@ export async function POST(
           inactive_reason
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29
         )
         RETURNING *
       `,
       [
         resolvedPatientId || null,
-        normalizeText(patient.patientName),
+        normalizeText(patient.firstName ?? patient.patientName),
+        normalizeText(patient.lastName),
         normalizeText(patient.dob) || null,
         normalizeText(patient.gender),
         normalizeText(patient.address),
@@ -267,7 +278,7 @@ export async function PUT(
           [phone],
         )
         : await pool.query(
-          `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(patient_name) = LOWER($1) LIMIT 1`,
+          `SELECT id, patient_id FROM ${quoteIdentifier(TABLE_NAME)} WHERE LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = LOWER($1) LIMIT 1`,
           [name],
         );
 
@@ -285,38 +296,40 @@ export async function PUT(
         UPDATE ${quoteIdentifier(TABLE_NAME)}
         SET
           patient_id = $1,
-          patient_name = $2,
-          dob = $3,
-          gender = $4,
-          address = $5,
-          country = $6,
-          state = $7,
-          city = $8,
-          zip_code = $9,
-          email = $10,
-          phone_office = $11,
-          phone_resi = $12,
-          hn_number = $13,
-          number_of_visits = $14,
-          last_visit_date_time = $15,
-          last_visit_doctor_name = $16,
-          profession = $17,
-          patient_type = $18,
-          preferred_payment_type = $19,
-          mediclaim_policy_available = $20,
-          policy_details = $21,
-          linked_patient_id = $22,
-          relationship_ship_linked_patient = $23,
-          active_from = $24,
-          inactive_from = $25,
-          inactive_reason = $26,
+          first_name = $2,
+          last_name = $3,
+          dob = $4,
+          gender = $5,
+          address = $6,
+          country = $7,
+          state = $8,
+          city = $9,
+          zip_code = $10,
+          email = $11,
+          phone_office = $12,
+          phone_resi = $13,
+          hn_number = $14,
+          number_of_visits = $15,
+          last_visit_date_time = $16,
+          last_visit_doctor_name = $17,
+          profession = $18,
+          patient_type = $19,
+          preferred_payment_type = $20,
+          mediclaim_policy_available = $21,
+          policy_details = $22,
+          linked_patient_id = $23,
+          relationship_ship_linked_patient = $24,
+          active_from = $25,
+          inactive_from = $26,
+          inactive_reason = $27,
           updated_at = NOW()
-        WHERE ${Number.isInteger(id) ? "id = $27" : phone ? "mobile = $27" : "LOWER(patient_name) = LOWER($27)"}
+        WHERE ${Number.isInteger(id) ? "id = $28" : phone ? "mobile = $28" : "LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) = LOWER($28)"}
         RETURNING *
       `,
       [
         resolvedPatientId || null,
-        normalizeText(patient.patientName),
+        normalizeText(patient.firstName ?? patient.patientName),
+        normalizeText(patient.lastName),
         normalizeText(patient.dob) || null,
         normalizeText(patient.gender),
         normalizeText(patient.address),

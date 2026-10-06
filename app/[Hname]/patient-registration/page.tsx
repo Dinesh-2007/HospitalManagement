@@ -15,12 +15,17 @@ export default function PatientRegistrationPage() {
   const mode = searchParams?.get("mode");
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedStateCode, setSelectedStateCode] = useState("");
-  const [localName, setLocalName] = useState("");
+  const [localFirstName, setLocalFirstName] = useState("");
+  const [localLastName, setLocalLastName] = useState("");
   const [localPhone, setLocalPhone] = useState("");
 
   useEffect(() => {
     try {
-      setLocalName(window.localStorage.getItem("patientName") ?? "");
+      // patientName is stored as "First Last" in localStorage for backward compat
+      const fullName = window.localStorage.getItem("patientName") ?? "";
+      const parts = fullName.split(" ");
+      setLocalFirstName(parts[0] ?? "");
+      setLocalLastName(parts.slice(1).join(" "));
       setLocalPhone(window.localStorage.getItem("patientPhone") ?? "");
     } catch {}
   }, []);
@@ -51,7 +56,8 @@ export default function PatientRegistrationPage() {
   const patientRegistrationFields: MastersFormField[] = useMemo(
     () => [
       { id: "patientId", label: "Patient ID", type: "display", size: "small", placeholder: "Auto-generated on check-in", hint: "Auto-generated when the patient checks in for the first time." },
-      { id: "patientName", label: "Patient Name", type: mode === "edit" ? "display" : "text", maxLength: 500, pattern: "[a-zA-Z\\s]*", size: "medium", defaultValue: mode === "edit" ? localName : undefined },
+      { id: "firstName", label: "First Name", type: mode === "edit" ? "display" : "text", maxLength: 250, pattern: "[a-zA-Z\\s]*", size: "small", defaultValue: mode === "edit" ? localFirstName : undefined },
+      { id: "lastName", label: "Last Name", type: mode === "edit" ? "display" : "text", maxLength: 250, pattern: "[a-zA-Z\\s]*", size: "small", defaultValue: mode === "edit" ? localLastName : undefined },
       { id: "dob", label: "Date of Birth", type: "date", size: "small", max: new Date().toISOString().split("T")[0] },
       {
         id: "gender",
@@ -127,7 +133,7 @@ export default function PatientRegistrationPage() {
         fullWidth: true,
       },
     ],
-    [cities, countries, states, mode, localName, localPhone],
+    [cities, countries, states, mode, localFirstName, localLastName, localPhone],
   );
 
   return (

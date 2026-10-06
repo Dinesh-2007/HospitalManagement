@@ -85,9 +85,33 @@ export function DatePicker({ value, onChange, className = "" }: DatePickerProps)
                     >
                         <ChevronLeftIcon className="h-4 w-4" />
                     </button>
-                    <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                        {monthName} {year}
-                    </span>
+                    <div className="flex gap-1">
+                        <select
+                            value={month}
+                            onChange={(e) => setViewDate(new Date(year, Number(e.target.value), 1))}
+                            className="cursor-pointer appearance-none bg-transparent text-sm font-semibold text-gray-800 focus:outline-none dark:text-white/90"
+                        >
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <option key={i} value={i} className="text-gray-800 dark:text-gray-800">
+                                    {new Date(2000, i).toLocaleString("default", { month: "short" })}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            value={year}
+                            onChange={(e) => setViewDate(new Date(Number(e.target.value), month, 1))}
+                            className="cursor-pointer appearance-none bg-transparent text-sm font-semibold text-gray-800 focus:outline-none dark:text-white/90"
+                        >
+                            {Array.from({ length: 150 }).map((_, i) => {
+                                const y = new Date().getFullYear() + 10 - i;
+                                return (
+                                    <option key={y} value={y} className="text-gray-800 dark:text-gray-800">
+                                        {y}
+                                    </option>
+                                );
+                            })}
+                        </select>
+                    </div>
                     <button
                         type="button"
                         onClick={handleNextMonth}
@@ -117,7 +141,7 @@ export function DatePicker({ value, onChange, className = "" }: DatePickerProps)
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex min-w-[140px] items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                className="flex h-11 w-full items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
             >
                 <CalenderIcon className="h-4 w-4 text-gray-400" />
                 <span>{formatDate(value)}</span>

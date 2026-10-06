@@ -27,14 +27,17 @@ export async function GET(
       return NextResponse.json({ rows: [] });
     }
 
-    // Search by patient_id (exact prefix), mobile (digit-normalised), or patient_name (ilike)
+    // Search by patient_id (exact prefix), mobile (digit-normalised), first_name, last_name, or patient_name (ilike)
     const result = await pool.query(
-      `SELECT patient_id, patient_name, mobile, phone_office, phone_resi, dob, patient_type
+      `SELECT patient_id, first_name, last_name, patient_name, mobile, phone_office, phone_resi, dob, patient_type
        FROM ${quoteIdentifier(PATIENTS_TABLE)}
        WHERE
          LOWER(COALESCE(patient_id, '')) LIKE LOWER($1)
           OR regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') LIKE '%' || regexp_replace($2, '\\D', '', 'g') || '%'
           OR regexp_replace($2, '\\D', '', 'g') LIKE '%' || regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g')
+         OR LOWER(COALESCE(first_name, '')) LIKE LOWER($3)
+         OR LOWER(COALESCE(last_name, '')) LIKE LOWER($3)
+         OR LOWER(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) LIKE LOWER($3)
          OR LOWER(COALESCE(patient_name, '')) LIKE LOWER($3)
        ORDER BY patient_id
        LIMIT 20`,

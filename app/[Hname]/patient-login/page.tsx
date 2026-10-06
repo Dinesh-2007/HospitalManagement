@@ -10,12 +10,14 @@ import { Button } from "../../../components/ui/button";
 import { PhoneInputField } from "../../../components/ui/phone-input";
 import { validateDateOfBirth } from "../../../lib/date-validation";
 import { tableNameFromCardTitle } from "../../../lib/master-form-table";
+import { DatePicker } from "../../../components/date-picker";
 
 /* ── types ── */
 type PatientRow = { id: number; name: string; phone: string; gender: string };
 
 type RegForm = {
-  patientName: string;
+  firstName: string;
+  lastName: string;
   dob: string;
   gender: string;
   address: string;
@@ -37,7 +39,8 @@ type RegForm = {
 
 function emptyReg(mobile = ""): RegForm {
   return {
-    patientName: "",
+    firstName: "",
+    lastName: "",
     dob: "",
     gender: "",
     address: "",
@@ -80,7 +83,10 @@ async function fetchPatientRows(hname: string): Promise<PatientRow[]> {
   return (data.rows ?? [])
     .map((row) => ({
       id: Number(row.id ?? 0),
-      name: String(row.patient_name ?? row.patientName ?? ""),
+      name: String(
+        ((`${row?.first_name ?? ""} ${row?.last_name ?? ""}`).trim()) ||
+          (row?.patient_name ?? "")
+      ),
       phone: String(row.mobile ?? ""),
       gender: String(row.gender ?? ""),
     }))
@@ -167,7 +173,10 @@ export default function PatientLoginPage() {
         const row = data.row ?? null;
         const patient: PatientRow = {
           id: Number(row?.id ?? data.patientId ?? 0),
-          name: String(row?.patient_name ?? row?.patientName ?? ""),
+          name: String(
+            ((`${row?.first_name ?? ""} ${row?.last_name ?? ""}`).trim()) ||
+              (row?.patient_name ?? "")
+          ),
           phone: String(row?.mobile ?? row?.phone ?? normalizedPhone),
           gender: String(row?.gender ?? ""),
         };
@@ -244,9 +253,10 @@ export default function PatientLoginPage() {
       if (!res.ok) throw new Error(data.error ?? "Registration failed.");
 
       const rowId = data.patientId ?? Number(data.row?.id ?? 0);
-      const payload = { id: rowId, name: regForm.patientName, phone: regForm.mobile, gender: regForm.gender };
+      const fullName = `${regForm.firstName} ${regForm.lastName}`.trim();
+      const payload = { id: rowId, name: fullName, phone: regForm.mobile, gender: regForm.gender };
       localStorage.setItem(storageKey(hname ?? ""), JSON.stringify(payload));
-      localStorage.setItem("patientName", regForm.patientName);
+      localStorage.setItem("patientName", fullName);
       localStorage.setItem("patientPhone", regForm.mobile);
       localStorage.setItem("patientGender", regForm.gender);
 
@@ -304,16 +314,30 @@ export default function PatientLoginPage() {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="reg-name">
-                    Patient Name <span className="text-error-500">*</span>
+                  <Label htmlFor="reg-first-name">
+                    First Name <span className="text-error-500">*</span>
                   </Label>
                   <input
-                    id="reg-name"
-                    value={regForm.patientName}
-                    onChange={(e) => updateReg("patientName", e.target.value)}
+                    id="reg-first-name"
+                    value={regForm.firstName}
+                    onChange={(e) => updateReg("firstName", e.target.value)}
                     required
                     className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    placeholder="Full name"
+                    placeholder="First name"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="reg-last-name">
+                    Last Name <span className="text-error-500">*</span>
+                  </Label>
+                  <input
+                    id="reg-last-name"
+                    value={regForm.lastName}
+                    onChange={(e) => updateReg("lastName", e.target.value)}
+                    required
+                    className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    placeholder="Last name"
                   />
                 </div>
 
@@ -334,18 +358,13 @@ export default function PatientLoginPage() {
                     const hasError = !!dobError;
                     return (
                       <>
-                        <input
-                          id="reg-dob"
-                          type="date"
-                          max="9999-12-31"
-                          value={regForm.dob}
-                          onChange={(e) => updateReg("dob", e.target.value)}
-                          className={`h-11 w-full rounded-lg border bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:outline-none focus:ring-2 ${
-                            hasError
-                              ? "border-red-500 focus:border-red-500 focus:ring-red-200"
-                              : "border-gray-300 focus:border-brand-300 focus:ring-brand-100"
-                          }`}
-                        />
+                        <div className={`w-full rounded-lg ${hasError ? "border-red-500 ring-2 ring-red-200" : ""}`}>
+                          <DatePicker
+                            value={regForm.dob}
+                            onChange={(val) => updateReg("dob", val)}
+                            className="w-full"
+                          />
+                        </div>
                         {hasError && (
                           <p className="mt-1.5 text-xs text-red-500">
                             {dobError}

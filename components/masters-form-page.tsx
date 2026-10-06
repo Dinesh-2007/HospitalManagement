@@ -10,6 +10,7 @@ import { PencilIcon, TrashBinIcon } from "./icons";
 import { PhoneInputField } from "./ui/phone-input";
 import { comparePhoneNumbers } from "../lib/phone";
 import { validateDateOfBirth } from "../lib/date-validation";
+import { DatePicker } from "./date-picker";
 
 const HIDDEN_FIELD_NOTES = new Set([
   "character",
@@ -638,6 +639,12 @@ export function MastersFormPage({
                         placeholder={field.placeholder}
                         required={false}
                       />
+                    ) : field.type === "date" ? (
+                      <DatePicker
+                        value={(typeof formValues[field.id] === "string" ? formValues[field.id] : "") as string}
+                        onChange={(val) => updateFieldValue(field, val)}
+                        className="w-full"
+                      />
                     ) : (
                       <input
                         id={field.id}
@@ -645,7 +652,7 @@ export function MastersFormPage({
                         type={field.type === "display" ? "text" : field.type}
                         placeholder={field.placeholder}
                         min={field.min}
-                        max={field.type === "date" ? "9999-12-31" : field.max}
+                        max={field.max}
                         step={field.step}
                         maxLength={field.maxLength}
                         pattern={field.pattern}
