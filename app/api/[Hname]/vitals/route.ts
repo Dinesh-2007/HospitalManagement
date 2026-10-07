@@ -257,7 +257,7 @@ export async function GET(
                 a.time_slot_minutes,
                 a.department,
                 a.doctor,
-                a.patient_id AS appointment_patient_id,
+                COALESCE(NULLIF(TRIM(a.patient_id), ''), NULLIF(TRIM(p.patient_id), '')) AS appointment_patient_id,
                 a.patient_name AS appointment_patient_name,
                 a.patient_phone,
                 a.reason,
@@ -276,7 +276,7 @@ export async function GET(
                 a.attendant_relation,
                 p.id AS registration_id,
                 p.patient_id AS registration_patient_id,
-                p.patient_name AS registration_patient_name,
+                COALESCE(NULLIF(TRIM(p.patient_name), ''), TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, ''))) AS registration_patient_name,
                 COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, '') AS mobile,
                 p.dob AS registration_dob,
                 p.gender AS registration_gender,
@@ -329,16 +329,72 @@ export async function GET(
                   OR LOWER(COALESCE(dce.sended, '')) IN ('yes', 'true')
                 ) AS is_vitals_locked
               FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
-              LEFT JOIN ${quoteIdentifier(PATIENTS_TABLE)} p
-                ON (
+              LEFT JOIN LATERAL (
+                SELECT
+                  p.id,
+                  p.patient_id,
+                  p.patient_name,
+                  p.first_name,
+                  p.last_name,
+                  p.mobile_country_code,
+                  p.mobile,
+                  p.dob,
+                  p.gender,
+                  p.address,
+                  p.country,
+                  p.state,
+                  p.city,
+                  p.zip_code,
+                  p.email,
+                  p.phone_office,
+                  p.phone_resi,
+                  p.hn_number,
+                  p.number_of_visits,
+                  p.last_visit_date_time,
+                  p.last_visit_doctor_name,
+                  p.profession,
+                  p.preferred_payment_type,
+                  p.mediclaim_policy_available,
+                  p.policy_details,
+                  p.linked_patient_id,
+                  p.relationship_ship_linked_patient,
+                  p.active_from,
+                  p.inactive_from,
+                  p.inactive_reason
+                FROM ${quoteIdentifier(PATIENTS_TABLE)} p
+                WHERE (
                   (a.patient_id IS NOT NULL AND a.patient_id <> '' AND a.patient_id = p.patient_id)
                   OR (
                     (a.patient_id IS NULL OR a.patient_id = '')
-                    AND a.patient_phone IS NOT NULL
-                    AND a.patient_phone <> ''
-                    AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                    AND (
+                      (
+                        a.patient_phone IS NOT NULL AND a.patient_phone <> ''
+                        AND (
+                          regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                          OR regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                          OR (
+                            length(regexp_replace(a.patient_phone, '\\D', '', 'g')) >= 10
+                            AND length(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g')) >= 10
+                            AND RIGHT(regexp_replace(a.patient_phone, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g'), 10)
+                          )
+                        )
+                      )
+                      OR (
+                        a.patient_name IS NOT NULL AND a.patient_name <> ''
+                        AND (
+                          LOWER(TRIM(a.patient_name)) = LOWER(TRIM(COALESCE(p.patient_name, '')))
+                          OR LOWER(TRIM(a.patient_name)) = LOWER(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')))
+                        )
+                      )
+                    )
                   )
                 )
+                ORDER BY
+                  (CASE WHEN a.patient_id IS NOT NULL AND a.patient_id = p.patient_id THEN 0 ELSE 1 END),
+                  (CASE WHEN a.patient_phone IS NOT NULL AND regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g') THEN 0 ELSE 1 END),
+                  p.id DESC
+                LIMIT 1
+              ) p ON true
               LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
                 ON v.appointment_id = a.id
               LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce
@@ -368,7 +424,7 @@ export async function GET(
             a.time_slot_minutes,
             a.department,
             a.doctor,
-            a.patient_id AS appointment_patient_id,
+            COALESCE(NULLIF(TRIM(a.patient_id), ''), NULLIF(TRIM(p.patient_id), '')) AS appointment_patient_id,
             a.patient_name AS appointment_patient_name,
             a.patient_phone,
             a.reason,
@@ -387,7 +443,7 @@ export async function GET(
             a.attendant_relation,
             p.id AS registration_id,
             p.patient_id AS registration_patient_id,
-            p.patient_name AS registration_patient_name,
+            COALESCE(NULLIF(TRIM(p.patient_name), ''), TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, ''))) AS registration_patient_name,
             COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, '') AS mobile,
             p.dob AS registration_dob,
             p.gender AS registration_gender,
@@ -440,16 +496,72 @@ export async function GET(
               OR LOWER(COALESCE(dce.sended, '')) IN ('yes', 'true')
             ) AS is_vitals_locked
           FROM ${quoteIdentifier(APPOINTMENTS_TABLE)} a
-          LEFT JOIN ${quoteIdentifier(PATIENTS_TABLE)} p
-            ON (
+          LEFT JOIN LATERAL (
+            SELECT
+              p.id,
+              p.patient_id,
+              p.patient_name,
+              p.first_name,
+              p.last_name,
+              p.mobile_country_code,
+              p.mobile,
+              p.dob,
+              p.gender,
+              p.address,
+              p.country,
+              p.state,
+              p.city,
+              p.zip_code,
+              p.email,
+              p.phone_office,
+              p.phone_resi,
+              p.hn_number,
+              p.number_of_visits,
+              p.last_visit_date_time,
+              p.last_visit_doctor_name,
+              p.profession,
+              p.preferred_payment_type,
+              p.mediclaim_policy_available,
+              p.policy_details,
+              p.linked_patient_id,
+              p.relationship_ship_linked_patient,
+              p.active_from,
+              p.inactive_from,
+              p.inactive_reason
+            FROM ${quoteIdentifier(PATIENTS_TABLE)} p
+            WHERE (
               (a.patient_id IS NOT NULL AND a.patient_id <> '' AND a.patient_id = p.patient_id)
               OR (
                 (a.patient_id IS NULL OR a.patient_id = '')
-                AND a.patient_phone IS NOT NULL
-                AND a.patient_phone <> ''
-                AND regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                AND (
+                  (
+                    a.patient_phone IS NOT NULL AND a.patient_phone <> ''
+                    AND (
+                      regexp_replace(COALESCE(p.mobile_country_code, '') || COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                      OR regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g')
+                      OR (
+                        length(regexp_replace(a.patient_phone, '\\D', '', 'g')) >= 10
+                        AND length(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g')) >= 10
+                        AND RIGHT(regexp_replace(a.patient_phone, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g'), 10)
+                      )
+                    )
+                  )
+                  OR (
+                    a.patient_name IS NOT NULL AND a.patient_name <> ''
+                    AND (
+                      LOWER(TRIM(a.patient_name)) = LOWER(TRIM(COALESCE(p.patient_name, '')))
+                      OR LOWER(TRIM(a.patient_name)) = LOWER(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')))
+                    )
+                  )
+                )
               )
             )
+            ORDER BY
+              (CASE WHEN a.patient_id IS NOT NULL AND a.patient_id = p.patient_id THEN 0 ELSE 1 END),
+              (CASE WHEN a.patient_phone IS NOT NULL AND regexp_replace(COALESCE(p.mobile, ''), '\\D', '', 'g') = regexp_replace(a.patient_phone, '\\D', '', 'g') THEN 0 ELSE 1 END),
+              p.id DESC
+            LIMIT 1
+          ) p ON true
           LEFT JOIN ${quoteIdentifier(VITALS_TABLE)} v
             ON v.appointment_id = a.id
           LEFT JOIN ${quoteIdentifier("doctor_consultation_entry")} dce

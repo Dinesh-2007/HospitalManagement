@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Country, State, City } from "country-state-city";
-import { CheckCircleIcon } from "../../../components/icons";
 import { validateDateOfBirth } from "../../../lib/date-validation";
 import { useHospitalTimezone } from "../../../components/context/HospitalTimezoneContext";
 import { PhoneInputField } from "../../../components/ui/phone-input";
@@ -441,6 +440,24 @@ export default function CheckInPage() {
     void loadOptions();
   }, [hname]);
 
+  const knownPatientIdsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      const pid = text(r, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
+      const validPid = pid && (isNaN(Number(pid)) || !!r.registration_patient_id || pid.startsWith("PID-")) ? pid : "";
+      if (validPid) {
+        const pName = text(r, ["registration_patient_name", "appointment_patient_name", "patient_name"]).trim().toLowerCase();
+        const pPhone = text(r, ["patient_phone", "mobile"]).replace(/\D/g, "");
+        if (pName && !map.has(`name:${pName}`)) map.set(`name:${pName}`, validPid);
+        if (pPhone && pPhone.length >= 10) {
+          const last10 = pPhone.slice(-10);
+          if (!map.has(`phone:${last10}`)) map.set(`phone:${last10}`, validPid);
+        }
+      }
+    }
+    return map;
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     // Show all records (both scheduled and walk-in)
     let result = rows;
@@ -629,7 +646,7 @@ export default function CheckInPage() {
                   <th className="px-4 py-3 text-left">Time</th>
                   <th className="px-4 py-3 text-left">Slot</th>
                   <th className="px-4 py-3 text-left">Attendant</th>
-                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Status (Completed)</th>
                   <th className="px-4 py-3 text-center">Print</th>
                 </tr>
               </thead>
@@ -644,7 +661,17 @@ export default function CheckInPage() {
                   const rowId = row.appointment_id as string | number;
                   const isRowCheckingIn = checkingIn === rowId;
                   const rawPid = text(row, ["registration_patient_id", "appointment_patient_id", "patient_id"]);
-                  const displayPatientId = rawPid && isNaN(Number(rawPid)) ? rawPid : "";
+                  let displayPatientId = rawPid && (isNaN(Number(rawPid)) || !!row.registration_patient_id || rawPid.startsWith("PID-")) ? rawPid : "";
+
+                  if (!displayPatientId) {
+                    const phoneDigits = text(row, ["patient_phone", "mobile"]).replace(/\D/g, "");
+                    const pName = name.trim().toLowerCase();
+                    if (phoneDigits && phoneDigits.length >= 10 && knownPatientIdsMap.has(`phone:${phoneDigits.slice(-10)}`)) {
+                      displayPatientId = knownPatientIdsMap.get(`phone:${phoneDigits.slice(-10)}`) || "";
+                    } else if (pName && knownPatientIdsMap.has(`name:${pName}`)) {
+                      displayPatientId = knownPatientIdsMap.get(`name:${pName}`) || "";
+                    }
+                  }
                   const pType = text(row, ["patient_type"]) || "scheduled";
                   const apptDate = text(row, ["appointment_date"]);
                   const dateCompact = apptDate ? apptDate.slice(0, 10).replace(/-/g, "") : "";
@@ -665,9 +692,11 @@ export default function CheckInPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {isCheckedIn && displayPatientId
-                          ? <span className="font-mono text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{displayPatientId}</span>
-                          : <span className="text-xs text-gray-400">—</span>}
+                        {displayPatientId ? (
+                          <span className="font-mono text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{displayPatientId}</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-gray-600">{appointmentIdDisplay}</span>
@@ -693,11 +722,7 @@ export default function CheckInPage() {
                       <td className="px-4 py-3 text-gray-600 font-medium">{isCheckedIn ? (row.has_attendant ? "Yes" : "No") : "-"}</td>
                       <td className="px-4 py-3">
                         {isCheckedIn ? (
-                          getStageBadge(
-                            row.appointment_status === "Scheduled" || row.appointment_status === "Rescheduled"
-                              ? "Checked In"
-                              : String(row.appointment_status || "Checked In")
-                          )
+                          getStageBadge(getCompletedStep(row))
                         ) : (
                           <button
                             type="button"
@@ -1386,63 +1411,39 @@ export default function CheckInPage() {
   );
 }
 
-function getStageBadge(status: string) {
-  switch (status) {
-    case "Checked In":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          Checked In
-        </span>
-      );
-    case "Vitals":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          Vitals
-        </span>
-      );
-    case "Conslt":
-    case "Completed":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-4 py-1.5 text-sm font-medium text-purple-700 dark:bg-purple-900/20 dark:text-purple-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-          </svg>
-          Conslt
-        </span>
-      );
-    case "Lab":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-pink-50 px-4 py-1.5 text-sm font-medium text-pink-700 dark:bg-pink-900/20 dark:text-pink-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          Lab
-        </span>
-      );
-    case "Pharmacy":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
-          </svg>
-          Pharmacy
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-4 py-1.5 text-sm font-medium text-success-700 dark:bg-success-900/20 dark:text-success-300">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-          </svg>
-          {status}
-        </span>
-      );
+function getCompletedStep(row: VitalsRow): string {
+  const apptStatus = String(row.appointment_status || "").trim();
+  if (apptStatus.toLowerCase() === "pharmacy") return "Pharmacy";
+  if (apptStatus.toLowerCase() === "lab") return "Lab";
+  if (apptStatus.toLowerCase() === "completed") return "Completed";
+  if (apptStatus.toLowerCase() === "conslt" || String(row.consultation_status || "").toLowerCase() === "completed") {
+    return "Consultation";
   }
+  if (apptStatus.toLowerCase() === "vitals" || row.vitals_id) return "Vitals";
+  return "Checked In";
+}
+
+function getStageBadge(status: string) {
+  let stepText = status;
+  const s = status.trim().toLowerCase();
+  if (s === "conslt") {
+    stepText = "Consultation";
+  } else if (s === "checked in" || s === "scheduled" || s === "rescheduled") {
+    stepText = "Checked In";
+  } else if (s === "vitals") {
+    stepText = "Vitals";
+  } else if (s === "lab") {
+    stepText = "Lab";
+  } else if (s === "pharmacy") {
+    stepText = "Pharmacy";
+  } else if (s === "completed") {
+    stepText = "Completed";
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+      {stepText}
+    </span>
+  );
 }
 

@@ -428,6 +428,23 @@ export async function POST(
         );
       }
 
+      // Also ensure any other appointments for this patient that lack a patient_id get linked
+      if (resolvedPatientId) {
+        await pool.query(
+          `UPDATE ${quoteIdentifier(TABLE_NAME)}
+           SET patient_id = $1, updated_at = NOW()
+           WHERE (patient_id IS NULL OR patient_id = '')
+             AND (
+               (patient_phone IS NOT NULL AND patient_phone <> '' AND (
+                 regexp_replace(patient_phone, '\\D', '', 'g') = regexp_replace($2, '\\D', '', 'g')
+                 OR (length(regexp_replace(patient_phone, '\\D', '', 'g')) >= 10 AND length(regexp_replace($2, '\\D', '', 'g')) >= 10 AND RIGHT(regexp_replace(patient_phone, '\\D', '', 'g'), 10) = RIGHT(regexp_replace($2, '\\D', '', 'g'), 10))
+               ))
+               OR (patient_name IS NOT NULL AND patient_name <> '' AND LOWER(TRIM(patient_name)) = LOWER(TRIM($3)))
+             )`,
+          [resolvedPatientId, apptRecord.patient_phone || "", apptRecord.patient_name || ""]
+        );
+      }
+
       return NextResponse.json({
         type: "scheduled",
         appointmentId: apptRecord.id,

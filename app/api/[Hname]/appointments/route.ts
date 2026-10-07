@@ -780,6 +780,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ Hna
     // Queue ID is generated later at check-in time only
     const { displayId: appointmentIdDisplay } = await generateAppointmentDisplayId(pool, appointmentDate);
 
+    // Look up existing patient ID from patient_registration if not provided
+    let finalPatientId = patientId || null;
+    if (!finalPatientId) {
+      if (patientPhone) {
+        const phoneMatch = await pool.query(
+          `SELECT patient_id FROM ${quoteIdentifier(PATIENT_TABLE)}
+           WHERE regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
+              OR regexp_replace(COALESCE(mobile_country_code, '') || COALESCE(mobile, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
+              OR (length(regexp_replace($1, '\\D', '', 'g')) >= 10 AND length(regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g')) >= 10 AND RIGHT(regexp_replace($1, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g'), 10))
+           LIMIT 1`,
+          [patientPhone]
+        );
+        if (phoneMatch.rows[0]?.patient_id) {
+          finalPatientId = phoneMatch.rows[0].patient_id;
+        }
+      }
+      if (!finalPatientId && patientName) {
+        const nameMatch = await pool.query(
+          `SELECT patient_id FROM ${quoteIdentifier(PATIENT_TABLE)}
+           WHERE LOWER(TRIM(patient_name)) = LOWER(TRIM($1))
+              OR LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))) = LOWER(TRIM($1))
+           LIMIT 1`,
+          [patientName]
+        );
+        if (nameMatch.rows[0]?.patient_id) {
+          finalPatientId = nameMatch.rows[0].patient_id;
+        }
+      }
+    }
+
     const inserted = await pool.query<AppointmentRow>(
       `
         INSERT INTO ${quoteIdentifier(TABLE_NAME)} (
@@ -796,7 +826,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ Hna
         department,
         doctor,
         patientName,
-        patientId || null,
+        finalPatientId || null,
         patientPhone || null,
         appointmentTime,
         appointmentEndTime || null,
