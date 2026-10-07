@@ -1322,7 +1322,7 @@ export default function PharmacyDispensingPage() {
                             <th className="px-2.5 py-2">Mobile</th>
                             <th className="px-2.5 py-2">Type</th>
                             <th className="px-2.5 py-2">Billing Amount</th>
-                            <th className="px-2.5 py-2">Status</th>
+
                             <th className="px-2.5 py-2">Date</th>
                           </tr>
                         </thead>
@@ -1342,19 +1342,7 @@ export default function PharmacyDispensingPage() {
                               <td className="px-2.5 py-2 font-medium text-slate-700 dark:text-gray-300">
                                 Rs. {bill.billing_amount ? Number(bill.billing_amount).toFixed(2) : "0.00"}
                               </td>
-                              <td className="px-2.5 py-2">
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                  bill.payment_status === "Paid"
-                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                    : bill.payment_status === "Partially Paid"
-                                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                    : bill.payment_status === "Cancelled"
-                                    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                    : "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-400"
-                                }`}>
-                                  {bill.payment_status || "Pending"}
-                                </span>
-                              </td>
+
                               <td className="px-2.5 py-2 text-slate-500 dark:text-gray-400">{formatDate(bill.created_at)}</td>
                             </tr>
                           ))}
