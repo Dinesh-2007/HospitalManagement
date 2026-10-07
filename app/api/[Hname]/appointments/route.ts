@@ -528,8 +528,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ Hnam
     const endDate = searchParams.get("end") ?? "";
     const department = searchParams.get("department") ?? "";
     const doctor = searchParams.get("doctor") ?? "";
-    const patientId = searchParams.get("patientId") ?? "";
-    const patientName = searchParams.get("patientName") ?? "";
+    const patientId = String(searchParams.get("patientId") ?? "").trim();
+    const patientName = String(searchParams.get("patientName") ?? "").trim();
     const doctorNames = parseDoctorNames(searchParams.get("doctorNames") ?? "");
     const requestedDoctorNames = Array.from(new Set([doctor, ...doctorNames].map((value) => value.trim()).filter(Boolean)));
 

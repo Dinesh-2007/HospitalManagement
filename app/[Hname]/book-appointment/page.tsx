@@ -609,11 +609,16 @@ export default function BookAppointmentPage() {
 
   const patientOptions = useMemo(() => {
     return patientRows
-      .map((row) => ({
-        id: Number(row.id ?? 0),
-        name: readText(row, ["patient_name", "patientName"]),
-        phone: readText(row, ["mobile"]),
-      }))
+      .map((row) => {
+        const firstName = readText(row, ["first_name", "firstName"]);
+        const lastName = readText(row, ["last_name", "lastName"]);
+        const computedName = `${firstName} ${lastName}`.trim();
+        return {
+          id: Number(row.id ?? 0),
+          name: readText(row, ["patient_name", "patientName"]) || computedName,
+          phone: readText(row, ["mobile"]),
+        };
+      })
       .filter((row) => row.id && row.name)
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [patientRows]);
@@ -646,12 +651,17 @@ export default function BookAppointmentPage() {
 
         return false;
       })
-      .map(row => ({
-        id: Number(row.id ?? 0),
-        name: readText(row, ["patient_name", "patientName"]),
-        phone: readText(row, ["mobile"]),
-        relationship: readText(row, ["relationship_ship_linked_patient", "relationshipShipLinkedPatient", "relationship"]),
-      }))
+      .map(row => {
+        const firstName = readText(row, ["first_name", "firstName"]);
+        const lastName = readText(row, ["last_name", "lastName"]);
+        const computedName = `${firstName} ${lastName}`.trim();
+        return {
+          id: Number(row.id ?? 0),
+          name: readText(row, ["patient_name", "patientName"]) || computedName,
+          phone: readText(row, ["mobile"]),
+          relationship: readText(row, ["relationship_ship_linked_patient", "relationshipShipLinkedPatient", "relationship"]),
+        };
+      })
       .filter(m => m.name);
   }, [patientRows, authenticatedPatient]);
 

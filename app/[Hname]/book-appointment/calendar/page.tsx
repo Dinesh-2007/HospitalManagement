@@ -114,9 +114,14 @@ function normalizeAppointmentRow(row: RawRow): AppointmentRow {
 }
 
 function normalizePatientRow(row: RawRow): PatientRow {
+  const firstName = readText(row, ["first_name", "firstName"]);
+  const lastName = readText(row, ["last_name", "lastName"]);
+  const computedName = `${firstName} ${lastName}`.trim();
+  const patientName = readText(row, ["patient_name", "patientName"]) || computedName || undefined;
+
   return {
     id: row.id ? Number(row.id) : undefined,
-    patient_name: readText(row, ["patient_name", "patientName"]) || undefined,
+    patient_name: patientName,
     mobile: readText(row, ["mobile"]) || null,
   };
 }
